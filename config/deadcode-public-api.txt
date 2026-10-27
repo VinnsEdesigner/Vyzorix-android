@@ -1,0 +1,13 @@
+# Names that must stay public: the module entry points.
+# One per line. A public declaration is otherwise not judged, because its
+# callers live in other modules.
+PtyBroker
+PtyRequest
+PtySession
+PtySessionRegistry
+PtyResult
+PtyError
+PtyReadOutcome
+FileDescriptorPasser
+AncillaryData
+NativePtyResult

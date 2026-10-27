@@ -36,15 +36,14 @@ jobject MakeResult(JNIEnv *env, vyzorix::pty::Status status, const char *detail)
     }
 
     jstring jdetail = env->NewStringUTF(detail);
-    jobject result = env->NewObject(cls, ctor, static_cast<jint>(status), jdetail, nullptr,
-                                    nullptr, static_cast<jboolean>(false),
-                                    static_cast<jboolean>(false));
+    jobject result = env->NewObject(cls, ctor, static_cast<jint>(status), jdetail, nullptr, nullptr,
+                                    static_cast<jboolean>(false), static_cast<jboolean>(false));
     env->DeleteLocalRef(jdetail);
 
     return result;
 }
 
-}  // namespace
+} // namespace
 
 extern "C" {
 
@@ -76,8 +75,7 @@ Java_com_vyzorix_capability_NativePty_selfTestFdPassing(JNIEnv *env, jclass /*cl
 
         char send_detail[kDetailSize] = {0};
         vyzorix::pty::Status send_status =
-            vyzorix::pty::SendFds(sockets[0], &pipe_fds[0], 1, nullptr, 0, send_detail,
-                                  sizeof(send_detail));
+            vyzorix::pty::SendFds(sockets[0], &pipe_fds[0], 1, send_detail, sizeof(send_detail));
         if (send_status != vyzorix::pty::Status::Ok) {
             close(pipe_fds[0]);
             close(pipe_fds[1]);
@@ -131,4 +129,4 @@ Java_com_vyzorix_capability_NativePty_selfTestFdPassing(JNIEnv *env, jclass /*cl
     }
 }
 
-}  // extern "C"
+} // extern "C"

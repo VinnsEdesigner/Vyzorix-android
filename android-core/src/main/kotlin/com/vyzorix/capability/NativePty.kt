@@ -9,7 +9,12 @@ package com.vyzorix.capability
  *
  * The library is loaded once per process; [loadLibrary] is idempotent so callers
  * need not coordinate.
+ *
+ * A JNI surface is one function per native entry point, and the signatures are
+ * fixed by the C side. Splitting or shortening them to satisfy a lint rule would
+ * cause a mismatch at runtime (UnsatisfiedLinkError), which no lint rule is worth.
  */
+@Suppress("TooManyFunctions", "LongParameterList")
 internal object NativePty {
 
     private const val LIBRARY = "vyzorix_core"
@@ -18,18 +23,21 @@ internal object NativePty {
     private var loaded = false
 
     /** Loads the native library, or returns the failure reason. */
-    fun loadLibrary(): PtyResult<Unit> = synchronized(this) {
-        if (loaded) {
-            return@synchronized PtyResult.Ok(Unit)
+    fun loadLibrary(): PtyResult<Unit> =
+        synchronized(this) {
+            if (loaded) {
+                return@synchronized PtyResult.Ok(Unit)
+            }
+            return try {
+                System.loadLibrary(LIBRARY)
+                loaded = true
+                PtyResult.Ok(Unit)
+            } catch (t: UnsatisfiedLinkError) {
+                PtyResult.Err(
+                    PtyError(PtyError.Kind.INTERNAL, "loadLibrary($LIBRARY): ${t.message}"),
+                )
+            }
         }
-        return try {
-            System.loadLibrary(LIBRARY)
-            loaded = true
-            PtyResult.Ok(Unit)
-        } catch (t: UnsatisfiedLinkError) {
-            PtyResult.Err(PtyError(PtyError.Kind.INTERNAL, "loadLibrary($LIBRARY): ${t.message}"))
-        }
-    }
 
     /**
      * Allocates a PTY pair.
@@ -62,13 +70,24 @@ internal object NativePty {
      * this is not an error. A blocking read is never used, because an idle shell
      * would hang the calling thread.
      */
-    external fun readMaster(fd: Int, maxBytes: Int, timeoutMs: Int): NativePtyResult
+    external fun readMaster(
+        fd: Int,
+        maxBytes: Int,
+        timeoutMs: Int,
+    ): NativePtyResult
 
     /** Writes to the master fd. */
-    external fun writeMaster(fd: Int, data: ByteArray): NativePtyResult
+    external fun writeMaster(
+        fd: Int,
+        data: ByteArray,
+    ): NativePtyResult
 
     /** Applies a terminal geometry via TIOCSWINSZ. */
-    external fun setWindowSize(fd: Int, rows: Int, cols: Int): NativePtyResult
+    external fun setWindowSize(
+        fd: Int,
+        rows: Int,
+        cols: Int,
+    ): NativePtyResult
 
     /** Sends SIGKILL and reaps. Safe on an already-dead pid. */
     external fun killChild(pid: Int): NativePtyResult
@@ -92,8 +111,14 @@ internal object NativePty {
     external fun closeFd(fd: Int): NativePtyResult
 
     /** Sends fds over a connected unix socket via SCM_RIGHTS. */
-    external fun sendFds(socketFd: Int, fds: IntArray): NativePtyResult
+    external fun sendFds(
+        socketFd: Int,
+        fds: IntArray,
+    ): NativePtyResult
 
     /** Receives fds from a connected unix socket. */
-    external fun receiveFds(socketFd: Int, timeoutMs: Int): NativePtyResult
+    external fun receiveFds(
+        socketFd: Int,
+        timeoutMs: Int,
+    ): NativePtyResult
 }

@@ -1,0 +1,5 @@
+# Dead-code allowlist: findings that are deliberate.
+#
+# Format:  <kind>:<name>   # reason
+# A line here suppresses that finding. Keep the reason, or the entry outlives
+# its justification.

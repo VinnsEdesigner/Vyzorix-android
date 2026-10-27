@@ -26,7 +26,10 @@ object FileDescriptorPasser {
      * connection). Sending on an unconnected socket fails with
      * `FD_PASS_FAILED`.
      */
-    fun send(socketFd: Int, descriptors: IntArray): PtyResult<Unit> {
+    fun send(
+        socketFd: Int,
+        descriptors: IntArray,
+    ): PtyResult<Unit> {
         if (socketFd < 0) {
             return PtyResult.Err(
                 PtyError(PtyError.Kind.INVALID_ARGUMENT, "socket fd is $socketFd"),
@@ -47,7 +50,10 @@ object FileDescriptorPasser {
      * Returns [PtyError.Kind.TIMED_OUT] if nothing arrived; the caller owns any
      * descriptors returned in [AncillaryData.descriptors].
      */
-    fun receive(socketFd: Int, timeoutMs: Int = DEFAULT_TIMEOUT_MS): PtyResult<AncillaryData> {
+    fun receive(
+        socketFd: Int,
+        timeoutMs: Int = DEFAULT_TIMEOUT_MS,
+    ): PtyResult<AncillaryData> {
         if (socketFd < 0) {
             return PtyResult.Err(
                 PtyError(PtyError.Kind.INVALID_ARGUMENT, "socket fd is $socketFd"),
@@ -55,7 +61,7 @@ object FileDescriptorPasser {
         }
 
         return NativePty.receiveFds(socketFd, timeoutMs).asResult { raw ->
-            AncillaryData(descriptors = raw.fds ?: IntArray(0), payload = raw.bytes ?: ByteArray(0))
+            AncillaryData(descriptors = raw.fds ?: IntArray(0))
         }
     }
 

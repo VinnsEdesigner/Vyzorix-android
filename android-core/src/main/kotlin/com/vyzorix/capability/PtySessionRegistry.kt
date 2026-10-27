@@ -34,7 +34,10 @@ class PtySessionRegistry(
 
         if (sessions.putIfAbsent(session.id, session) != null) {
             return PtyResult.Err(
-                PtyError(PtyError.Kind.SESSION_EXISTS, "session id ${session.id} is already in use"),
+                PtyError(
+                    PtyError.Kind.SESSION_EXISTS,
+                    "session id ${session.id} is already in use",
+                ),
             )
         }
 
@@ -47,12 +50,21 @@ class PtySessionRegistry(
 
     /** Closes a session and removes it. The reader still owns the fd. */
     fun unregister(id: String): PtyResult<PtySession> {
-        val session = sessions.remove(id)
-            ?: return PtyResult.Err(
-                PtyError(PtyError.Kind.NO_SUCH_SESSION, "no session $id"),
-            )
+        val session =
+            sessions.remove(id)
+                ?: return PtyResult.Err(
+                    PtyError(PtyError.Kind.NO_SUCH_SESSION, "no session $id"),
+                )
 
-        perDevice.computeIfPresent(session.deviceId) { _, count -> if (count <= 1) null else count - 1 }
+        perDevice.computeIfPresent(session.deviceId) { _, count ->
+            if (count <=
+                1
+            ) {
+                null
+            } else {
+                count - 1
+            }
+        }
 
         session.close()
 
@@ -73,10 +85,6 @@ class PtySessionRegistry(
 
         return owned
     }
-
-    /** Sessions idle for longer than [idleMs]. */
-    fun idleSessions(idleMs: Long): List<PtySession> =
-        sessions.values.filter { it.idleForMs > idleMs }
 
     val count: Int get() = sessions.size
 

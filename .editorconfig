@@ -1,0 +1,33 @@
+# ktlint — Kotlin formatting and basic correctness.
+#
+# Runs as the formatting gate. Style-only rules are delegated to ktlint's own
+# standard ruleset; the entries here are the deliberate deviations.
+#
+# ktlint_official is the 1.x ruleset. android_studio is the alternative and is
+# more permissive; we use official so the gate is deterministic.
+
+[*.{kt,kts}]
+ktlint_code_style = ktlint_official
+max_line_length = 100
+
+# Imports are ordered and unused ones removed. The wildcard import limit is set
+# to 999 so a wildcard is never *required*, but is allowed where it is clearer
+# (JNI constants, test assertions).
+ij_kotlin_imports_layout = *
+ij_kotlin_allow_wildcard_imports = true
+ij_kotlin_allow_wildcard_imports_on_alias = false
+ij_kotlin_name_count_to_use_star_import = 999
+ij_kotlin_name_count_to_use_star_import_for_members = 999
+
+# Trailing commas keep diffs small when a list grows.
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+# The codebase uses KDoc on public API and on anything non-obvious; ktlint should
+# not insist on it everywhere (the doc-comment rules stay off).
+ktlint_standard_function-signature = enabled
+ktlint_standard_no-empty-first-line-in-class-body = disabled
+
+# A blank line before a KDoc block that documents a member is noise in short
+# classes.
+ktlint_standard_comment-wrapping = enabled

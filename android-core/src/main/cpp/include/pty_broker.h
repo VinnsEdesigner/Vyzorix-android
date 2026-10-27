@@ -49,9 +49,6 @@ enum class Status : int32_t {
     Internal = 10,
 };
 
-// Human-readable name for a status, for logs and error messages.
-const char *StatusName(Status status);
-
 // A PTY pair.
 //
 // Ownership: the caller owns both fds and must close them. `master` is the end
@@ -81,9 +78,6 @@ Status OpenPty(PtyPair *out_pair, char *detail, size_t detail_size);
 // give the shell the right geometry from its first prompt) and on resize.
 Status SetWindowSize(int fd, WindowSize size, char *detail, size_t detail_size);
 
-// Reads the current window size from a pty fd via TIOCGWINSZ.
-Status GetWindowSize(int fd, WindowSize *out_size, char *detail, size_t detail_size);
-
 // What to execute on the slave end of the PTY.
 struct ExecRequest {
     // Absolute path of the binary. Must be executable by this app's UID.
@@ -107,8 +101,8 @@ struct ExecRequest {
 // shell that simply produced no output.
 constexpr int kExecFailedExitCode = 100;
 
-Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pid,
-                  char *detail, size_t detail_size);
+Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pid, char *detail,
+                  size_t detail_size);
 
 // Result of a bounded read from the master fd.
 struct ReadResult {
@@ -150,20 +144,16 @@ Status KillChild(pid_t pid, char *detail, size_t detail_size);
 struct FdMessage {
     // The descriptors received. The caller owns them.
     std::vector<int> fds;
-    // Any non-fd payload (currently unused, reserved for a small header).
-    std::vector<uint8_t> payload;
 };
 
-// Sends one or more fds, plus optional payload bytes, over a connected unix
-// socket.
-Status SendFds(int socket_fd, const int *fds, size_t fd_count, const uint8_t *payload,
-               size_t payload_size, char *detail, size_t detail_size);
+// Sends one or more fds over a connected unix socket.
+Status SendFds(int socket_fd, const int *fds, size_t fd_count, char *detail, size_t detail_size);
 
 // Receives fds and payload from a connected unix socket, waiting at most
 // `timeout_ms`. The caller owns any descriptors returned.
 Status ReceiveFds(int socket_fd, int timeout_ms, FdMessage *out_message, char *detail,
                   size_t detail_size);
 
-}  // namespace vyzorix::pty
+} // namespace vyzorix::pty
 
-#endif  // VYZORIX_PTY_BROKER_H
+#endif // VYZORIX_PTY_BROKER_H

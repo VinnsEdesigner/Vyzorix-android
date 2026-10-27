@@ -13,8 +13,8 @@
 #include <cstring>
 #include <exception>
 
-#include <unistd.h>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 #include "include/pty_broker.h"
@@ -61,8 +61,7 @@ jobject MakeResult(JNIEnv *env, Status status, const char *detail, jintArray fds
 
     jstring jdetail = env->NewStringUTF(detail != nullptr ? detail : "");
     jobject result = env->NewObject(cls, ctor, static_cast<jint>(status), jdetail, fds, bytes,
-                                    static_cast<jboolean>(timed_out),
-                                    static_cast<jboolean>(eof));
+                                    static_cast<jboolean>(timed_out), static_cast<jboolean>(eof));
     env->DeleteLocalRef(jdetail);
 
     return result;
@@ -105,7 +104,7 @@ std::vector<std::string> ReadStringArray(JNIEnv *env, jobjectArray array) {
     }
     jsize n = env->GetArrayLength(array);
     for (jsize i = 0; i < n; i++) {
-        auto item = static_cast<jstring>(env->GetObjectArrayElement(array, i));
+        auto *item = static_cast<jstring>(env->GetObjectArrayElement(array, i));
         out.push_back(ToString(env, item));
         env->DeleteLocalRef(item);
     }
@@ -113,14 +112,14 @@ std::vector<std::string> ReadStringArray(JNIEnv *env, jobjectArray array) {
     return out;
 }
 
-}  // namespace
+} // namespace
 
 extern "C" {
 
 // NativePtyResult openPty()
 // On success fds = [master, slave] and detail = slave path.
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_openPty(JNIEnv *env, jclass /*clazz*/) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_openPty(JNIEnv *env,
+                                                                        jclass /*clazz*/) {
     return Guarded(env, [env]() -> jobject {
         char detail[kDetailSize] = {0};
         PtyPair pair;
@@ -143,10 +142,9 @@ Java_com_vyzorix_capability_NativePty_openPty(JNIEnv *env, jclass /*clazz*/) {
 
 // NativePtyResult spawnOnPty(masterFd, slaveFd, path, argv, env, workingDir, rows, cols)
 // On success fds = [pid].
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_spawnOnPty(
-    JNIEnv *env, jclass /*clazz*/, jint master_fd, jint slave_fd, jstring path,
-    jobjectArray argv, jobjectArray envp, jstring working_dir, jint rows, jint cols) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_spawnOnPty(
+    JNIEnv *env, jclass /*clazz*/, jint master_fd, jint slave_fd, jstring path, jobjectArray argv,
+    jobjectArray envp, jstring working_dir, jint rows, jint cols) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
@@ -180,9 +178,10 @@ Java_com_vyzorix_capability_NativePty_spawnOnPty(
 }
 
 // NativePtyResult readMaster(fd, maxBytes, timeoutMs)
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_readMaster(JNIEnv *env, jclass /*clazz*/, jint fd,
-                                                 jint max_bytes, jint timeout_ms) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_readMaster(JNIEnv *env,
+                                                                           jclass /*clazz*/,
+                                                                           jint fd, jint max_bytes,
+                                                                           jint timeout_ms) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
@@ -202,8 +201,8 @@ Java_com_vyzorix_capability_NativePty_readMaster(JNIEnv *env, jclass /*clazz*/, 
                                     reinterpret_cast<const jbyte *>(buffer.data()));
         }
 
-        jobject result = MakeResult(env, status, detail, nullptr, bytes, read_result.timed_out,
-                                    read_result.eof);
+        jobject result =
+            MakeResult(env, status, detail, nullptr, bytes, read_result.timed_out, read_result.eof);
         env->DeleteLocalRef(bytes);
 
         return result;
@@ -211,9 +210,10 @@ Java_com_vyzorix_capability_NativePty_readMaster(JNIEnv *env, jclass /*clazz*/, 
 }
 
 // NativePtyResult writeMaster(fd, data)
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_writeMaster(JNIEnv *env, jclass /*clazz*/, jint fd,
-                                                  jbyteArray data) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_writeMaster(JNIEnv *env,
+                                                                            jclass /*clazz*/,
+                                                                            jint fd,
+                                                                            jbyteArray data) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
@@ -236,9 +236,10 @@ Java_com_vyzorix_capability_NativePty_writeMaster(JNIEnv *env, jclass /*clazz*/,
 }
 
 // NativePtyResult setWindowSize(fd, rows, cols)
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_setWindowSize(JNIEnv *env, jclass /*clazz*/, jint fd,
-                                                    jint rows, jint cols) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_setWindowSize(JNIEnv *env,
+                                                                              jclass /*clazz*/,
+                                                                              jint fd, jint rows,
+                                                                              jint cols) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
@@ -253,8 +254,9 @@ Java_com_vyzorix_capability_NativePty_setWindowSize(JNIEnv *env, jclass /*clazz*
 }
 
 // NativePtyResult killChild(pid)
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_killChild(JNIEnv *env, jclass /*clazz*/, jint pid) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_killChild(JNIEnv *env,
+                                                                          jclass /*clazz*/,
+                                                                          jint pid) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
         Status status = vyzorix::pty::KillChild(static_cast<pid_t>(pid), detail, sizeof(detail));
@@ -264,8 +266,9 @@ Java_com_vyzorix_capability_NativePty_killChild(JNIEnv *env, jclass /*clazz*/, j
 }
 
 // NativePtyResult reapChild(pid) — on success fds = [reaped ? 1 : 0, exitCode].
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_reapChild(JNIEnv *env, jclass /*clazz*/, jint pid) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_reapChild(JNIEnv *env,
+                                                                          jclass /*clazz*/,
+                                                                          jint pid) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
@@ -289,8 +292,8 @@ Java_com_vyzorix_capability_NativePty_reapChild(JNIEnv *env, jclass /*clazz*/, j
 }
 
 // NativePtyResult closeFd(fd)
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_closeFd(JNIEnv *env, jclass /*clazz*/, jint fd) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_closeFd(JNIEnv *env,
+                                                                        jclass /*clazz*/, jint fd) {
     return Guarded(env, [&]() -> jobject {
         if (fd < 0) {
             return MakeResult(env, Status::InvalidArgument, "fd is negative");
@@ -309,30 +312,32 @@ Java_com_vyzorix_capability_NativePty_closeFd(JNIEnv *env, jclass /*clazz*/, jin
 }
 
 // NativePtyResult sendFds(socketFd, fds)
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_sendFds(JNIEnv *env, jclass /*clazz*/, jint socket_fd,
-                                              jintArray fds) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_sendFds(JNIEnv *env,
+                                                                        jclass /*clazz*/,
+                                                                        jint socket_fd,
+                                                                        jintArray fds) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
         std::vector<int> descriptors = ReadIntArray(env, fds);
         Status status = vyzorix::pty::SendFds(socket_fd, descriptors.data(), descriptors.size(),
-                                              nullptr, 0, detail, sizeof(detail));
+                                              detail, sizeof(detail));
 
         return MakeResult(env, status, detail);
     });
 }
 
 // NativePtyResult receiveFds(socketFd, timeoutMs) — received fds come back in fds[].
-JNIEXPORT jobject JNICALL
-Java_com_vyzorix_capability_NativePty_receiveFds(JNIEnv *env, jclass /*clazz*/, jint socket_fd,
-                                                 jint timeout_ms) {
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_receiveFds(JNIEnv *env,
+                                                                           jclass /*clazz*/,
+                                                                           jint socket_fd,
+                                                                           jint timeout_ms) {
     return Guarded(env, [&]() -> jobject {
         char detail[kDetailSize] = {0};
 
         FdMessage message;
-        Status status = vyzorix::pty::ReceiveFds(socket_fd, timeout_ms, &message, detail,
-                                                 sizeof(detail));
+        Status status =
+            vyzorix::pty::ReceiveFds(socket_fd, timeout_ms, &message, detail, sizeof(detail));
         if (status != Status::Ok) {
             return MakeResult(env, status, detail);
         }
@@ -350,4 +355,4 @@ Java_com_vyzorix_capability_NativePty_receiveFds(JNIEnv *env, jclass /*clazz*/, 
     });
 }
 
-}  // extern "C"
+} // extern "C"

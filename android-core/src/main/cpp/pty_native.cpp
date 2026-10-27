@@ -13,13 +13,13 @@
 #include <cstdio>
 #include <cstring>
 
+#include <cstdlib>
 #include <fcntl.h>
 #include <poll.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <unistd.h>
 
 namespace vyzorix::pty {
 namespace {
@@ -39,24 +39,7 @@ void SetMessage(char *detail, size_t size, const char *message) {
     snprintf(detail, size, "%s", message);
 }
 
-}  // namespace
-
-const char *StatusName(Status status) {
-    switch (status) {
-        case Status::Ok: return "Ok";
-        case Status::SyscallFailed: return "SyscallFailed";
-        case Status::InvalidArgument: return "InvalidArgument";
-        case Status::NoSuchSession: return "NoSuchSession";
-        case Status::TooManySessions: return "TooManySessions";
-        case Status::SessionExists: return "SessionExists";
-        case Status::SessionClosed: return "SessionClosed";
-        case Status::TimedOut: return "TimedOut";
-        case Status::ExecFailed: return "ExecFailed";
-        case Status::FdPassFailed: return "FdPassFailed";
-        case Status::Internal: return "Internal";
-    }
-    return "Unknown";
-}
+} // namespace
 
 Status OpenPty(PtyPair *out_pair, char *detail, size_t detail_size) {
     if (out_pair == nullptr) {
@@ -125,24 +108,6 @@ Status SetWindowSize(int fd, WindowSize size, char *detail, size_t detail_size) 
     return Status::Ok;
 }
 
-Status GetWindowSize(int fd, WindowSize *out_size, char *detail, size_t detail_size) {
-    if (fd < 0 || out_size == nullptr) {
-        SetMessage(detail, detail_size, "invalid argument");
-        return Status::InvalidArgument;
-    }
-
-    struct winsize ws {};
-    if (ioctl(fd, TIOCGWINSZ, &ws) != 0) {
-        SetDetail(detail, detail_size, "TIOCGWINSZ");
-        return Status::SyscallFailed;
-    }
-
-    out_size->rows = ws.ws_row;
-    out_size->cols = ws.ws_col;
-
-    return Status::Ok;
-}
-
 Status ReadMaster(int master_fd, uint8_t *buffer, size_t buffer_size, int timeout_ms,
                   ReadResult *out_result, char *detail, size_t detail_size) {
     if (master_fd < 0 || buffer == nullptr || out_result == nullptr || buffer_size == 0) {
@@ -160,7 +125,7 @@ Status ReadMaster(int master_fd, uint8_t *buffer, size_t buffer_size, int timeou
     pfd.fd = master_fd;
     pfd.events = POLLIN;
 
-    int ready;
+    int ready = -1;
     do {
         ready = poll(&pfd, 1, timeout_ms);
     } while (ready < 0 && errno == EINTR);
@@ -175,7 +140,7 @@ Status ReadMaster(int master_fd, uint8_t *buffer, size_t buffer_size, int timeou
         return Status::Ok;
     }
 
-    ssize_t n;
+    ssize_t n = -1;
     do {
         n = read(master_fd, buffer, buffer_size);
     } while (n < 0 && errno == EINTR);
@@ -242,7 +207,7 @@ Status ReapChild(pid_t pid, bool *out_reaped, int32_t *out_exit_code, char *deta
     *out_exit_code = 0;
 
     int status = 0;
-    pid_t reaped;
+    pid_t reaped = -1;
     do {
         reaped = waitpid(pid, &status, WNOHANG);
     } while (reaped < 0 && errno == EINTR);
@@ -258,7 +223,7 @@ Status ReapChild(pid_t pid, bool *out_reaped, int32_t *out_exit_code, char *deta
     }
 
     if (reaped == 0) {
-        return Status::Ok;  // Still running.
+        return Status::Ok; // Still running.
     }
 
     *out_reaped = true;
@@ -286,7 +251,7 @@ Status KillChild(pid_t pid, char *detail, size_t detail_size) {
     }
 
     int status = 0;
-    pid_t reaped;
+    pid_t reaped = -1;
     do {
         reaped = waitpid(pid, &status, 0);
     } while (reaped < 0 && errno == EINTR);
@@ -299,4 +264,4 @@ Status KillChild(pid_t pid, char *detail, size_t detail_size) {
     return Status::Ok;
 }
 
-}  // namespace vyzorix::pty
+} // namespace vyzorix::pty

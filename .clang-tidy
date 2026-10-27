@@ -1,0 +1,65 @@
+# clang-tidy — static analysis for the native capability layer.
+#
+# Scope is deliberately narrow: checks that catch real defects in syscall and JNI
+# code, not style (clang-format owns style). Every check here has to earn its
+# place — a noisy linter gets ignored, which is worse than no linter at all.
+#
+# Disabled checks, and why:
+#   cppcoreguidelines-pro-bounds-array-to-pointer-decay
+#       Flags every `char buf[N]` passed to a C API. That is the only way to call
+#       open/read/ioctl, so it cannot be satisfied without wrapping the entire
+#       syscall surface.
+#   cppcoreguidelines-avoid-do-while
+#       The EINTR retry idiom is `do { ... } while (errno == EINTR)`; a for-loop
+#       obscures that it is a retry.
+#   misc-no-recursion, readability-magic-numbers, readability-identifier-length
+#       Style, not correctness. Enforcing them adds churn and catches no bugs.
+---
+Checks: >
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  cert-*,
+  -cert-err58-cpp,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-type-const-cast,
+  -cppcoreguidelines-pro-type-static-cast-downcast,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-no-malloc,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cert-err33-c,
+  -bugprone-exception-escape,
+  misc-*,
+  -misc-const-correctness,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  performance-*,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -readability-function-cognitive-complexity,
+  -readability-isolate-declaration
+
+# A finding is a failure. The tuned check list above keeps this honest.
+WarningsAsErrors: '*'
+
+# JNI signatures and the C ABI for syscall wrappers are fixed; do not suggest
+# changing them.
+# Naming is not enforced here. JNI entry points are named by the JVM and cannot
+# be changed, and clang-tidy cannot exempt a name pattern from a naming rule.
+# clang-format plus review covers style; this config is about defects.
+CheckOptions:
+  - key: readability-identifier-naming.IgnoreMainLikeFunctions
+    value: 1
+
+HeaderFilterRegex: '.*/(android-core|debian-engine|app-runtime)/.*'

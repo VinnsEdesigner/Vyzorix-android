@@ -8,11 +8,17 @@ plugins {
 
 android {
     namespace = "com.vyzorix"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk =
+        libs.versions.android.compileSdk
+            .get()
+            .toInt()
     ndkVersion = "26.3.11579264"
 
     defaultConfig {
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
@@ -21,14 +27,20 @@ android {
                 // target, armeabi-v7a covers older handsets, x86_64 keeps
                 // emulator builds working for CI.
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-                cppFlags += listOf(
-                    "-std=c++17",
-                    "-Wall",
-                    "-Werror",
-                    "-Wno-unused-parameter",
-                    "-fvisibility=hidden",
-                )
+                cppFlags +=
+                    listOf(
+                        "-std=c++17",
+                        "-Wall",
+                        "-Werror",
+                        "-Wno-unused-parameter",
+                        "-fvisibility=hidden",
+                    )
                 arguments += listOf("-DANDROID_STL=c++_static")
+                // clang-tidy needs a compile database; AGP does not emit one by
+                // default, so the gate asks for it explicitly.
+                if (project.findProperty("exportCompileCommands") == "true") {
+                    arguments += listOf("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
+                }
             }
         }
 

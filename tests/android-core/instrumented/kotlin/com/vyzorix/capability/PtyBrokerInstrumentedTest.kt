@@ -2,12 +2,11 @@ package com.vyzorix.capability
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 /**
  * Exercises the real syscall paths on a device.
@@ -21,20 +20,25 @@ class PtyBrokerInstrumentedTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-    private fun readUntil(session: PtySession, needle: String, timeoutMs: Long = 4000): String {
+    private fun readUntil(
+        session: PtySession,
+        needle: String,
+        timeoutMs: Long = 4000,
+    ): String {
         val deadline = System.currentTimeMillis() + timeoutMs
         val collected = StringBuilder()
 
         while (System.currentTimeMillis() < deadline) {
             when (val outcome = session.read()) {
-                is PtyResult.Ok -> when (val value = outcome.value) {
-                    is PtyReadOutcome.Data -> {
-                        collected.append(String(value.bytes))
-                        if (collected.contains(needle)) return collected.toString()
+                is PtyResult.Ok ->
+                    when (val value = outcome.value) {
+                        is PtyReadOutcome.Data -> {
+                            collected.append(String(value.bytes))
+                            if (collected.contains(needle)) return collected.toString()
+                        }
+                        PtyReadOutcome.Eof -> return collected.toString()
+                        PtyReadOutcome.Timeout -> Unit
                     }
-                    PtyReadOutcome.Eof -> return collected.toString()
-                    PtyReadOutcome.Timeout -> Unit
-                }
                 is PtyResult.Err -> error("read failed: ${outcome.error}")
             }
         }
@@ -46,12 +50,13 @@ class PtyBrokerInstrumentedTest {
     fun opensPtyAndRunsACommand() {
         val broker = PtyBroker()
 
-        val opened = broker.open(
-            sessionId = "test-1",
-            deviceId = "dev-1",
-            operatorId = "op-1",
-            request = PtyRequest(executable = "/system/bin/sh"),
-        )
+        val opened =
+            broker.open(
+                sessionId = "test-1",
+                deviceId = "dev-1",
+                operatorId = "op-1",
+                request = PtyRequest(executable = "/system/bin/sh"),
+            )
 
         assertTrue("open failed: $opened", opened is PtyResult.Ok)
         val session = (opened as PtyResult.Ok).value
@@ -80,12 +85,13 @@ class PtyBrokerInstrumentedTest {
         script.setExecutable(true, false)
 
         val broker = PtyBroker()
-        val opened = broker.open(
-            sessionId = "test-2",
-            deviceId = "dev-1",
-            operatorId = "op-1",
-            request = PtyRequest(executable = script.absolutePath),
-        )
+        val opened =
+            broker.open(
+                sessionId = "test-2",
+                deviceId = "dev-1",
+                operatorId = "op-1",
+                request = PtyRequest(executable = script.absolutePath),
+            )
 
         assertTrue("open failed: $opened", opened is PtyResult.Ok)
         val session = (opened as PtyResult.Ok).value
@@ -105,12 +111,13 @@ class PtyBrokerInstrumentedTest {
     @Test
     fun resizeAppliesToTheSession() {
         val broker = PtyBroker()
-        val opened = broker.open(
-            sessionId = "test-3",
-            deviceId = "dev-1",
-            operatorId = "op-1",
-            request = PtyRequest(executable = "/system/bin/sh", rows = 24, cols = 80),
-        )
+        val opened =
+            broker.open(
+                sessionId = "test-3",
+                deviceId = "dev-1",
+                operatorId = "op-1",
+                request = PtyRequest(executable = "/system/bin/sh", rows = 24, cols = 80),
+            )
 
         val session = (opened as PtyResult.Ok).value
         try {
@@ -140,12 +147,13 @@ class PtyBrokerInstrumentedTest {
     @Test
     fun badExecutableReportsExecFailed() {
         val broker = PtyBroker()
-        val opened = broker.open(
-            sessionId = "test-4",
-            deviceId = "dev-1",
-            operatorId = "op-1",
-            request = PtyRequest(executable = "/nonexistent/binary"),
-        )
+        val opened =
+            broker.open(
+                sessionId = "test-4",
+                deviceId = "dev-1",
+                operatorId = "op-1",
+                request = PtyRequest(executable = "/nonexistent/binary"),
+            )
 
         // The fork succeeds, so open succeeds; the failure surfaces as the child
         // exiting rather than as an open error.
@@ -161,7 +169,10 @@ class PtyBrokerInstrumentedTest {
             }
 
             assertTrue("child with a bad exec path should have exited", reaped)
-            assertTrue("expected a non-zero exit, got ${session.childExitCode}", session.childExitCode != 0)
+            assertTrue(
+                "expected a non-zero exit, got ${session.childExitCode}",
+                session.childExitCode != 0,
+            )
         } finally {
             broker.close("test-4")
             session.releaseFd()
@@ -200,7 +211,10 @@ class PtyBrokerInstrumentedTest {
                 (overflow as PtyResult.Err).error.kind,
             )
         } finally {
-            opened.forEach { broker.close(it.id); it.releaseFd() }
+            opened.forEach {
+                broker.close(it.id)
+                it.releaseFd()
+            }
         }
     }
 }

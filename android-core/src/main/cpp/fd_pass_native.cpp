@@ -18,8 +18,8 @@
 
 #include <fcntl.h>
 #include <poll.h>
-#include <unistd.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 namespace vyzorix::pty {
 namespace {
@@ -38,10 +38,9 @@ void SetMessage(char *detail, size_t size, const char *message) {
     snprintf(detail, size, "%s", message);
 }
 
-}  // namespace
+} // namespace
 
-Status SendFds(int socket_fd, const int *fds, size_t fd_count, const uint8_t *payload,
-               size_t payload_size, char *detail, size_t detail_size) {
+Status SendFds(int socket_fd, const int *fds, size_t fd_count, char *detail, size_t detail_size) {
     if (socket_fd < 0 || (fds == nullptr && fd_count > 0)) {
         SetMessage(detail, detail_size, "invalid argument");
         return Status::InvalidArgument;
@@ -50,17 +49,11 @@ Status SendFds(int socket_fd, const int *fds, size_t fd_count, const uint8_t *pa
     struct msghdr msg {};
     struct iovec io {};
 
-    // Always send at least one payload byte. A zero-length iovec is legal but
-    // some kernels treat an empty message as a no-op and silently drop the
-    // control data, so a single byte keeps the send unambiguous.
-    uint8_t fallback = 0;
-    if (payload != nullptr && payload_size > 0) {
-        io.iov_base = const_cast<uint8_t *>(payload);
-        io.iov_len = payload_size;
-    } else {
-        io.iov_base = &fallback;
-        io.iov_len = 1;
-    }
+    // Always send one byte. A zero-length iovec is legal, but some kernels treat
+    // an empty message as a no-op and drop the control data with it.
+    uint8_t keepalive = 0;
+    io.iov_base = &keepalive;
+    io.iov_len = 1;
     msg.msg_iov = &io;
     msg.msg_iovlen = 1;
 
@@ -85,7 +78,7 @@ Status SendFds(int socket_fd, const int *fds, size_t fd_count, const uint8_t *pa
         memcpy(CMSG_DATA(cmsg), fds, sizeof(int) * fd_count);
     }
 
-    ssize_t sent;
+    ssize_t sent = -1;
     do {
         sent = sendmsg(socket_fd, &msg, 0);
     } while (sent < 0 && errno == EINTR);
@@ -106,13 +99,12 @@ Status ReceiveFds(int socket_fd, int timeout_ms, FdMessage *out_message, char *d
     }
 
     out_message->fds.clear();
-    out_message->payload.clear();
 
     struct pollfd pfd {};
     pfd.fd = socket_fd;
     pfd.events = POLLIN;
 
-    int ready;
+    int ready = -1;
     do {
         ready = poll(&pfd, 1, timeout_ms);
     } while (ready < 0 && errno == EINTR);
@@ -140,7 +132,7 @@ Status ReceiveFds(int socket_fd, int timeout_ms, FdMessage *out_message, char *d
     msg.msg_control = control;
     msg.msg_controllen = sizeof(control);
 
-    ssize_t received;
+    ssize_t received = -1;
     do {
         received = recvmsg(socket_fd, &msg, 0);
     } while (received < 0 && errno == EINTR);
@@ -170,12 +162,7 @@ Status ReceiveFds(int socket_fd, int timeout_ms, FdMessage *out_message, char *d
         }
     }
 
-    // The payload includes the one-byte keepalive, so copy only what is real.
-    if (received > 0) {
-        out_message->payload.assign(payload, payload + received);
-    }
-
     return Status::Ok;
 }
 
-}  // namespace vyzorix::pty
+} // namespace vyzorix::pty

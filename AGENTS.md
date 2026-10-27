@@ -85,12 +85,76 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties   # gitignored
 ./gradlew projects                    # verify module wiring
 ./gradlew :android-core:assembleDebug # build the core library
 ./gradlew :app:assembleDebug          # build the APK
-./gradlew checkAllModules             # run check on every module
+./gradlew gate                        # THE GATE — run this before every commit
 ./gradlew :android-core:testDebugUnitTest
 ```
 
 Native builds are slow the first time (CMake configures for 3 ABIs). Use
 `-Pandroid.injected.build.abi=arm64-v8a` to build one ABI while iterating.
+
+---
+
+## The gate
+
+`./gradlew gate` runs everything a change must pass. CI runs the same task.
+
+| Step | Tool | Covers |
+|---|---|---|
+| `ktlintCheck` | ktlint 1.3.1 | Kotlin formatting, import order, unused imports |
+| `detekt` | detekt 1.23.6 | Kotlin complexity, smells, potential bugs |
+| `deadcode` | `scripts/deadcode_gate.py` | see below |
+| `testDebugUnitTest` | JUnit/Robolectric | JVM tests |
+| `nativeGate` | `scripts/native-gate.sh` | clang-format + clang-tidy (NDK 26.3) |
+
+### Why a custom dead-code gate
+
+detekt catches unused **private** members; ktlint catches unused **imports**.
+Neither catches the cases that actually rot a library module, so
+`scripts/deadcode_gate.py` covers:
+
+| Kind | What it catches |
+|---|---|
+| `kotlin-unused-decl` | an internal declaration nothing references |
+| `kotlin-unused-const` | a `val`/`var` nothing references |
+| `kotlin-unused-param` | a parameter never read in its own body |
+| `kotlin-test-only-decl` | referenced only from `tests/` — never runs in production |
+| `native-unused-func` | a C++ function with no call site |
+| `jni-orphan-decl` | a Kotlin `external fun` with no native implementation |
+| `jni-orphan-symbol` | a native `JNIEXPORT` with no Kotlin declaration |
+
+The last two matter most: a JNI name mismatch **does not fail the build** — it
+fails at runtime with `UnsatisfiedLinkError`. Nothing else looks for it.
+
+Two suppression files, both requiring a reason:
+
+- `config/deadcode-allowlist.txt` — `kind:name  # reason`
+- `config/deadcode-public-api.txt` — names that are the module's intended
+  surface. A public declaration's callers live in other modules, so it is judged
+  only when listed here.
+
+Do not add to either file to silence a finding you have not understood.
+
+### Why the native tools come from the NDK
+
+`clang-format` and `clang-tidy` ship with NDK 26.3. Using those rather than a
+separate install means the formatter's LLVM version matches the compiler's. A
+formatter from a different release disagrees about line breaks and produces churn
+with no benefit.
+
+`clang-tidy` needs a compile database:
+
+```bash
+./gradlew -PexportCompileCommands=true :android-core:configureCMakeDebug
+```
+
+The gate tells you this if the database is missing.
+
+### Tuning the linters
+
+Both configs disable checks that flag C-API idioms rather than defects, and each
+disabled check carries its reason inline (`.clang-tidy`, `detekt.yml`). Before
+disabling another, ask whether the check is wrong or the code is. Most of the
+time it is the code.
 
 ---
 

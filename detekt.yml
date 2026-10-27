@@ -1,0 +1,71 @@
+# detekt — Kotlin static analysis (complexity, potential bugs, smells).
+#
+# ktlint handles formatting; detekt handles everything else. This file configures
+# *rules only*. Build flags (buildUponDefaultConfig, parallel, exclude) belong in
+# the Gradle extension in build.gradle.kts — putting them here fails the task with
+# "Property ... is misspelled or does not exist".
+#
+# Rules are set so the gate fails on real problems and stays quiet on this
+# codebase's deliberate choices, each recorded against its suppression.
+
+complexity:
+  LongMethod:
+    # Native-heavy functions legitimately run long: a syscall sequence with a
+    # per-step error path does not split cleanly.
+    threshold: 80
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  TooManyFunctions:
+    thresholdInFiles: 25
+    thresholdInClasses: 25
+  CyclomaticComplexMethod:
+    threshold: 20
+  NestedBlockDepth:
+    threshold: 5
+
+style:
+  MagicNumber:
+    # Bit flags, fd numbers and protocol constants read better inline.
+    ignoreNumbers: ['-1', '0', '1', '2', '3', '8', '16', '32', '100', '1000', '1024', '4096']
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+  MaxLineLength:
+    maxLineLength: 100
+    excludeCommentStatements: true
+  UnusedPrivateMember:
+    allowedNames: '(_|ignored|expected)'
+  ReturnCount:
+    # Guard-clause style: several early returns beat nested ifs here.
+    max: 8
+  ThrowsCount:
+    max: 4
+  ForbiddenComment:
+    # A TODO must name an owner or a ticket, or it never gets picked up.
+    comments:
+      - reason: 'TODOs must name a person or ticket.'
+        value: 'TODO:'
+    allowedPatterns: 'TODO\([a-z0-9-]+\):'
+
+naming:
+  FunctionNaming:
+    # Test names use backticks so a failure reads as a sentence.
+    ignoreAnnotated: ['Test']
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][A-Za-z0-9]*'
+    propertyPattern: '[A-Za-z][A-Za-z0-9]*'
+
+potential-bugs:
+  UnsafeCallOnNullableType:
+    active: true
+  ImplicitDefaultLocale:
+    active: true
+
+coroutines:
+  GlobalCoroutineUsage:
+    active: true
+
+empty-blocks:
+  EmptyCatchBlock:
+    # An empty catch is acceptable only when its name says why.
+    allowedExceptionNameRegex: '_|(ignore|expected|already|nothing)'

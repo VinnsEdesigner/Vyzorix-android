@@ -11,7 +11,10 @@ import org.junit.Test
  */
 class PtySessionRegistryTest {
 
-    private fun session(id: String, deviceId: String) = PtySession(
+    private fun session(
+        id: String,
+        deviceId: String,
+    ) = PtySession(
         id = id,
         masterFd = -1,
         slaveFd = -1,

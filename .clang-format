@@ -1,0 +1,26 @@
+# clang-format — C++ style for the native capability layer.
+#
+# Based on LLVM with the column limit widened: the native code is syscall-heavy
+# and the argument lists are long, so 100 keeps most calls on one line without
+# excessive wrapping.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+ColumnLimit: 100
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortCaseLabelsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBraces: Attach
+PointerAlignment: Right
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+NamespaceIndentation: None
+ReflowComments: true
+SpacesBeforeTrailingComments: 1
+# JNI entry points are declared with C linkage in a block; keep them as written.
+DisableFormat: false

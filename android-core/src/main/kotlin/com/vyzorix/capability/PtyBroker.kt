@@ -18,7 +18,12 @@ class PtyBroker(
 ) {
 
     /** Allocates a PTY and starts [request]. The returned session owns the fds. */
-    fun open(sessionId: String, deviceId: String, operatorId: String, request: PtyRequest): PtyResult<PtySession> {
+    fun open(
+        sessionId: String,
+        deviceId: String,
+        operatorId: String,
+        request: PtyRequest,
+    ): PtyResult<PtySession> {
         val loaded = NativePty.loadLibrary()
         if (loaded is PtyResult.Err) {
             return loaded
@@ -37,16 +42,17 @@ class PtyBroker(
             )
         }
 
-        val spawn = NativePty.spawnOnPty(
-            masterFd = masterFd,
-            slaveFd = slaveFd,
-            path = request.executable,
-            argv = request.arguments.toTypedArray(),
-            env = request.environment.toTypedArray(),
-            workingDir = request.workingDirectory,
-            rows = request.rows,
-            cols = request.cols,
-        )
+        val spawn =
+            NativePty.spawnOnPty(
+                masterFd = masterFd,
+                slaveFd = slaveFd,
+                path = request.executable,
+                argv = request.arguments.toTypedArray(),
+                env = request.environment.toTypedArray(),
+                workingDir = request.workingDirectory,
+                rows = request.rows,
+                cols = request.cols,
+            )
 
         if (!spawn.isOk) {
             // The fork failed, so no child exists. Release both fds here; the
@@ -63,15 +69,16 @@ class PtyBroker(
 
         // The parent side of the slave is already closed by SpawnOnPty; holding
         // it open would stop the master reporting EOF when the child dies.
-        val session = PtySession(
-            id = sessionId,
-            masterFd = masterFd,
-            slaveFd = -1,
-            slavePath = pair.detail,
-            childPid = pid,
-            deviceId = deviceId,
-            operatorId = operatorId,
-        )
+        val session =
+            PtySession(
+                id = sessionId,
+                masterFd = masterFd,
+                slaveFd = -1,
+                slavePath = pair.detail,
+                childPid = pid,
+                deviceId = deviceId,
+                operatorId = operatorId,
+            )
 
         val registered = registry.register(session)
         if (registered is PtyResult.Err) {
@@ -89,15 +96,6 @@ class PtyBroker(
 
     /** Closes a session and returns it. The reader must call releaseFd afterwards. */
     fun close(sessionId: String): PtyResult<PtySession> = registry.unregister(sessionId)
-
-    /** Closes every session for a device. */
-    fun closeAllForDevice(deviceId: String): List<PtySession> =
-        registry.unregisterAllForDevice(deviceId)
-
-    /** Sessions idle longer than [idleMs]. */
-    fun idleSessions(idleMs: Long): List<PtySession> = registry.idleSessions(idleMs)
-
-    val sessionCount: Int get() = registry.count
 
     private companion object {
         const val TAG = "PtyBroker"

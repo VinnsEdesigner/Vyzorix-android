@@ -16,10 +16,10 @@
 #include <cstring>
 
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <unistd.h>
 
 namespace vyzorix::pty {
 namespace {
@@ -83,10 +83,10 @@ char **BuildEnvp(const std::vector<std::string> &env) {
     return envp;
 }
 
-}  // namespace
+} // namespace
 
-Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pid,
-                  char *detail, size_t detail_size) {
+Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pid, char *detail,
+                  size_t detail_size) {
     if (pair.master < 0 || pair.slave < 0 || out_pid == nullptr || request.path.empty()) {
         SetMessage(detail, detail_size, "invalid argument");
         return Status::InvalidArgument;
@@ -101,8 +101,7 @@ Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pi
         }
     }
 
-    std::vector<std::string> env =
-        request.env.empty() ? DefaultEnvironment() : request.env;
+    std::vector<std::string> env = request.env.empty() ? DefaultEnvironment() : request.env;
 
     // argv/envp are built before the fork: after the fork, in the child, only
     // async-signal-safe calls are permitted before execve, and allocation is not
@@ -142,8 +141,7 @@ Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pi
             _exit(kExecFailedExitCode + 2);
         }
 
-        if (dup2(pair.slave, STDIN_FILENO) < 0 ||
-            dup2(pair.slave, STDOUT_FILENO) < 0 ||
+        if (dup2(pair.slave, STDIN_FILENO) < 0 || dup2(pair.slave, STDOUT_FILENO) < 0 ||
             dup2(pair.slave, STDERR_FILENO) < 0) {
             _exit(kExecFailedExitCode + 3);
         }
@@ -180,4 +178,4 @@ Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pi
     return Status::Ok;
 }
 
-}  // namespace vyzorix::pty
+} // namespace vyzorix::pty

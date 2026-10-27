@@ -8,10 +8,16 @@ plugins {
 
 android {
     namespace = "com.vyzorix.connector"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk =
+        libs.versions.android.compileSdk
+            .get()
+            .toInt()
 
     defaultConfig {
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
         consumerProguardFiles("consumer-rules.pro")
     }
 

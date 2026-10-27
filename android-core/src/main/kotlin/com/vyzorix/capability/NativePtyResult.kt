@@ -23,8 +23,31 @@ class NativePtyResult(
 
 /** Outcome of a native call. Failures arrive as [Err]; native never throws. */
 sealed interface PtyResult<out T> {
-    data class Ok<T>(val value: T) : PtyResult<T>
-    data class Err(val error: PtyError) : PtyResult<Nothing>
+    data class Ok<T>(
+        val value: T,
+    ) : PtyResult<T>
+
+    data class Err(
+        val error: PtyError,
+    ) : PtyResult<Nothing>
+}
+
+/**
+ * Native status codes, mirroring the `Status` enum in `pty_broker.h`.
+ *
+ * Named rather than inlined so a change on either side has one obvious
+ * counterpart to update.
+ */
+private object NativeStatusCode {
+    const val SYSCALL_FAILED = 1
+    const val INVALID_ARGUMENT = 2
+    const val NO_SUCH_SESSION = 3
+    const val TOO_MANY_SESSIONS = 4
+    const val SESSION_EXISTS = 5
+    const val SESSION_CLOSED = 6
+    const val TIMED_OUT = 7
+    const val EXEC_FAILED = 8
+    const val FD_PASS_FAILED = 9
 }
 
 /** Why a native operation failed. */
@@ -48,21 +71,25 @@ data class PtyError(
     override fun toString(): String = "${kind.name.lowercase()}: $detail"
 
     companion object {
-        fun fromNative(status: Int, detail: String): PtyError = PtyError(
-            when (status) {
-                1 -> Kind.SYSCALL_FAILED
-                2 -> Kind.INVALID_ARGUMENT
-                3 -> Kind.NO_SUCH_SESSION
-                4 -> Kind.TOO_MANY_SESSIONS
-                5 -> Kind.SESSION_EXISTS
-                6 -> Kind.SESSION_CLOSED
-                7 -> Kind.TIMED_OUT
-                8 -> Kind.EXEC_FAILED
-                9 -> Kind.FD_PASS_FAILED
-                else -> Kind.INTERNAL
-            },
-            detail,
-        )
+        fun fromNative(
+            status: Int,
+            detail: String,
+        ): PtyError =
+            PtyError(
+                when (status) {
+                    NativeStatusCode.SYSCALL_FAILED -> Kind.SYSCALL_FAILED
+                    NativeStatusCode.INVALID_ARGUMENT -> Kind.INVALID_ARGUMENT
+                    NativeStatusCode.NO_SUCH_SESSION -> Kind.NO_SUCH_SESSION
+                    NativeStatusCode.TOO_MANY_SESSIONS -> Kind.TOO_MANY_SESSIONS
+                    NativeStatusCode.SESSION_EXISTS -> Kind.SESSION_EXISTS
+                    NativeStatusCode.SESSION_CLOSED -> Kind.SESSION_CLOSED
+                    NativeStatusCode.TIMED_OUT -> Kind.TIMED_OUT
+                    NativeStatusCode.EXEC_FAILED -> Kind.EXEC_FAILED
+                    NativeStatusCode.FD_PASS_FAILED -> Kind.FD_PASS_FAILED
+                    else -> Kind.INTERNAL
+                },
+                detail,
+            )
     }
 }
 
