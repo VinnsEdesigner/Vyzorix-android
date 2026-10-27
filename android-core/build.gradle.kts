@@ -13,6 +13,7 @@ android {
 
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
             cmake {
@@ -74,6 +75,17 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    // Tests live in the repo-root tests/ tree rather than alongside the sources,
+    // so the module tree contains only shipping code.
+    sourceSets {
+        getByName("test") {
+            java.setSrcDirs(listOf("../tests/android-core/unit/kotlin"))
+        }
+        getByName("androidTest") {
+            java.setSrcDirs(listOf("../tests/android-core/instrumented/kotlin"))
+        }
+    }
 }
 
 dependencies {
@@ -88,4 +100,8 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
 }

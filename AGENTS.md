@@ -231,9 +231,20 @@ number to an unrelated file. Rules:
 
 ### Tests
 
+Tests live in the repo-root `tests/` tree, **not** alongside the sources:
+
+```
+tests/android-core/unit/kotlin/...          JVM/Robolectric, runs anywhere
+tests/android-core/instrumented/kotlin/...  needs a device or emulator
+```
+
+Each module's `build.gradle.kts` points its `test` and `androidTest` source sets
+at the matching directory, so module trees contain only shipping code. Add a new
+module's tests under `tests/<module>/`.
+
 - JVM/Robolectric unit tests are the default; they run anywhere.
-- Anything touching real syscalls (PTY, USB, exec) cannot be tested on the JVM.
-  Mark those as requiring a device, and verify them on the emulator or the C22.
+- Anything touching real syscalls (PTY, USB, exec) cannot run on the JVM. Those
+  go in `instrumented/` and are verified on the emulator or the C22.
 - Do not claim a platform-behaviour change is verified unless it ran on the
   emulator or a device. Compiling is not verifying.
 
@@ -259,4 +270,5 @@ app/                 the APK: manifest, permissions, nothing else
 debian-engine/       rootfs tarball, proot launcher, pty-agent, android-bin
 app-runtime/         supervisor (C) and app-* CLI wrappers
 doc/                 architecture, ADRs, spike results
+tests/               all tests, split per module (unit/ and instrumented/)
 ```
