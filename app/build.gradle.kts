@@ -1,19 +1,4 @@
-// Phase 1 Layer 3 — `:app`
-//
-// The Android application module. Produces the user-installable APK.
-// Depends transitively on every other module via :core:services.
-//
-// Per doc/BUILD_ORDER.md §Layer 3 the manifest permissions are trimmed
-// to the bare minimum for the route-war machinery:
-//   - FOREGROUND_SERVICE
-//   - FOREGROUND_SERVICE_MEDIA_PLAYBACK
-//   - MODIFY_AUDIO_SETTINGS
-//   - RECEIVE_BOOT_COMPLETED
-//   - POST_NOTIFICATIONS
-//
-// MediaProjection / FOREGROUND_SERVICE_MEDIA_PROJECTION lands in Layer 4.
-// All later-layer permissions (RECORD_AUDIO, internet, etc.) land alongside
-// the consumer feature.
+// :app — the APK.
 
 plugins {
     alias(libs.plugins.android.application)
@@ -21,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.vyzorix.audiorouter"
+    namespace = "com.vyzorix.agent"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.vyzorix.audiorouter"
+        applicationId = "com.vyzorix.agent"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
@@ -38,8 +23,8 @@ android {
             isDebuggable = true
         }
         getByName("release") {
-            // No signingConfig yet — release builds are unsigned at Phase 1
-            // per BUILD_ORDER §Layer 3 ("No APK signing configuration yet").
+            // Unsigned at this stage; signing lands with the distribution story
+            // (sideload only — see the targetSdk note).
             isMinifyEnabled = false
             isShrinkResources = false
         }
@@ -53,40 +38,12 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-
-    testOptions {
-        unitTests {
-            isReturnDefaultValues = true
-            isIncludeAndroidResources = true
-        }
-    }
-
-    sourceSets["main"].kotlin.srcDirs("src/main/kotlin")
-    sourceSets["test"].kotlin.srcDirs("src/test/kotlin")
 }
 
 dependencies {
-    implementation(project(":core:common"))
-    implementation(project(":core:data"))
-    implementation(project(":core:audioengine"))
-    implementation(project(":core:services"))
+    implementation(project(":android-core"))
+    implementation(project(":cloud-connector"))
 
-    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.annotation)
-
-    testImplementation(libs.kotlin.test)
-    testImplementation(libs.kotlin.test.junit)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.junit4)
-    testImplementation(libs.robolectric)
-    testImplementation(libs.androidx.test.core)
-    testImplementation(libs.androidx.test.ext.junit)
-}
-
-tasks.withType<Test>().configureEach {
-    useJUnit()
-    testLogging {
-        events("passed", "failed", "skipped")
-    }
+    implementation(libs.kotlinx.coroutines.android)
 }

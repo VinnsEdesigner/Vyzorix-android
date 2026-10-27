@@ -1,11 +1,4 @@
-// Phase 1:
-//   Layer 0 -> :core:common      (now `com.android.library`; was pure-JVM in PR #5).
-//   Layer 1 -> :core:data        (Room + SQLCipher + DataStore).
-//   Layer 2 -> :core:audioengine (native C++ ring buffer + JNI bridge).
-//   Layer 3 -> :core:services    (foreground service + route-war machinery)
-//              :app              (Android application module — produces the APK).
-// Layers 4+ continue to extend `:core:services` and `:app` in place rather than
-// adding new modules.
+// Gradle module wiring. Layout is documented in doc/.
 
 @Suppress("UnstableApiUsage")
 pluginManagement {
@@ -25,19 +18,13 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "VyzorixAudioRouter"
+rootProject.name = "Vyzorix-android"
 
-include(":core:common")
-project(":core:common").projectDir = file("core/common")
+include(":android-core")
+project(":android-core").projectDir = file("android-core")
 
-include(":core:data")
-project(":core:data").projectDir = file("core/data")
-
-include(":core:audioengine")
-project(":core:audioengine").projectDir = file("core/audioengine")
-
-include(":core:services")
-project(":core:services").projectDir = file("core/services")
+include(":cloud-connector")
+project(":cloud-connector").projectDir = file("cloud-connector")
 
 include(":app")
 project(":app").projectDir = file("app")

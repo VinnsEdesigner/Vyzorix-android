@@ -9,16 +9,29 @@ kotlinx-coroutines = "1.8.0"
 kotlinx-serialization = "1.6.3"
 kotlin-test = "1.9.23"
 
-# Android SDK levels (Phase 1: Nokia C22 / Android 13 stock)
+# Android SDK levels.
+#
+# targetSdk is pinned at 28 deliberately and must not be raised. Android 10
+# denies execve() on files inside an app's home directory for any app targeting
+# API 29+, and the Debian engine execs binaries from app storage. The kernel
+# enforces this through SELinux (seapp_contexts maps targetSdk >= 29 to
+# untrusted_app_29, which lacks the exec rule untrusted_app_27 has), so there is
+# no userspace workaround. Termux pins 28 for the same reason.
+#
+# Consequences: no Play Store distribution (Play requires a recent API level),
+# and the app carries the "built for an older Android" install notice. Both are
+# accepted. See doc/ANDROID_SERVICE_ARCHITECTURE.md §1.1.
+#
+# compileSdk stays high so the code can compile against modern APIs.
 android-compileSdk = "34"
-android-minSdk = "33"
-android-targetSdk = "34"
+android-minSdk = "23"
+android-targetSdk = "28"
 
 # AndroidX
 androidx-annotation = "1.7.1"
 androidx-core-ktx = "1.13.1"
 androidx-datastore = "1.1.1"
-androidx-room = "2.6.1"
+androidx-lifecycle = "2.7.0"
 
 # SQLCipher — full-DB encryption per ADR-0004
 sqlcipher-android = "4.5.6"
@@ -42,12 +55,7 @@ kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version
 androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidx-annotation" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core-ktx" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidx-datastore" }
-
-# Room
-androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "androidx-room" }
-androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "androidx-room" }
-androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "androidx-room" }
-androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "androidx-room" }
+androidx-lifecycle-service = { module = "androidx.lifecycle:lifecycle-service", version.ref = "androidx-lifecycle" }
 
 # SQLCipher
 sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher-android" }
