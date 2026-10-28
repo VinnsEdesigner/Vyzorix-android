@@ -14,6 +14,20 @@
         android:allowBackup="false"
         android:label="Vyzorix"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light" />
+        android:theme="@android:style/Theme.Material.Light">
+
+        <!-- The entry point that starts the service on a fresh install. See
+             LaunchActivity for why a headless agent still needs one. -->
+        <activity
+            android:name="com.vyzorix.agent.LaunchActivity"
+            android:exported="true"
+            android:label="Vyzorix">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
 
 </manifest>

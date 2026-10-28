@@ -1,0 +1,323 @@
+package com.vyzorix.service
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import android.util.Log
+import com.vyzorix.bridge.AndroidSocketServer
+import com.vyzorix.bridge.ApiRouter
+import com.vyzorix.bridge.SessionTokenRegistry
+import com.vyzorix.bridge.apis.BatteryApi
+import com.vyzorix.bridge.apis.DeviceInfoApi
+import com.vyzorix.bridge.apis.LogcatApi
+import com.vyzorix.bridge.apis.NetworkApi
+import com.vyzorix.bridge.apis.SessionApi
+import com.vyzorix.bridge.apis.StorageApi
+import com.vyzorix.capability.PtyBroker
+import com.vyzorix.capability.PtyError
+import com.vyzorix.capability.PtyReader
+import com.vyzorix.capability.PtyResult
+import com.vyzorix.engine.ProotLauncher
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * The foreground service. It owns every layer: the wake lock that keeps the
+ * process schedulable, the bridge socket, the PTY broker and its readers, and the
+ * engine.
+ *
+ * Everything lives here because there is exactly one of each: one socket, one
+ * engine, one place that decides when to restart. A second owner would mean two
+ * copies of that state.
+ *
+ * `START_STICKY` so the system restarts it after a kill. Child processes are not
+ * phantom processes precisely because they belong to this service, which is why
+ * the engine runs under it rather than as a detached daemon.
+ */
+class VyzorixForegroundService : Service() {
+
+    private val running = AtomicBoolean(false)
+    private lateinit var tokens: SessionTokenRegistry
+    private lateinit var router: ApiRouter
+    private lateinit var broker: PtyBroker
+    private lateinit var bridge: AndroidSocketServer
+    private lateinit var watchdog: ServiceWatchdog
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    /** Live PTY readers, keyed by channel. The reader owns the fd and closes it. */
+    private val readers = ConcurrentHashMap<Int, PtyReader>()
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startForeground(NOTIFICATION_ID, buildNotification())
+        acquireWakeLock()
+    }
+
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
+        if (running.compareAndSet(false, true)) {
+            start()
+        }
+
+        return START_STICKY
+    }
+
+    private fun start() {
+        tokens = SessionTokenRegistry()
+        broker = PtyBroker()
+        router = buildRouter()
+
+        bridge =
+            AndroidSocketServer(
+                context = this,
+                tokens = tokens,
+                router = router,
+                onPtyInput = ::onPtyInput,
+                onPtyCredit = ::onPtyCredit,
+            )
+
+        if (!bridge.start()) {
+            Log.e(TAG, "bridge failed to start; service is up but unreachable")
+        }
+
+        watchdog =
+            ServiceWatchdog(
+                isEngineReady = { ProotLauncher.isReady(this) },
+                onEngineLost = { Log.w(TAG, "engine unavailable; will retry") },
+            ).also { it.start() }
+
+        Log.i(TAG, "service started")
+    }
+
+    /**
+     * Registers every API. Adding one is a line here plus a file in `apis/`.
+     *
+     * The session API needs the service's session table, so it is constructed with
+     * the two callbacks rather than registered as a singleton object.
+     */
+    private fun buildRouter(): ApiRouter {
+        val sessionApi =
+            SessionApi(
+                openSession = ::openSession,
+                closeSession = ::closeSession,
+                resizeSession = ::resizeSession,
+            )
+
+        return ApiRouter()
+            .register(BatteryApi.NAME, BatteryApi)
+            .register(DeviceInfoApi.NAME, DeviceInfoApi)
+            .register(StorageApi.NAME, StorageApi)
+            .register(NetworkApi.NAME, NetworkApi)
+            .register(LogcatApi.NAME, LogcatApi)
+            .register(SessionApi.NAME, sessionApi)
+    }
+
+    /**
+     * Opens a PTY session, launches the engine on it, and starts its reader.
+     * Returns the channel number, which is what the client uses on subsequent
+     * frames.
+     *
+     * The token is issued here and handed to the child through its environment, so
+     * the container can reach the bridge and be identified. The request is built
+     * after the token exists for exactly that reason.
+     */
+    fun openSession(
+        sessionId: String,
+        deviceId: String,
+        operatorId: String,
+    ): PtyResult<Int> {
+        val token =
+            tokens.issue(
+                sessionId = sessionId,
+                deviceId = deviceId,
+                operatorId = operatorId,
+            )
+
+        val opened =
+            broker.open(
+                sessionId,
+                deviceId,
+                operatorId,
+                ProotLauncher.loginShellRequest(this, token.token),
+            )
+        if (opened is PtyResult.Err) return opened
+
+        val channel = (opened as PtyResult.Ok).value
+        val session =
+            broker.sessionForChannel(channel)
+                ?: return PtyResult.Err(
+                    PtyError(PtyError.Kind.INTERNAL, "channel $channel vanished"),
+                )
+
+        val reader =
+            PtyReader(
+                session = session,
+                onOutput = { bytes -> bridge.pushPtyOutput(channel, sessionId, bytes) },
+                onExit = { code -> onSessionExit(channel, code) },
+            )
+
+        readers[channel] = reader
+        reader.start()
+
+        return PtyResult.Ok(channel)
+    }
+
+    /** Closes a session. The reader observes the flag and closes the fd. */
+    fun closeSession(channel: Int): PtyResult<Unit> {
+        val reader =
+            readers.remove(channel)
+                ?: return PtyResult.Err(
+                    PtyError(PtyError.Kind.NO_SUCH_SESSION, "no channel $channel"),
+                )
+
+        val closed = broker.close(channel)
+        if (closed is PtyResult.Ok) {
+            tokens.revokeSession(closed.value.id)
+        }
+
+        // The reader closes the fd; wait so the caller knows it is gone.
+        reader.awaitStopped()
+
+        return PtyResult.Ok(Unit)
+    }
+
+    /** Applies a terminal size to a live session. */
+    fun resizeSession(
+        channel: Int,
+        rows: Int,
+        cols: Int,
+    ): PtyResult<Unit> {
+        val session =
+            broker.sessionForChannel(channel)
+                ?: return PtyResult.Err(
+                    PtyError(PtyError.Kind.NO_SUCH_SESSION, "no channel $channel"),
+                )
+
+        return session.resize(rows, cols)
+    }
+
+    /**
+     * The reader reports its session ended. Its token is revoked so a shell that
+     * exited cannot be re-driven, and a lifecycle event is pushed so a client can
+     * tell a dead shell from a quiet one.
+     */
+    private fun onSessionExit(
+        channel: Int,
+        exitCode: Int,
+    ) {
+        readers.remove(channel)
+        val session = broker.sessionForChannel(channel)
+        if (session != null) {
+            broker.close(channel)
+            tokens.revokeSession(session.id)
+        }
+        bridge.pushEvent(EVENT_SESSION_EXIT, "{\"channel\":$channel,\"exit\":$exitCode}")
+        Log.i(TAG, "session channel $channel exited with $exitCode")
+    }
+
+    private fun onPtyInput(
+        channel: Int,
+        bytes: ByteArray,
+    ) {
+        val session = broker.sessionForChannel(channel) ?: return
+        session.write(bytes)
+    }
+
+    private fun onPtyCredit(
+        channel: Int,
+        bytes: Int,
+    ) {
+        readers[channel]?.grantCredit(bytes)
+    }
+
+    override fun onDestroy() {
+        running.set(false)
+
+        // Close every session so each reader releases its fd. Clearing `readers`
+        // without closing the broker would leak one descriptor per live session.
+        readers.keys.toList().forEach { channel ->
+            broker.close(channel)
+            readers.remove(channel)?.awaitStopped(SHUTDOWN_TIMEOUT_MS)
+        }
+        readers.clear()
+
+        if (::bridge.isInitialized) bridge.stop()
+        if (::tokens.isInitialized) tokens.sweep()
+        if (::watchdog.isInitialized) watchdog.stop()
+
+        releaseWakeLock()
+        super.onDestroy()
+    }
+
+    private fun acquireWakeLock() {
+        val manager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        wakeLock =
+            manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:engine").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
+    }
+
+    private fun buildNotification(): Notification {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Vyzorix engine",
+                    NotificationManager.IMPORTANCE_LOW,
+                )
+            (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
+                ?.createNotificationChannel(channel)
+        }
+
+        val builder =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(this, CHANNEL_ID)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(this)
+            }
+
+        return builder
+            .setContentTitle("Vyzorix")
+            .setContentText("Device engine running")
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setOngoing(true)
+            .build()
+    }
+
+    companion object {
+        private const val TAG = "VyzorixService"
+        private const val CHANNEL_ID = "vyzorix-engine"
+        private const val NOTIFICATION_ID = 1
+        private const val SHUTDOWN_TIMEOUT_MS = 3000L
+
+        /** Event topic pushed when a PTY session's child exits. */
+        const val EVENT_SESSION_EXIT = "session.exit"
+
+        fun start(context: Context) {
+            val intent = Intent(context, VyzorixForegroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+    }
+}
