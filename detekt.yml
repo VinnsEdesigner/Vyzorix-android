@@ -46,13 +46,20 @@ style:
       - reason: 'TODOs must name a person or ticket.'
         value: 'TODO:'
     allowedPatterns: 'TODO\([a-z0-9-]+\):'
+  LoopWithTooManyJumpStatements:
+    # Accept loops are written with guard-clause continues, which reads more
+    # directly than a nested condition tree.
+    maxJumpCount: 5
 
 naming:
   FunctionNaming:
     # Test names use backticks so a failure reads as a sentence.
     ignoreAnnotated: ['Test']
   TopLevelPropertyNaming:
-    constantPattern: '[A-Z][A-Za-z0-9]*'
+    # A `const val` at file scope is a constant and reads as SCREAMING_SNAKE, the
+    # same as a companion's; ktlint's property-naming rule requires the same, so
+    # the two linters agree.
+    constantPattern: '[A-Z][A-Z0-9_]*'
     propertyPattern: '[A-Za-z][A-Za-z0-9]*'
 
 potential-bugs:
@@ -69,3 +76,13 @@ empty-blocks:
   EmptyCatchBlock:
     # An empty catch is acceptable only when its name says why.
     allowedExceptionNameRegex: '_|(ignore|expected|already|nothing)'
+
+exceptions:
+  TooGenericExceptionCaught:
+    # Boundary code must catch Throwable. A socket reader, a PTY reader, an API
+    # handler and a watchdog each sit at an edge where *anything* can escape —
+    # including Error — and the correct behaviour is to log and keep the process
+    # alive, not to die. Catching specific types there would let an unexpected
+    # throw kill the service.
+    active: false
+

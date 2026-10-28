@@ -48,13 +48,24 @@ ALLOWLIST = ROOT / "config" / "deadcode-allowlist.txt"
 PUBLIC_API = ROOT / "config" / "deadcode-public-api.txt"
 
 # Kotlin constructs whose absence of a caller is meaningful.
+#
+# `^[ \t]*` rather than `^`: every declaration inside a class or an object is
+# indented, so anchoring at column zero would see only top-level declarations and
+# report a library of unreferenced members as clean. The optional indentation is
+# what makes the gate look at members at all.
+#
+# Whitespace between the parts is `[ \t]`, never `\s`: `\s` matches newlines, so a
+# declaration preceded by blank lines (every one that carries a KDoc) would have
+# its match start on an earlier line. The line number is taken from the name, but
+# keeping the match on one line avoids the pattern running past a blank line into
+# an unrelated declaration.
 KOTLIN_DECL = re.compile(
-    r"^(?:@\w+(?:\([^)]*\))?\s+)*"
-    r"(?P<visibility>public|internal|private|protected)?\s*"
+    r"^[ \t]*(?:@\w+(?:\([^)]*\))?[ \t]*\n?[ \t]*)*"
+    r"(?P<visibility>public|internal|private|protected)?[ \t]*"
     r"(?:(?:open|abstract|sealed|data|enum|inline|suspend|"
-    r"override|operator|infix|external|tailrec|const)\s+)*"
-    r"(fun|val|var|class|object|interface)\s+"
-    r"(?:<[^>]*>\s*)?"
+    r"override|operator|infix|external|tailrec|const)[ \t]+)*"
+    r"(fun|val|var|class|object|interface)[ \t]+"
+    r"(?:<[^>]*>[ \t]*)?"
     r"(?:[A-Za-z_][A-Za-z0-9_.<>?]*\.)?"      # receiver, if any
     r"([A-Za-z_][A-Za-z0-9_]*)",
     re.MULTILINE,
@@ -67,28 +78,99 @@ KOTLIN_PARAM = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*:")
 JNI_EXTERNAL = re.compile(r"external\s+fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.MULTILINE)
 
 CPP_FUNC = re.compile(
-    r"^(?:[A-Za-z_][A-Za-z0-9_:<>*&,\s]*?\s+)?"
+    r"^[ \t]*(?:[A-Za-z_][A-Za-z0-9_:<>*&,\s]*?\s+)?"
     r"([A-Za-z_][A-Za-z0-9_]*)\s*\([^;{]*\)\s*(?:const\s*)?\{",
     re.MULTILINE,
 )
 
-JNI_SYMBOL = re.compile(r"Java_com_vyzorix_(\w+)_([A-Za-z_]\w*)\s*\(", re.MULTILINE)
+# A JNI entry point can be split across lines, so the function name and its
+# parameter list are matched on separate lines rather than with a single
+# name-then-paren pattern.
+JNI_SYMBOL = re.compile(r"Java_com_vyzorix_(\w+)_([A-Za-z_]\w*)", re.MULTILINE)
+
+# Android framework entry points. The system calls these; there is no in-repo
+# caller, and their absence of a call site says nothing about whether they are
+# dead. A declaration whose name is also a genuine internal one would be a false
+# negative, but the names are distinctive enough that this does not happen.
+FRAMEWORK_CALLBACKS = {
+    "onCreate",
+    "onStart",
+    "onStartCommand",
+    "onDestroy",
+    "onBind",
+    "onUnbind",
+    "onRebind",
+    "onReceive",
+    "onLowMemory",
+    "onTrimMemory",
+    "onConfigurationChanged",
+    "onTaskRemoved",
+    "onTimeout",
+    "onNewIntent",
+}
+
+# The class name is the last component of a fully-qualified `android:name`.
+MANIFEST_CLASS = re.compile(r'android:name\s*=\s*"([A-Za-z0-9_.]+)"')
+
+
+def manifest_referenced_names() -> set[str]:
+    """Simple class names the manifest names, so components are not judged dead.
+
+    A service or receiver has no in-repo constructor call: the system creates it
+    from the manifest. Without this, every component would be reported as unused.
+    """
+    names: set[str] = set()
+    for manifest in MAIN_DIRS[0].rglob("AndroidManifest.xml"):
+        text = manifest.read_text()
+        for match in MANIFEST_CLASS.finditer(text):
+            value = match.group(1)
+            if "." not in value:
+                continue
+            names.add(value.rsplit(".", 1)[1])
+    return names
+
+
+def _blank(match: re.Match[str]) -> str:
+    """Replace a comment or literal with spaces, preserving its newlines.
+
+    Preserving newlines keeps every offset and line number aligned with the
+    original file. Collapsing a multi-line block comment to a single space would
+    shift every line after it, so a declaration's reported line would not be its
+    real one and the self-reference exclusion in the reference count would
+    exclude the wrong line.
+    """
+    return re.sub(r"[^\n]", " ", match.group(0))
 
 
 def strip_kotlin(text: str) -> str:
     """Remove comments and string literals so prose does not count as a use."""
-    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
-    text = re.sub(r"//[^\n]*", " ", text)
-    text = re.sub(r'""".*?"""', ' "" ', text, flags=re.DOTALL)
-    text = re.sub(r'"(?:[^"\\]|\\.)*"', ' "" ', text)
+    text = re.sub(r"/\*.*?\*/", _blank, text, flags=re.DOTALL)
+    text = re.sub(r"//[^\n]*", _blank, text)
+    text = re.sub(r'""".*?"""', _blank, text, flags=re.DOTALL)
+    text = re.sub(r'"(?:[^"\\]|\\.)*"', _blank, text)
     return text
 
 
 def strip_cpp(text: str) -> str:
-    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
-    text = re.sub(r"//[^\n]*", " ", text)
-    text = re.sub(r'"(?:[^"\\]|\\.)*"', ' "" ', text)
+    text = re.sub(r"/\*.*?\*/", _blank, text, flags=re.DOTALL)
+    text = re.sub(r"//[^\n]*", _blank, text)
+    text = re.sub(r'"(?:[^"\\]|\\.)*"', _blank, text)
     return text
+
+
+def count_interpolations(path: Path, name: str) -> int:
+    """Counts `$name` and `${name}` uses, which live inside string literals.
+
+    strip_kotlin blanks literals, so a name used only in interpolation would look
+    unused. This reads the raw file for that one shape. The declaration's own line
+    is excluded, so a default value in a signature is not counted as a use.
+    """
+    pattern = re.compile(rf"\$\{{?{re.escape(name)}\b")
+    count = 0
+    for line in path.read_text().splitlines():
+        count += len(pattern.findall(line))
+
+    return count
 
 
 def sources(dirs: list[Path], suffixes: tuple[str, ...]) -> list[Path]:
@@ -150,16 +232,22 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
     test_text: dict[Path, str] = {p: strip_kotlin(p.read_text()) for p in test_files}
 
     # Every identifier appearing anywhere, with the file it came from.
-    all_text = "\n".join(main_text.values())
     test_only_text = "\n".join(test_text.values())
 
     public_api = load_public_api()
+    manifest_names = manifest_referenced_names()
     declared: list[tuple[str, str, Path, int]] = []
 
     for path, text in main_text.items():
         for match in KOTLIN_DECL.finditer(text):
             kind, name = match.group(2), match.group(3)
             if name in {"main", "init"}:
+                continue
+            # An Android framework callback is called by the system through the
+            # framework, and a component class is instantiated from the manifest.
+            # Neither has an in-repo caller by construction, so flagging them is
+            # noise. The manifest scan covers the classes the manifest names.
+            if name in FRAMEWORK_CALLBACKS or name in manifest_names:
                 continue
             # A `val`/`var` inside an unclosed parenthesis is a constructor
             # property, not a declaration. Its use is the constructor call, so
@@ -172,7 +260,9 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
             # dead public API is dead API.
             if name in public_api:
                 continue
-            line = prefix.count("\n") + 1
+            # The name's own position, so an annotation or a blank line above the
+            # declaration cannot move the reported line.
+            line = text[: match.start(3)].count("\n") + 1
             declared.append((kind, name, path, line))
 
     for kind, name, path, line in declared:
@@ -180,7 +270,9 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
         if key in allow or f"kotlin-unused-const:{name}" in allow:
             continue
 
-        # Count references outside the declaration's own file+line.
+        # Count references outside the declaration's own file+line. Interpolations
+        # inside string literals count: `"$FOO"` is a real use of `FOO`, but
+        # strip_kotlin blanks literals, so the count also reads the raw file.
         occurrences = 0
         for other, text in main_text.items():
             if other == path:
@@ -194,12 +286,16 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
             else:
                 occurrences += len(re.findall(rf"\b{re.escape(name)}\b", text))
 
+        occurrences += count_interpolations(path, name)
+
         test_occurrences = len(re.findall(rf"\b{re.escape(name)}\b", test_only_text))
 
         if occurrences > 0:
             continue
 
         if test_occurrences > 0:
+            if f"kotlin-test-only-decl:{name}" in allow:
+                continue
             findings.append(
                 Finding("kotlin-test-only-decl", name, path, line, "referenced only from tests/")
             )
@@ -212,21 +308,46 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
 
     # Unused parameters: a parameter never mentioned in the function body.
     for path, text in main_text.items():
-        for fn in re.finditer(r"\bfun\s+[A-Za-z_][A-Za-z0-9_.]*\s*\(([^)]*)\)\s*(?::[^{=]*)?[{=]", text):
-            params_src = fn.group(1)
-            body_start = fn.end()
-            # Take a generous slice of the body; a long function may exceed it, but
-            # a false negative is safer than a false positive here.
-            body = text[body_start : body_start + 4000]
+        # Interpolations are uses, and strip_kotlin removed the literals they live
+        # in, so this pass needs a copy with *comments* blanked but string
+        # literals kept. Both strips preserve length and newlines, so offsets into
+        # this copy line up with offsets into `text`.
+        raw = path.read_text()
+        raw = re.sub(r"/\*.*?\*/", _blank, raw, flags=re.DOTALL)
+        raw = re.sub(r"//[^\n]*", _blank, raw)
+
+        for fn in re.finditer(
+            # The return type may not cross a newline: `[^{=]*` would run on to the
+            # next declaration's `{`, so an interface member with no body (and no
+            # `{` on its line) would borrow the brace of an unrelated function and
+            # its parameters would be scanned against the wrong body.
+            r"(?P<override>\boverride\s+)?\bfun\s+[A-Za-z_][A-Za-z0-9_.]*\s*\(([^)]*)\)"
+            r"\s*(?::[^{=\n]*)?[{=]",
+            text,
+        ):
+            # An override's parameters are fixed by the interface it implements,
+            # so an unused one cannot be removed and reporting it is noise.
+            if fn.group("override"):
+                continue
+
+            params_src = fn.group(2)
+            body = text[fn.end() : fn.end() + 4000]
+
+            # The same slice of the original file, for interpolation checks.
+            raw_body = raw[fn.end() : fn.end() + 4000]
+
             for pm in KOTLIN_PARAM.finditer(params_src):
                 pname = pm.group(1)
                 if pname in {"val", "var", "private", "internal"}:
                     continue
-                if not re.search(rf"\b{re.escape(pname)}\b", body):
-                    line = text[: fn.start()].count("\n") + 1
-                    findings.append(
-                        Finding("kotlin-unused-param", pname, path, line, "parameter unused in body")
-                    )
+                if re.search(rf"\b{re.escape(pname)}\b", body):
+                    continue
+                if re.search(rf"\$\{{?{re.escape(pname)}\b", raw_body):
+                    continue
+                line = text[: fn.start()].count("\n") + 1
+                findings.append(
+                    Finding("kotlin-unused-param", pname, path, line, "parameter unused in body")
+                )
 
     return {name for _, name, _, _ in declared}
 
@@ -251,6 +372,9 @@ def analyse_native(findings: list[Finding], allow: set[str], kotlin_names: set[s
             line = text[: match.start()].count("\n") + 1
             declared_external[match.group(1)] = (path, line)
 
+    # Every `external fun` must have a matching JNIEXPORT, and vice versa: a
+    # mismatch is silent until runtime (UnsatisfiedLinkError), which is exactly
+    # why a gate has to look for it.
     for name, (path, line) in declared_external.items():
         if name not in native_symbols and f"jni-orphan-decl:{name}" not in allow:
             findings.append(

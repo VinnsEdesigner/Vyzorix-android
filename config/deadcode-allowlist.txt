@@ -3,3 +3,22 @@
 # Format:  <kind>:<name>   # reason
 # A line here suppresses that finding. Keep the reason, or the entry outlives
 # its justification.
+
+# The PTY broker is exercised by instrumented tests today; the service drives it
+# in production through the session API. countForDevice/unregisterAllForDevice
+# are the per-device teardown and reporting the multi-device path will use.
+kotlin-test-only-decl:unregisterAllForDevice   # device-disconnect teardown; wired in the multi-device build
+kotlin-test-only-decl:countForDevice           # operator reporting; used by the diagnostics dashboard
+
+# The native fd-passing self test is a proof the SCM_RIGHTS path works, run from
+# the instrumented suite on the emulator. It is not a production code path.
+kotlin-test-only-decl:selfTestFdPassing        # native proof, run by the instrumented suite
+
+# FileDescriptorPasser.receive is the receiving half of the fd handoff. The sender
+# is exercised; the receiver lands with the Debian-side agent that needs it (Build 3,
+# USB transport), so it is built but not yet called.
+kotlin-unused-decl:receive                     # receiving half of the fd handoff; Build 3
+
+# Live session count, for the operator's dashboard and for tests.
+kotlin-unused-const:channelCount               # live-session gauge; consumed by the diagnostics dashboard
+
