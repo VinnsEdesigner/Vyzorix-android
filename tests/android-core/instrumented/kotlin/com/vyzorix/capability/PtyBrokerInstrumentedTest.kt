@@ -14,6 +14,9 @@ import org.junit.runner.RunWith
  * These cannot run on the JVM: they need a kernel that can allocate a PTY and
  * fork. They are the tests that answer whether the capability layer actually
  * works, as opposed to whether it compiles.
+ *
+ * The broker hands back a channel, not the session, so the tests resolve the
+ * session through [PtyBroker.sessionForChannel] the way the service does.
  */
 @RunWith(AndroidJUnit4::class)
 class PtyBrokerInstrumentedTest {
@@ -59,7 +62,8 @@ class PtyBrokerInstrumentedTest {
             )
 
         assertTrue("open failed: $opened", opened is PtyResult.Ok)
-        val session = (opened as PtyResult.Ok).value
+        val channel = (opened as PtyResult.Ok).value
+        val session = broker.sessionForChannel(channel)!!
 
         try {
             assertTrue(session.masterFd >= 0)
@@ -71,7 +75,7 @@ class PtyBrokerInstrumentedTest {
             val output = readUntil(session, "BROKER_MARKER_OK")
             assertTrue("marker not seen in output: $output", output.contains("BROKER_MARKER_OK"))
         } finally {
-            broker.close("test-1")
+            broker.close(channel)
             session.releaseFd()
         }
     }
@@ -94,7 +98,8 @@ class PtyBrokerInstrumentedTest {
             )
 
         assertTrue("open failed: $opened", opened is PtyResult.Ok)
-        val session = (opened as PtyResult.Ok).value
+        val channel = (opened as PtyResult.Ok).value
+        val session = broker.sessionForChannel(channel)!!
 
         try {
             val output = readUntil(session, "APP_STORAGE_MARKER")
@@ -103,7 +108,7 @@ class PtyBrokerInstrumentedTest {
                 output.contains("APP_STORAGE_MARKER"),
             )
         } finally {
-            broker.close("test-2")
+            broker.close(channel)
             session.releaseFd()
         }
     }
@@ -119,11 +124,12 @@ class PtyBrokerInstrumentedTest {
                 request = PtyRequest(executable = "/system/bin/sh", rows = 24, cols = 80),
             )
 
-        val session = (opened as PtyResult.Ok).value
+        val channel = (opened as PtyResult.Ok).value
+        val session = broker.sessionForChannel(channel)!!
         try {
             assertTrue(session.resize(50, 120) is PtyResult.Ok)
         } finally {
-            broker.close("test-3")
+            broker.close(channel)
             session.releaseFd()
         }
     }
@@ -132,14 +138,15 @@ class PtyBrokerInstrumentedTest {
     fun duplicateSessionIdIsRejected() {
         val broker = PtyBroker()
         val first = broker.open("dup", "dev-1", "op-1", PtyRequest("/system/bin/sh"))
-        val session = (first as PtyResult.Ok).value
+        val channel = (first as PtyResult.Ok).value
+        val session = broker.sessionForChannel(channel)!!
 
         try {
             val second = broker.open("dup", "dev-1", "op-1", PtyRequest("/system/bin/sh"))
             assertTrue(second is PtyResult.Err)
             assertEquals(PtyError.Kind.SESSION_EXISTS, (second as PtyResult.Err).error.kind)
         } finally {
-            broker.close("dup")
+            broker.close(channel)
             session.releaseFd()
         }
     }
@@ -158,7 +165,8 @@ class PtyBrokerInstrumentedTest {
         // The fork succeeds, so open succeeds; the failure surfaces as the child
         // exiting rather than as an open error.
         assertTrue(opened is PtyResult.Ok)
-        val session = (opened as PtyResult.Ok).value
+        val channel = (opened as PtyResult.Ok).value
+        val session = broker.sessionForChannel(channel)!!
 
         try {
             var reaped = false
@@ -174,7 +182,7 @@ class PtyBrokerInstrumentedTest {
                 session.childExitCode != 0,
             )
         } finally {
-            broker.close("test-4")
+            broker.close(channel)
             session.releaseFd()
         }
     }
@@ -196,13 +204,14 @@ class PtyBrokerInstrumentedTest {
     @Test
     fun sessionCapIsEnforcedOnDevice() {
         val broker = PtyBroker()
-        val opened = mutableListOf<PtySession>()
+        val opened = mutableListOf<Pair<Int, PtySession>>()
 
         try {
             repeat(PtySessionRegistry.DEFAULT_MAX_SESSIONS_PER_DEVICE) { i ->
                 val result = broker.open("cap-$i", "capdev", "op-1", PtyRequest("/system/bin/sh"))
                 assertTrue("open $i failed: $result", result is PtyResult.Ok)
-                opened += (result as PtyResult.Ok).value
+                val channel = (result as PtyResult.Ok).value
+                opened += channel to broker.sessionForChannel(channel)!!
             }
 
             val overflow = broker.open("cap-over", "capdev", "op-1", PtyRequest("/system/bin/sh"))
@@ -211,10 +220,33 @@ class PtyBrokerInstrumentedTest {
                 (overflow as PtyResult.Err).error.kind,
             )
         } finally {
-            opened.forEach {
-                broker.close(it.id)
-                it.releaseFd()
+            opened.forEach { (channel, session) ->
+                broker.close(channel)
+                session.releaseFd()
             }
         }
     }
+
+    @Test
+    fun closingASessionLeavesTheFdCountUnchanged() {
+        // Definition-of-done item 5: opening and closing 50 PTY sessions must leave
+        // the descriptor count unchanged. The reader owns the fd and closes it;
+        // this proves the Build 1 leak is fixed.
+        val broker = PtyBroker()
+        val before = openFdCount()
+
+        repeat(50) { i ->
+            val opened = broker.open("leak-$i", "dev-leak", "op-1", PtyRequest("/system/bin/sh"))
+            assertTrue(opened is PtyResult.Ok)
+            val channel = (opened as PtyResult.Ok).value
+            val session = broker.sessionForChannel(channel)!!
+            broker.close(channel)
+            session.releaseFd()
+        }
+
+        val after = openFdCount()
+        assertTrue("fd count grew from $before to $after over 50 sessions", after <= before + 1)
+    }
+
+    private fun openFdCount(): Int = File("/proc/self/fd").list()?.size ?: -1
 }

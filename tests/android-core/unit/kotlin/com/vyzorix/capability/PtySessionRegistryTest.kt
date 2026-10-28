@@ -17,7 +17,6 @@ class PtySessionRegistryTest {
     ) = PtySession(
         id = id,
         masterFd = -1,
-        slaveFd = -1,
         slavePath = "/dev/pts/0",
         childPid = -1,
         deviceId = deviceId,
