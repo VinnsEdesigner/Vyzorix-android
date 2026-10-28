@@ -1,38 +1,42 @@
 package com.vyzorix.capability
 
 import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Allocates PTYs and starts processes on them.
  *
  * The PTY is created here, by the app, not by anything inside proot — that is
- * what makes terminal support independent of what the container can see. The
- * broker holds the master fd; the Debian side receives a duplicate over a socket
- * when it needs one (see `com.vyzorix.capability.fd`).
+ * what makes terminal support independent of what the container can see.
  *
- * Callers are responsible for reading the master fd on a single thread. This
- * class does not run a reader loop; see [PtySession] for the threading contract.
+ * A session is identified on the wire by a **channel**: a small integer allocated
+ * on open and freed on close. Deriving it from the session id would let two ids
+ * collide, and one session would then answer for the other.
+ *
+ * This class does not read the master fd. See [PtyReader] for that, and for the
+ * ownership rule that only the reader closes it.
  */
 class PtyBroker(
     private val registry: PtySessionRegistry = PtySessionRegistry(),
 ) {
+    private val channels = ConcurrentHashMap<Int, PtySession>()
 
-    /** Allocates a PTY and starts [request]. The returned session owns the fds. */
+    /**
+     * Allocates a PTY, starts [request], and assigns a channel.
+     *
+     * @return the channel number on success.
+     */
     fun open(
         sessionId: String,
         deviceId: String,
         operatorId: String,
         request: PtyRequest,
-    ): PtyResult<PtySession> {
+    ): PtyResult<Int> {
         val loaded = NativePty.loadLibrary()
-        if (loaded is PtyResult.Err) {
-            return loaded
-        }
+        if (loaded is PtyResult.Err) return loaded
 
         val pair = NativePty.openPty()
-        if (!pair.isOk) {
-            return PtyResult.Err(PtyError.fromNative(pair.status, pair.detail))
-        }
+        if (!pair.isOk) return PtyResult.Err(PtyError.fromNative(pair.status, pair.detail))
 
         val masterFd = pair.fds?.getOrNull(0) ?: -1
         val slaveFd = pair.fds?.getOrNull(1) ?: -1
@@ -55,25 +59,23 @@ class PtyBroker(
             )
 
         if (!spawn.isOk) {
-            // The fork failed, so no child exists. Release both fds here; the
-            // session object that would own them was never created.
+            // The fork failed, so no child exists and no session will own the fd.
             NativePty.closeFd(masterFd)
+
             return PtyResult.Err(PtyError.fromNative(spawn.status, spawn.detail))
         }
 
         val pid = spawn.fds?.getOrNull(0) ?: -1
         if (pid <= 0) {
             NativePty.closeFd(masterFd)
+
             return PtyResult.Err(PtyError(PtyError.Kind.INTERNAL, "spawnOnPty returned no pid"))
         }
 
-        // The parent side of the slave is already closed by SpawnOnPty; holding
-        // it open would stop the master reporting EOF when the child dies.
         val session =
             PtySession(
                 id = sessionId,
                 masterFd = masterFd,
-                slaveFd = -1,
                 slavePath = pair.detail,
                 childPid = pid,
                 deviceId = deviceId,
@@ -82,23 +84,59 @@ class PtyBroker(
 
         val registered = registry.register(session)
         if (registered is PtyResult.Err) {
-            // Cap reached or duplicate id: tear the child down rather than
-            // leaving an orphaned process with no session pointing at it.
+            // Cap reached or duplicate id: tear the child down rather than leaving
+            // an orphaned process with no session pointing at it.
             session.close()
             session.releaseFd()
+
             return registered
         }
 
-        Log.i(TAG, "session $sessionId opened on $deviceId (pid $pid, ${pair.detail})")
+        val channel = allocateChannel(session)
+        if (channel < 0) {
+            registry.unregister(sessionId)
+            session.releaseFd()
+
+            return PtyResult.Err(PtyError(PtyError.Kind.TOO_MANY_SESSIONS, "no free channel"))
+        }
+
+        Log.i(TAG, "channel $channel -> session $sessionId (pid $pid, ${pair.detail})")
+
+        return PtyResult.Ok(channel)
+    }
+
+    /** Resolves the session behind a channel. */
+    fun sessionForChannel(channel: Int): PtySession? = channels[channel]
+
+    /**
+     * Closes a session and frees its channel. The fd is released by the reader,
+     * which owns it; this only signals.
+     */
+    fun close(channel: Int): PtyResult<PtySession> {
+        val session =
+            channels.remove(channel)
+                ?: return PtyResult.Err(
+                    PtyError(PtyError.Kind.NO_SUCH_SESSION, "no channel $channel"),
+                )
+
+        registry.unregister(session.id)
 
         return PtyResult.Ok(session)
     }
 
-    /** Closes a session and returns it. The reader must call releaseFd afterwards. */
-    fun close(sessionId: String): PtyResult<PtySession> = registry.unregister(sessionId)
+    val channelCount: Int get() = channels.size
+
+    private fun allocateChannel(session: PtySession): Int {
+        for (candidate in 0 until MAX_CHANNELS) {
+            if (channels.putIfAbsent(candidate, session) == null) return candidate
+        }
+
+        return -1
+    }
 
     private companion object {
         const val TAG = "PtyBroker"
+        const val MAX_CHANNELS = 256
     }
 }
 

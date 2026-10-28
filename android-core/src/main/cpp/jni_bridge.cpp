@@ -355,4 +355,28 @@ JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_receiveFds(JNIEn
     });
 }
 
+// NativePtyResult bindListenSocket(path) — the listening fd comes back in fds[0].
+JNIEXPORT jobject JNICALL Java_com_vyzorix_capability_NativePty_bindListenSocket(JNIEnv *env,
+                                                                                 jclass /*clazz*/,
+                                                                                 jstring path) {
+    return Guarded(env, [&]() -> jobject {
+        char detail[kDetailSize] = {0};
+        std::string socket_path = ToString(env, path);
+
+        int fd = -1;
+        Status status = vyzorix::pty::BindListenSocket(socket_path, &fd, detail, sizeof(detail));
+        if (status != Status::Ok) {
+            return MakeResult(env, status, detail);
+        }
+
+        jintArray values = env->NewIntArray(1);
+        env->SetIntArrayRegion(values, 0, 1, &fd);
+
+        jobject result = MakeResult(env, Status::Ok, "", values);
+        env->DeleteLocalRef(values);
+
+        return result;
+    });
+}
+
 } // extern "C"

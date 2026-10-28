@@ -154,6 +154,15 @@ Status SendFds(int socket_fd, const int *fds, size_t fd_count, char *detail, siz
 Status ReceiveFds(int socket_fd, int timeout_ms, FdMessage *out_message, char *detail,
                   size_t detail_size);
 
+// Creates, binds and listens on an AF_UNIX stream socket in the *filesystem*
+// namespace at `path`, returning the listening fd in `*out_fd`. A stale node at
+// `path` is unlinked first, since a crashed process leaves the node behind and
+// bind() over an existing node fails.
+//
+// This exists because Android's public Java API (LocalServerSocket) can only bind
+// the abstract namespace, which proot cannot bind into the container tree.
+Status BindListenSocket(const std::string &path, int *out_fd, char *detail, size_t detail_size);
+
 } // namespace vyzorix::pty
 
 #endif // VYZORIX_PTY_BROKER_H

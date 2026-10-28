@@ -19,10 +19,16 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 namespace vyzorix::pty {
 namespace {
+
+// Pending connections the kernel will hold for the bridge socket. Matches the
+// backlog LocalServerSocket uses; the bridge caps live connections at 16 anyway.
+constexpr int kListenBacklog = 50;
 
 void SetDetail(char *detail, size_t size, const char *what) {
     if (detail == nullptr || size == 0) {
@@ -161,6 +167,63 @@ Status ReceiveFds(int socket_fd, int timeout_ms, FdMessage *out_message, char *d
             out_message->fds.push_back(fd);
         }
     }
+
+    return Status::Ok;
+}
+
+Status BindListenSocket(const std::string &path, int *out_fd, char *detail, size_t detail_size) {
+    if (path.empty() || out_fd == nullptr) {
+        SetMessage(detail, detail_size, "invalid argument");
+        return Status::InvalidArgument;
+    }
+
+    // AF_UNIX path names are bounded by sun_path (108 bytes on Linux, including
+    // the NUL). A longer path would be silently truncated by the kernel, so it is
+    // rejected rather than bound to a surprising name.
+    if (path.size() >= sizeof(sockaddr_un::sun_path)) {
+        SetMessage(detail, detail_size, "socket path too long");
+        return Status::InvalidArgument;
+    }
+
+    // A crashed process leaves the node behind and bind() over it fails with
+    // EADDRINUSE, so remove any stale node first.
+    unlink(path.c_str());
+
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) {
+        SetDetail(detail, detail_size, "socket");
+        return Status::SyscallFailed;
+    }
+
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    memcpy(addr.sun_path, path.c_str(), path.size());
+
+    if (bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
+        SetDetail(detail, detail_size, "bind");
+        close(fd);
+        return Status::SyscallFailed;
+    }
+
+    // The file mode is the access control for a filesystem socket. Android's
+    // setReadable/setWritable are a best-effort on top; setting 0600 here means
+    // the node is owner-only from the moment it exists, with no window where it
+    // is world-accessible.
+    if (chmod(path.c_str(), S_IRUSR | S_IWUSR) != 0) {
+        SetDetail(detail, detail_size, "chmod");
+        close(fd);
+        unlink(path.c_str());
+        return Status::SyscallFailed;
+    }
+
+    if (listen(fd, kListenBacklog) != 0) {
+        SetDetail(detail, detail_size, "listen");
+        close(fd);
+        unlink(path.c_str());
+        return Status::SyscallFailed;
+    }
+
+    *out_fd = fd;
 
     return Status::Ok;
 }

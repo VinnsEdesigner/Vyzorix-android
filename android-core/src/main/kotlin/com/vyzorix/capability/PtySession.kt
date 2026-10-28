@@ -24,13 +24,16 @@ import java.util.concurrent.atomic.AtomicInteger
 class PtySession internal constructor(
     val id: String,
     val masterFd: Int,
-    val slaveFd: Int,
     val slavePath: String,
     val childPid: Int,
     val deviceId: String,
     val operatorId: String,
 ) {
     private val closed = AtomicBoolean(false)
+
+    /** True once [close] has been called. Read by the reader loop to stop. */
+    val isClosed: Boolean get() = closed.get()
+
     private val exitCode = AtomicInteger(Int.MIN_VALUE)
 
     /**
@@ -106,24 +109,25 @@ class PtySession internal constructor(
      * it via [releaseFd] once it has stopped reading. Calling this is safe from
      * any thread and is idempotent.
      *
-     * The child kill is best-effort. A session with no child (or one running
-     * where the native library is unavailable) still transitions to closed,
-     * because the caller's intent — stop using this session — is satisfiable
-     * regardless.
+     * The child kill is best-effort: the session transitions to closed either
+     * way, because the caller's intent is to stop using it.
      */
     fun close(): PtyResult<Unit> {
         if (!closed.compareAndSet(false, true)) {
             return PtyResult.Ok(Unit)
         }
 
-        if (childPid <= 0) {
-            return PtyResult.Ok(Unit)
+        // Signalling only. The master fd is closed by the reader, which owns it.
+        // Closing it here would release the number while another thread may be
+        // reading, and the reader would then read from whatever got that number.
+        //
+        // A pid that has already been reaped is not killed: the kernel is free to
+        // recycle it, and signalling the recycled number would hit an unrelated
+        // process.
+        if (childPid > 0 && !hasExited) {
+            NativePty.killChild(childPid)
         }
 
-        // A live shell does not exit on its own, so it is killed rather than
-        // asked politely. The kill is best-effort: the session is closed either
-        // way, because the caller's intent is to stop using it.
-        NativePty.killChild(childPid)
         return PtyResult.Ok(Unit)
     }
 
@@ -132,7 +136,7 @@ class PtySession internal constructor(
      * reader, after it has stopped reading.
      */
     internal fun releaseFd() {
-        if (childPid > 0) {
+        if (childPid > 0 && !hasExited) {
             NativePty.killChild(childPid)
         }
         if (masterFd >= 0) {
