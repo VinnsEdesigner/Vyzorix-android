@@ -101,7 +101,13 @@ class AndroidSocketServerInstrumentedTest {
 
     @Test
     fun validTokenAuthenticatesAndAScopedCallAnswers() {
-        val token = tokens.issue("s1", "dev-1", "op-1")
+        val token =
+            tokens.issue(
+                "s1",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf(BatteryApi.NAME, LogcatApi.NAME),
+            )
 
         connect().use { socket ->
             val out = socket.outputStream
@@ -165,7 +171,13 @@ class AndroidSocketServerInstrumentedTest {
 
     @Test
     fun unknownApiReportsUnknownApi() {
-        val token = tokens.issue("s1", "dev-1", "op-1")
+        val token =
+            tokens.issue(
+                "s1",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf(BatteryApi.NAME, LogcatApi.NAME),
+            )
 
         connect().use { socket ->
             val out = socket.outputStream
@@ -182,7 +194,13 @@ class AndroidSocketServerInstrumentedTest {
 
     @Test
     fun twoConnectionsCanUseTheSameToken() {
-        val token = tokens.issue("s1", "dev-1", "op-1")
+        val token =
+            tokens.issue(
+                "s1",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf(BatteryApi.NAME, LogcatApi.NAME),
+            )
 
         repeat(2) {
             connect().use { socket ->
@@ -241,7 +259,13 @@ class AndroidSocketServerInstrumentedTest {
 
     @Test
     fun eventIsPushedOnlyToAuthenticatedConnections() {
-        val token = tokens.issue("s1", "dev-1", "op-1")
+        val token =
+            tokens.issue(
+                "s1",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf(BatteryApi.NAME, LogcatApi.NAME),
+            )
 
         connect().use { socket ->
             val out = socket.outputStream

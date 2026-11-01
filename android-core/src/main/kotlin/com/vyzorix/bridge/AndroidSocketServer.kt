@@ -40,6 +40,22 @@ class AndroidSocketServer(
     private val router: ApiRouter,
     private val onPtyInput: (channel: Int, bytes: ByteArray) -> Unit,
     private val onPtyCredit: (channel: Int, bytes: Int) -> Unit,
+    /**
+     * True when [channel] belongs to [sessionId]. The device's binding check
+     * (boundary contract §9): a connection may only drive the channels its own
+     * session opened, so one operator cannot type into or credit another's
+     * terminal. Defaulted to deny so a caller that forgets it fails closed.
+     */
+    private val channelOwnedBy: (channel: Int, sessionId: String) -> Boolean = { _, _ -> false },
+    /**
+     * This device's own identity, or null when it has not been provisioned yet.
+     *
+     * The contract's §9 clause `token.deviceId == self` needs the device to know
+     * its own ID, which arrives with registration (Build 3). Until then this is
+     * null and the check is skipped *loudly* — an unprovisioned device is reported
+     * once at startup rather than silently accepting any token's device ID.
+     */
+    private val selfDeviceId: String? = null,
 ) {
     private val running = AtomicBoolean(false)
     private val connections = AtomicInteger(0)
@@ -103,6 +119,16 @@ class AndroidSocketServer(
                 }
 
             Log.i(TAG, "bridge listening on ${socketPath.absolutePath}")
+            if (selfDeviceId == null) {
+                // Stated once, loudly: the §9 device-identity clause is not enforced
+                // because the device does not know its own ID yet (registration is
+                // Build 3). Silence here would read as "enforced".
+                Log.w(
+                    TAG,
+                    "device identity unset: tokens are not bound to this device " +
+                        "(registration lands in Build 3)",
+                )
+            }
 
             true
         } catch (t: Throwable) {
@@ -277,6 +303,15 @@ class AndroidSocketServer(
             val presented = request.args[ARG_TOKEN_NAME] ?: return false
             val validated = tokens.validate(presented) ?: return false
 
+            // §9 binding: the token must be for THIS device. When the device is not
+            // yet provisioned there is no self ID to compare, and the token is
+            // accepted on the strength of the token alone; start() logs that state
+            // once so it is visible rather than assumed.
+            if (selfDeviceId != null && validated.deviceId != selfDeviceId) {
+                Log.w(TAG, "token for device ${validated.deviceId} presented to $selfDeviceId")
+                return false
+            }
+
             token = validated
             // Past the handshake a connection may idle, so the pre-auth deadline
             // no longer applies.
@@ -314,6 +349,10 @@ class AndroidSocketServer(
                 }
                 FrameType.PtyInput -> {
                     val decoded = PtyFrame.decode(frame.payload) ?: return
+                    val active = token ?: return
+                    // Binding check (§9): only the session that opened the channel
+                    // may type into it.
+                    if (!active.permitsChannel(decoded.first, channelOwnedBy)) return
                     onPtyInput(decoded.first, decoded.second)
                 }
                 FrameType.PtyCredit -> {
@@ -324,6 +363,8 @@ class AndroidSocketServer(
                             )
                         }.getOrNull() ?: return
 
+                    val active = token ?: return
+                    if (!active.permitsChannel(credit.channel, channelOwnedBy)) return
                     onPtyCredit(credit.channel, credit.bytes)
                 }
                 else -> Unit

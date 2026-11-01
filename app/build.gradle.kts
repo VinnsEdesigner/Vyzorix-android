@@ -47,6 +47,17 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // See android-core: compileSdk is well above minSdk, so an unguarded newer-API
+    // call must fail the gate rather than the device.
+    lint {
+        abortOnError = true
+        warningsAsErrors = false
+        error += "NewApi"
+        disable += "ObsoleteSdkInt"
+        disable += "GradleDependency"
+        disable += "AndroidGradlePluginVersion"
+    }
 }
 
 dependencies {

@@ -62,10 +62,11 @@ tasks.register<Exec>("nativeGate") {
 // The full gate. This is what CI runs and what a change must pass.
 tasks.register("gate") {
     group = "verification"
-    description = "Format, static analysis, dead code, unit tests, and the native gate."
+    description = "Format, static analysis, Android lint, dead code, unit tests, and the native gate."
     dependsOn(
         subprojects.map { "${it.path}:ktlintCheck" },
         subprojects.map { "${it.path}:detekt" },
+        subprojects.map { "${it.path}:lintDebug" },
         subprojects.map { "${it.path}:testDebugUnitTest" },
         "deadcode",
         "nativeGate",

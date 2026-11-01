@@ -28,8 +28,33 @@ class SessionToken internal constructor(
 
     val isValid: Boolean get() = !isRevoked && !isExpired
 
-    /** True when this token may call [api]. An empty allowlist permits every API. */
-    fun permits(api: String): Boolean = apiAllowlist.isEmpty() || api in apiAllowlist
+    /**
+     * True when this token may call [api]. Fail-closed: an empty allowlist permits
+     * nothing.
+     *
+     * This is deliberately not "empty means every API". The allowlist is resolved
+     * on the server, so an empty one is either a resolution that granted nothing
+     * or a token that was built wrong; treating it as a master key turns either
+     * case into full access. See documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md §7.
+     */
+    fun permits(api: String): Boolean = api in apiAllowlist
+
+    /**
+     * True when this token may act on [channel].
+     *
+     * The device's binding check (boundary contract §9): the token's session must
+     * own the channel, and the channel must exist. [owns] is the device's own
+     * channel→session fact, so this is set membership against what the device
+     * minted, not a scope the server sent. A token with no session owns nothing.
+     */
+    fun permitsChannel(
+        channel: Int,
+        owns: (channel: Int, sessionId: String) -> Boolean,
+    ): Boolean {
+        if (sessionId.isEmpty()) return false
+
+        return owns(channel, sessionId)
+    }
 
     internal fun revoke() {
         revoked.set(true)
@@ -51,13 +76,19 @@ class SessionTokenRegistry(
     private val byToken = ConcurrentHashMap<String, SessionToken>()
 
     /**
-     * Issues a token for a session. [apiAllowlist] empty means every API.
+     * Issues a token for a session.
+     *
+     * [apiAllowlist] is required and is the token's whole authority: the server
+     * resolves it, and the device enforces exactly it. There is deliberately no
+     * default — an omitted allowlist used to mean "every API", which is how the
+     * fail-open bug was reachable. A caller that wants a broad token must say so
+     * explicitly.
      */
     fun issue(
         sessionId: String,
         deviceId: String,
         operatorId: String,
-        apiAllowlist: Set<String> = emptySet(),
+        apiAllowlist: Set<String>,
         ttlMs: Long = DEFAULT_TTL_MS,
     ): SessionToken {
         val bytes = ByteArray(TOKEN_BYTES)

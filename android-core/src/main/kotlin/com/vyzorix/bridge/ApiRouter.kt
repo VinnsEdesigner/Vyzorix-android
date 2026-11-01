@@ -1,6 +1,8 @@
 package com.vyzorix.bridge
 
 import android.content.Context
+import com.vyzorix.permissions.PermissionRegistry
+import com.vyzorix.permissions.PermissionRequester
 import org.json.JSONObject
 
 /**
@@ -50,8 +52,16 @@ class ApiOutcome private constructor(
  *
  * Adding an API is one line here plus one file in `apis/`, which is the
  * extension model the architecture calls for.
+ *
+ * Permission enforcement lives here, not in the handlers. The router consults
+ * [PermissionRegistry] for the API being called and refuses it when the runtime
+ * permission is missing, so a handler never requests a permission itself and the
+ * 120-API surface cannot scatter that logic. The dialog path is separate: it is
+ * driven from the app, and a call over the socket is either permitted or refused.
  */
-class ApiRouter {
+class ApiRouter(
+    private val permissions: PermissionRequester? = null,
+) {
     private val handlers = LinkedHashMap<String, ApiHandler>()
 
     /** Registers [handler] under [name]. A duplicate name is a programming error. */
@@ -64,6 +74,16 @@ class ApiRouter {
 
         return this
     }
+
+    /**
+     * Names of every registered API, sorted.
+     *
+     * Used to mint a session's allowlist on the device: a shell session may call
+     * every API the bridge serves, and the set is stated explicitly rather than
+     * left empty, because an empty allowlist permits nothing (boundary contract
+     * §7). When the server resolves a per-session allowlist, that replaces this.
+     */
+    fun names(): List<String> = handlers.keys.sorted()
 
     /**
      * Dispatches a call. [token] is the validated session token, already checked
@@ -86,10 +106,36 @@ class ApiRouter {
             )
         }
 
+        // The single permission gate. A missing runtime permission is a refusal,
+        // not a prompt: a request over the socket has no Activity to attach a
+        // dialog to, and blocking a dispatch thread on a dialog that cannot appear
+        // would stall the pool. The app asks for permissions before it needs them.
+        if (!permissionGranted(api)) {
+            return ApiOutcome.fail(
+                BridgeErrorKind.FORBIDDEN,
+                "runtime permission not granted for $api",
+            )
+        }
+
         return try {
             handler.handle(ApiCall(context, token, args))
         } catch (t: Throwable) {
             ApiOutcome.fail(BridgeErrorKind.INTERNAL, "${t.javaClass.simpleName}: ${t.message}")
         }
+    }
+
+    /**
+     * True when the API's runtime permission is held, or it needs none.
+     *
+     * Without a requester (a test, or a build with no app module) an API that needs
+     * a permission is refused: fail-closed, matching the token rule.
+     */
+    private fun permissionGranted(api: String): Boolean {
+        if (PermissionRegistry.needsNoPermission(api)) return true
+
+        val def = PermissionRegistry.forApi(api) ?: return true
+        val requester = permissions ?: return false
+
+        return requester.isGranted(def.androidPermission)
     }
 }

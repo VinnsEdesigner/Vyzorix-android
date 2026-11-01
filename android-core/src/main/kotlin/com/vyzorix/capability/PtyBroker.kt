@@ -109,6 +109,23 @@ class PtyBroker(
     fun sessionForChannel(channel: Int): PtySession? = channels[channel]
 
     /**
+     * True when [channel] belongs to [sessionId].
+     *
+     * This is the device's real resource axis (boundary contract §9): the device
+     * holds one resource — itself — so its binding check is not a scope evaluation
+     * but set membership against a fact it minted. A connection may only act on
+     * the channels its own session opened.
+     */
+    fun channelBelongsToSession(
+        channel: Int,
+        sessionId: String,
+    ): Boolean {
+        val session = channels[channel] ?: return false
+
+        return session.id == sessionId
+    }
+
+    /**
      * Closes a session and frees its channel. The fd is released by the reader,
      * which owns it; this only signals.
      */

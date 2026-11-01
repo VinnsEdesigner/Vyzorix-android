@@ -88,6 +88,24 @@ android {
         }
     }
 
+    // Lint is part of the gate because compileSdk (34) is deliberately far above
+    // minSdk (26): an unguarded call to a newer API compiles cleanly and throws
+    // NoSuchMethodError on the target device. `NewApi` is the check that catches
+    // exactly that, and it is an error here rather than a warning.
+    lint {
+        abortOnError = true
+        warningsAsErrors = false
+        error += "NewApi"
+        // Version-conditional code is the point of a compat package; the check
+        // that flags "this could be unconditional" is noise for that pattern.
+        disable += "ObsoleteSdkInt"
+        // Dependency versions are pinned deliberately (AGP/Kotlin/KSP must stay in
+        // lockstep; targetSdk is a platform constraint). "A newer version exists"
+        // is not actionable here.
+        disable += "GradleDependency"
+        disable += "AndroidGradlePluginVersion"
+    }
+
     // Tests live in the repo-root tests/ tree rather than alongside the sources,
     // so the module tree contains only shipping code.
     sourceSets {

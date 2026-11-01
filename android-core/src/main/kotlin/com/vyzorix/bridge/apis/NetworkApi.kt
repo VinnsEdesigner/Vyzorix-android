@@ -6,12 +6,22 @@ import android.net.NetworkCapabilities
 import com.vyzorix.bridge.ApiCall
 import com.vyzorix.bridge.ApiHandler
 import com.vyzorix.bridge.ApiOutcome
+import com.vyzorix.bridge.ApiTags
 import com.vyzorix.bridge.BridgeErrorKind
+import com.vyzorix.bridge.VyzorixApi
 import org.json.JSONObject
 
 /**
  * Connectivity state. No runtime permission.
  */
+@VyzorixApi(
+    tags = [
+        ApiTags.DATA_PUBLIC,
+        ApiTags.OP_READ,
+        ApiTags.PROTECTION_NORMAL,
+        ApiTags.VISIBILITY_PUBLIC,
+    ],
+)
 object NetworkApi : ApiHandler {
 
     const val NAME = "network"

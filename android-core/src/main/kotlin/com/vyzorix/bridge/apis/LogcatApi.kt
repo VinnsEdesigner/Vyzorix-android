@@ -3,7 +3,9 @@ package com.vyzorix.bridge.apis
 import com.vyzorix.bridge.ApiCall
 import com.vyzorix.bridge.ApiHandler
 import com.vyzorix.bridge.ApiOutcome
+import com.vyzorix.bridge.ApiTags
 import com.vyzorix.bridge.BridgeErrorKind
+import com.vyzorix.bridge.VyzorixApi
 import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
@@ -17,6 +19,14 @@ import org.json.JSONObject
  * bridge, and logcat's default ring buffer is far larger than any response should
  * be.
  */
+@VyzorixApi(
+    tags = [
+        ApiTags.DATA_PRIVATE,
+        ApiTags.OP_READ,
+        ApiTags.PROTECTION_NORMAL,
+        ApiTags.VISIBILITY_PRIVATE,
+    ],
+)
 object LogcatApi : ApiHandler {
 
     const val NAME = "logcat"

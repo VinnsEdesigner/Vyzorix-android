@@ -25,8 +25,16 @@ kotlin-test = "1.9.23"
 # accepted. See doc/ANDROID_SERVICE_ARCHITECTURE.md §1.1.
 #
 # compileSdk stays high so the code can compile against modern APIs.
+#
+# minSdk is 26 because that is the floor the code actually has: the PTY reader and
+# session registry use ConcurrentHashMap.compute/computeIfPresent (API 24) and
+# Process.waitFor(timeout)/destroyForcibly (API 26). It was declared 23 for a while,
+# which was never true — lint's NewApi check found seven unguarded calls that would
+# have thrown NoSuchMethodError on a 23 device. The fleet is Android 13, so raising
+# the floor excludes nothing and makes the declaration honest rather than guarding
+# seven call sites to support an OS nothing runs.
 android-compileSdk = "34"
-android-minSdk = "23"
+android-minSdk = "26"
 android-targetSdk = "28"
 
 # AndroidX

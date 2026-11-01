@@ -4,6 +4,7 @@ import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.vyzorix.bridge.apis.SessionApi
 import com.vyzorix.capability.PtyBroker
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyRequest
@@ -53,6 +54,9 @@ class PtyRoundTripInstrumentedTest {
                     broker.sessionForChannel(channel)?.write(bytes)
                 },
                 onPtyCredit = { channel, bytes -> readers[channel]?.grantCredit(bytes) },
+                // Real ownership: this test drives pty_input, and the server now
+                // refuses input for a channel the connection's session does not own.
+                channelOwnedBy = broker::channelBelongsToSession,
             )
         assertTrue(server.start())
     }
@@ -153,7 +157,7 @@ class PtyRoundTripInstrumentedTest {
     @Test
     fun aShellRoundTripsOverTheSocket() {
         val channel = openSession("rt-1", "/system/bin/sh")
-        val token = tokens.issue("rt-1", "dev-1", "op-1")
+        val token = tokens.issue("rt-1", "dev-1", "op-1", apiAllowlist = setOf(SessionApi.NAME))
 
         connect(token.token).use { socket ->
             val out = socket.outputStream
@@ -175,8 +179,18 @@ class PtyRoundTripInstrumentedTest {
         val channelB = openSession("scoped-b", "/system/bin/sh")
 
         // Two connections, each bound to a different session's token.
-        connect(tokens.issue("scoped-a", "dev-1", "op-1").token).use { socketA ->
-            connect(tokens.issue("scoped-b", "dev-1", "op-1").token).use { socketB ->
+        connect(
+            tokens.issue("scoped-a", "dev-1", "op-1", apiAllowlist = setOf(SessionApi.NAME)).token,
+        ).use { socketA ->
+            connect(
+                tokens
+                    .issue(
+                        "scoped-b",
+                        "dev-1",
+                        "op-1",
+                        apiAllowlist = setOf(SessionApi.NAME),
+                    ).token,
+            ).use { socketB ->
                 sendInput(socketA.outputStream, channelA, "echo ONLY_A\n")
 
                 // A's output must arrive on A's connection.
@@ -217,7 +231,7 @@ class PtyRoundTripInstrumentedTest {
         // A small initial window proves credit is what releases the reader: with
         // the window exhausted the reader stops, and a credit frame resumes it.
         val channel = openSession("credit-1", "/system/bin/sh", credit = 8)
-        val token = tokens.issue("credit-1", "dev-1", "op-1")
+        val token = tokens.issue("credit-1", "dev-1", "op-1", apiAllowlist = setOf(SessionApi.NAME))
 
         connect(token.token).use { socket ->
             val out = socket.outputStream
@@ -257,7 +271,7 @@ class PtyRoundTripInstrumentedTest {
         // The length prefix is the payload length, big-endian, and the type is one
         // byte after it. A client implementing the contract depends on exactly this.
         val channel = openSession("shape-1", "/system/bin/sh")
-        val token = tokens.issue("shape-1", "dev-1", "op-1")
+        val token = tokens.issue("shape-1", "dev-1", "op-1", apiAllowlist = setOf(SessionApi.NAME))
 
         connect(token.token).use { socket ->
             sendInput(socket.outputStream, channel, "echo SHAPE\n")

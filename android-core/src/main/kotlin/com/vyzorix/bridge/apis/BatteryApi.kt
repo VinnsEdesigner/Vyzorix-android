@@ -7,12 +7,22 @@ import android.os.BatteryManager
 import com.vyzorix.bridge.ApiCall
 import com.vyzorix.bridge.ApiHandler
 import com.vyzorix.bridge.ApiOutcome
+import com.vyzorix.bridge.ApiTags
 import com.vyzorix.bridge.BridgeErrorKind
+import com.vyzorix.bridge.VyzorixApi
 import org.json.JSONObject
 
 /**
  * Battery state. No runtime permission.
  */
+@VyzorixApi(
+    tags = [
+        ApiTags.DATA_PUBLIC,
+        ApiTags.OP_READ,
+        ApiTags.PROTECTION_NORMAL,
+        ApiTags.VISIBILITY_PUBLIC,
+    ],
+)
 object BatteryApi : ApiHandler {
 
     const val NAME = "battery"

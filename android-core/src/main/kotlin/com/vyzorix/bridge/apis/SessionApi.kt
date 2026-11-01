@@ -32,6 +32,13 @@ class SessionApi(
     ) -> PtyResult<Int>,
     private val closeSession: (channel: Int) -> PtyResult<Unit>,
     private val resizeSession: (channel: Int, rows: Int, cols: Int) -> PtyResult<Unit>,
+    /**
+     * True when [channel] belongs to [sessionId]. This is the device's binding
+     * check (boundary contract §9): a connection may only act on the channels its
+     * own session opened, so one operator cannot close or resize another's
+     * terminal.
+     */
+    private val channelOwnedBy: (channel: Int, sessionId: String) -> Boolean,
 ) : ApiHandler {
 
     override fun handle(call: ApiCall): ApiOutcome {
@@ -76,6 +83,13 @@ class SessionApi(
             call.args["channel"]?.toIntOrNull()
                 ?: return ApiOutcome.fail(BridgeErrorKind.INVALID_ARGS, "channel is required")
 
+        if (!call.token.permitsChannel(channel, channelOwnedBy)) {
+            return ApiOutcome.fail(
+                BridgeErrorKind.FORBIDDEN,
+                "channel $channel is not owned by session ${call.token.sessionId}",
+            )
+        }
+
         return when (val closed = closeSession(channel)) {
             is PtyResult.Ok -> ApiOutcome.ok(JSONObject().put("closed", channel))
             is PtyResult.Err -> ApiOutcome.fail(mapKind(closed.error), closed.error.detail)
@@ -92,6 +106,13 @@ class SessionApi(
         val cols =
             call.args["cols"]?.toIntOrNull()
                 ?: return ApiOutcome.fail(BridgeErrorKind.INVALID_ARGS, "cols is required")
+
+        if (!call.token.permitsChannel(channel, channelOwnedBy)) {
+            return ApiOutcome.fail(
+                BridgeErrorKind.FORBIDDEN,
+                "channel $channel is not owned by session ${call.token.sessionId}",
+            )
+        }
 
         return when (val resized = resizeSession(channel, rows, cols)) {
             is PtyResult.Ok -> ApiOutcome.ok(JSONObject().put("channel", channel))

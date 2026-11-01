@@ -22,3 +22,12 @@ kotlin-unused-decl:receive                     # receiving half of the fd handof
 # Live session count, for the operator's dashboard and for tests.
 kotlin-unused-const:channelCount               # live-session gauge; consumed by the diagnostics dashboard
 
+# The permission package's app-facing surface. The router enforces at call time
+# (refuse when the permission is not held); the dialog path is driven from the app,
+# because a socket dispatch thread has no Activity to attach a dialog to. Its first
+# caller lands with the first permission-gated API (camera/location/notification),
+# which is not registered yet — every registered API today needs no permission.
+kotlin-unused-decl:ensure                      # app-facing dialog path; first caller with a gated API
+kotlin-test-only-decl:requestedPermissions     # builds the array the app's Activity forwards to the system
+kotlin-test-only-decl:allGranted               # interprets the Activity's onRequestPermissionsResult
+

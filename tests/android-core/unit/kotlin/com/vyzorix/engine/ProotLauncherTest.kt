@@ -2,7 +2,9 @@ package com.vyzorix.engine
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,5 +73,56 @@ class ProotLauncherTest {
 
         assertEquals(ProotLauncher.prootBinary(context).absolutePath, request.executable)
         assertEquals(request.executable, request.arguments.first())
+    }
+
+    @Test
+    fun `the bind list never crosses the engine zone`() {
+        // The closed-world guarantee (§10): the rootfs, secret store and recordings
+        // are not bound, so the container cannot reach them by construction.
+        for (bind in ProotLauncher.binds(context)) {
+            val host = bind.substringBefore(":")
+            assertFalse("bind $bind crosses the engine zone", ProotLauncher.isEngineZonePath(host))
+        }
+    }
+
+    @Test
+    fun `the engine zone is recognised in its several shapes`() {
+        val rootfs = ProotLauncher.rootfs(context).absolutePath
+        val secrets = File(context.filesDir, ProotLauncher.SECRETS_DIR).absolutePath
+        val recordings = File(context.filesDir, ProotLauncher.RECORDINGS_DIR).absolutePath
+
+        // rootfs is the container's own root, so it is NOT the engine zone: the
+        // zone is what holds a secret or a recording.
+        assertFalse(
+            "rootfs is the container root, not a leak",
+            ProotLauncher.isEngineZonePath(rootfs),
+        )
+        assertTrue(ProotLauncher.isEngineZonePath(secrets))
+        assertTrue(ProotLauncher.isEngineZonePath(recordings))
+        assertTrue(
+            "a child of the zone must be refused",
+            ProotLauncher.isEngineZonePath("$secrets/token"),
+        )
+        assertTrue(ProotLauncher.isEngineZonePath("$recordings/session.cast"))
+    }
+
+    @Test
+    fun `a normal path is not in the engine zone`() {
+        assertFalse(ProotLauncher.isEngineZonePath("/sdcard"))
+        assertFalse(ProotLauncher.isEngineZonePath("/tmp"))
+        assertFalse(ProotLauncher.isEngineZonePath(context.filesDir.absolutePath))
+    }
+
+    @Test
+    fun `the bind list carries the socket and the overlay prefix`() {
+        val binds = ProotLauncher.binds(context)
+
+        assertTrue(
+            "the socket must be bound",
+            binds.any {
+                it.endsWith(ProotLauncher.BRIDGE_SOCKET_IN_CONTAINER)
+            },
+        )
+        assertTrue("the overlay prefix must be bound", binds.any { it.contains("/usr-local") })
     }
 }

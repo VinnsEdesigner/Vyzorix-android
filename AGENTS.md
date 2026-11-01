@@ -2,10 +2,9 @@
 
 Instructions for any agent or engineer working in this repository.
 
-The architecture this repo implements is `doc/ANDROID_SERVICE_ARCHITECTURE.md`
-(mirrored from `vyzorix-update-server/documents/`). Read it before changing
-anything structural; it is the contract, and it records *why* the awkward
-constraints below exist.
+The architecture this repo implements is `doc/ANDROID_SERVICE_ARCHITECTURE.md`.
+Read it before changing anything structural; it is the contract, and it records
+*why* the awkward constraints below exist.
 
 ---
 
@@ -333,6 +332,6 @@ cloud-connector/     endpoint constants + app-proxy relay
 app/                 the APK: manifest, permissions, nothing else
 debian-engine/       rootfs tarball, proot launcher, pty-agent, android-bin
 app-runtime/         supervisor (C) and app-* CLI wrappers
-doc/                 architecture, ADRs, spike results
+doc/                 architecture, the current build contract, spike results
 tests/               all tests, split per module (unit/ and instrumented/)
 ```

@@ -25,8 +25,8 @@ class SessionTokensTest {
     @Test
     fun `issued tokens are unique and validate`() {
         val registry = SessionTokenRegistry()
-        val first = registry.issue("s1", "dev-1", "op-1")
-        val second = registry.issue("s2", "dev-1", "op-1")
+        val first = registry.issue("s1", "dev-1", "op-1", apiAllowlist = setOf("battery"))
+        val second = registry.issue("s2", "dev-1", "op-1", apiAllowlist = setOf("battery"))
 
         assertNotEquals(first.token, second.token)
         assertSame(first, registry.validate(first.token))
@@ -41,12 +41,15 @@ class SessionTokensTest {
     }
 
     @Test
-    fun `an empty allowlist permits every api`() {
+    fun `an empty allowlist permits nothing`() {
+        // Fail-closed: the allowlist is resolved on the server, so an empty one is
+        // either "granted nothing" or a malformed token. Treating it as a master
+        // key would turn either case into full access.
         val registry = SessionTokenRegistry()
-        val token = registry.issue("s1", "dev-1", "op-1")
+        val token = registry.issue("s1", "dev-1", "op-1", apiAllowlist = emptySet())
 
-        assertTrue(token.permits("battery"))
-        assertTrue(token.permits("logcat"))
+        assertFalse(token.permits("battery"))
+        assertFalse(token.permits("logcat"))
     }
 
     @Test
@@ -62,7 +65,14 @@ class SessionTokensTest {
     fun `an expired token stops validating and is dropped`() {
         val clock = FakeClock()
         val registry = SessionTokenRegistry(clock = { clock.now })
-        val token = registry.issue("s1", "dev-1", "op-1", ttlMs = 1000)
+        val token =
+            registry.issue(
+                "s1",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf("battery"),
+                ttlMs = 1000,
+            )
 
         assertSame(token, registry.validate(token.token))
 
@@ -75,9 +85,9 @@ class SessionTokensTest {
     @Test
     fun `revoking a session drops every token it owns`() {
         val registry = SessionTokenRegistry()
-        val a = registry.issue("s1", "dev-1", "op-1")
-        val b = registry.issue("s1", "dev-1", "op-1")
-        val other = registry.issue("s2", "dev-1", "op-1")
+        val a = registry.issue("s1", "dev-1", "op-1", apiAllowlist = setOf("battery"))
+        val b = registry.issue("s1", "dev-1", "op-1", apiAllowlist = setOf("battery"))
+        val other = registry.issue("s2", "dev-1", "op-1", apiAllowlist = setOf("battery"))
 
         val removed = registry.revokeSession("s1")
 
@@ -91,8 +101,22 @@ class SessionTokensTest {
     fun `sweep drops expired and revoked tokens only`() {
         val clock = FakeClock()
         val registry = SessionTokenRegistry(clock = { clock.now })
-        val shortLived = registry.issue("s1", "dev-1", "op-1", ttlMs = 10)
-        val longLived = registry.issue("s2", "dev-1", "op-1", ttlMs = 1_000_000)
+        val shortLived =
+            registry.issue(
+                "s1",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf("battery"),
+                ttlMs = 10,
+            )
+        val longLived =
+            registry.issue(
+                "s2",
+                "dev-1",
+                "op-1",
+                apiAllowlist = setOf("battery"),
+                ttlMs = 1_000_000,
+            )
 
         clock.advance(11)
 

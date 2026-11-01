@@ -24,6 +24,7 @@ import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyResult
 import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.permissions.PermissionRequester
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -39,6 +40,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * `START_STICKY` so the system restarts it after a kill. Child processes are not
  * phantom processes precisely because they belong to this service, which is why
  * the engine runs under it rather than as a detached daemon.
+ *
+ * On the phantom-process killer (Android 12+, ~32 concurrent children): it is not
+ * a targetSdk-gated behaviour and there is no public or hidden `ActivityManager`
+ * API to disable it — `setPhantomProcessList` does not exist, so a reflection call
+ * for it would throw and silently do nothing. The lever is the global setting
+ * `settings_enable_monitor_phantom_procs`, writable only from shell/root or via
+ * Shizuku (documented future work). Until then the bound is respected by keeping
+ * the PTY session cap low, and the architecture doc's §1.4 stands: the OEM killer,
+ * not the phantom killer, is the survival risk.
  */
 class VyzorixForegroundService : Service() {
 
@@ -85,6 +95,7 @@ class VyzorixForegroundService : Service() {
                 router = router,
                 onPtyInput = ::onPtyInput,
                 onPtyCredit = ::onPtyCredit,
+                channelOwnedBy = broker::channelBelongsToSession,
             )
 
         if (!bridge.start()) {
@@ -112,9 +123,10 @@ class VyzorixForegroundService : Service() {
                 openSession = ::openSession,
                 closeSession = ::closeSession,
                 resizeSession = ::resizeSession,
+                channelOwnedBy = broker::channelBelongsToSession,
             )
 
-        return ApiRouter()
+        return ApiRouter(permissions = PermissionRequester(this))
             .register(BatteryApi.NAME, BatteryApi)
             .register(DeviceInfoApi.NAME, DeviceInfoApi)
             .register(StorageApi.NAME, StorageApi)
@@ -131,6 +143,12 @@ class VyzorixForegroundService : Service() {
      * The token is issued here and handed to the child through its environment, so
      * the container can reach the bridge and be identified. The request is built
      * after the token exists for exactly that reason.
+     *
+     * The session's allowlist is the full local API set, stated explicitly: a shell
+     * session is an operator's terminal and may call every bridge API. It is spelled
+     * out rather than left empty because an empty allowlist permits nothing — the
+     * fail-closed rule from the boundary contract (§7). When the server resolves a
+     * per-session allowlist (Build 3), it replaces this set.
      */
     fun openSession(
         sessionId: String,
@@ -142,6 +160,7 @@ class VyzorixForegroundService : Service() {
                 sessionId = sessionId,
                 deviceId = deviceId,
                 operatorId = operatorId,
+                apiAllowlist = router.names().toSet(),
             )
 
         val opened =
@@ -262,6 +281,12 @@ class VyzorixForegroundService : Service() {
 
     private fun acquireWakeLock() {
         val manager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        // Held for the service's lifetime, with no timeout, and that is the point:
+        // the agent must stay schedulable to answer a command or keep a shell
+        // alive. It is released in onDestroy, and a PARTIAL lock does not keep the
+        // screen on. Lint's WakelockTimeout warning is suppressed with that reason
+        // rather than silenced globally.
+        @Suppress("WakelockTimeout")
         wakeLock =
             manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:engine").apply {
                 setReferenceCounted(false)

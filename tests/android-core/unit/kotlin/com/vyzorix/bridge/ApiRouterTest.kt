@@ -19,8 +19,12 @@ class ApiRouterTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
-    private fun token(allowlist: Set<String> = emptySet()): SessionToken =
-        SessionTokenRegistry().issue("s1", "dev-1", "op-1", apiAllowlist = allowlist)
+    // The default is a populated allowlist: permits() is fail-closed, so an empty
+    // one would deny everything and every case below would fail for the wrong
+    // reason. Tests that want to prove denial pass an explicit allowlist.
+    private fun token(
+        allowlist: Set<String> = setOf("ping", "battery", "boom", "whoami", "x"),
+    ): SessionToken = SessionTokenRegistry().issue("s1", "dev-1", "op-1", apiAllowlist = allowlist)
 
     @Test
     fun `dispatches a registered api`() {
@@ -52,12 +56,16 @@ class ApiRouterTest {
     }
 
     @Test
-    fun `an empty allowlist is permitted, per contract 2_5`() {
+    fun `an empty allowlist is refused`() {
+        // Supersedes the earlier "empty means every API" reading of contract 2.5.
+        // The allowlist is resolved on the server, so empty is deny-by-default; a
+        // master-key reading turns a resolution that granted nothing into full
+        // access. See documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md §7.
         val router = ApiRouter().register("battery") { ApiOutcome.ok(JSONObject()) }
 
         val outcome = router.dispatch(context, token(emptySet()), "battery", emptyMap())
 
-        assertTrue(outcome.isOk)
+        assertEquals(BridgeErrorKind.FORBIDDEN, outcome.error?.kind)
     }
 
     @Test
