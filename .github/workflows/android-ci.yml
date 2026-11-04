@@ -1,5 +1,11 @@
 name: android-ci
 
+# The modules this repo actually has are :android-core, :cloud-connector and :app
+# (see settings.gradle.kts). An earlier revision of this workflow built
+# :core:common, :core:data, :core:services and :core:audioengine, which are not
+# modules here — every one of those jobs failed with "project 'core' not found",
+# which reads as a build break rather than as a stale workflow.
+
 on:
   pull_request:
     paths:
@@ -9,7 +15,8 @@ on:
       - 'gradle.properties'
       - 'gradlew'
       - 'gradlew.bat'
-      - 'core/**'
+      - 'android-core/**'
+      - 'cloud-connector/**'
       - 'app/**'
       - '.github/workflows/android-ci.yml'
   push:
@@ -21,7 +28,8 @@ on:
       - 'gradle.properties'
       - 'gradlew'
       - 'gradlew.bat'
-      - 'core/**'
+      - 'android-core/**'
+      - 'cloud-connector/**'
       - 'app/**'
       - '.github/workflows/android-ci.yml'
 
@@ -30,122 +38,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  core-common:
-    name: core:common — assemble + JVM tests
+  android-core:
+    name: android-core — native build + JVM tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17 (Temurin)
+      - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Assemble :core:common
-        run: ./gradlew :core:common:assembleDebug --no-daemon --stacktrace
-
-      - name: Test :core:common
-        run: ./gradlew :core:common:testDebugUnitTest --no-daemon --stacktrace
-
-      - name: Upload test report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-common-test-report
-          path: core/common/build/reports/tests/testDebugUnitTest
-
-  core-data:
-    name: core:data — assemble + JVM tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17 (Temurin)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Assemble :core:data
-        run: ./gradlew :core:data:assembleDebug --no-daemon --stacktrace
-
-      - name: Test :core:data
-        run: ./gradlew :core:data:testDebugUnitTest --no-daemon --stacktrace
-
-      - name: Upload test report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-data-test-report
-          path: core/data/build/reports/tests/testDebugUnitTest
-
-  core-audioengine:
-    name: core:audioengine — native build + JVM + host C++ tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17 (Temurin)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK + NDK
         uses: android-actions/setup-android@v3
         with:
-          # The NDK + CMake versions match `core/audioengine/build.gradle.kts`
-          # (`ndkVersion` and the CMake spec). Bumping either requires updating
-          # both this manifest and the gradle file.
+          # The NDK + CMake versions match android-core/build.gradle.kts
+          # (`ndkVersion` and the CMake spec). Bumping either requires updating both
+          # this manifest and the gradle file.
           packages: 'platforms;android-34 build-tools;34.0.0 platform-tools ndk;26.3.11579264 cmake;3.22.1'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Native build (assembleDebug — runs externalNativeBuild)
-        run: ./gradlew :core:audioengine:assembleDebug --no-daemon --stacktrace
+      - name: Assemble (runs externalNativeBuild)
+        run: ./gradlew :android-core:assembleDebug --no-daemon --stacktrace
 
-      - name: JVM tests (loader fallback path)
-        run: ./gradlew :core:audioengine:testDebugUnitTest --no-daemon --stacktrace
-
-      - name: Host C++ algorithm tests
-        run: ./gradlew :core:audioengine:runNativeHostTests --no-daemon --stacktrace
+      - name: Test
+        run: ./gradlew :android-core:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload test report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: core-audioengine-test-report
-          path: core/audioengine/build/reports/tests/testDebugUnitTest
+          name: android-core-test-report
+          path: android-core/build/reports/tests/testDebugUnitTest
 
-  core-services:
-    name: core:services — assemble + Robolectric tests
+  cloud-connector:
+    name: cloud-connector — assemble + JVM tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17 (Temurin)
+      - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -153,20 +92,20 @@ jobs:
           packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Assemble :core:services
-        run: ./gradlew :core:services:assembleDebug --no-daemon --stacktrace
+      - name: Assemble
+        run: ./gradlew :cloud-connector:assembleDebug --no-daemon --stacktrace
 
-      - name: Test :core:services
-        run: ./gradlew :core:services:testDebugUnitTest --no-daemon --stacktrace
+      - name: Test
+        run: ./gradlew :cloud-connector:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload test report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: core-services-test-report
-          path: core/services/build/reports/tests/testDebugUnitTest
+          name: cloud-connector-test-report
+          path: cloud-connector/build/reports/tests/testDebugUnitTest
 
   app:
     name: app — assembleDebug + JVM tests
@@ -174,25 +113,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 17 (Temurin)
+      - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Android SDK + NDK
         uses: android-actions/setup-android@v3
         with:
-          # NDK + CMake required because :app transitively pulls in :core:audioengine.
+          # NDK + CMake required because :app transitively pulls in :android-core,
+          # which has an external native build.
           packages: 'platforms;android-34 build-tools;34.0.0 platform-tools ndk;26.3.11579264 cmake;3.22.1'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Test :app
+      - name: Test
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload test report on failure
@@ -201,3 +141,34 @@ jobs:
         with:
           name: app-test-report
           path: app/build/reports/tests/testDebugUnitTest
+
+  gate:
+    name: gate — ktlint + detekt + dead code + unit tests + native gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools ndk;26.3.11579264 cmake;3.22.1'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The same task AGENTS.md tells every contributor to run before committing.
+      - name: Run the gate
+        run: ./gradlew gate --no-daemon --stacktrace
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-test-report
+          path: '**/build/reports/tests/testDebugUnitTest'
