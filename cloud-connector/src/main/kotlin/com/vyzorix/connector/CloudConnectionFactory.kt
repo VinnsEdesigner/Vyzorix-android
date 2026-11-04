@@ -50,7 +50,10 @@ object CloudConnectionFactory {
         val signer: DeviceSigner =
             KeystoreDeviceIdentity(KeyStore.getInstance(KeystoreDeviceIdentity.ANDROID_KEYSTORE))
         val uuid = DeviceUuidStore(FileUuidStorage(context)).uuid()
-        val http = OkHttpClient()
+        // One client for both HTTP and the WebSocket, with the WebSocket heartbeat
+        // enabled: OkHttp's ping fails a silently dead link so the reconnect loop
+        // runs, rather than the device writing into a black hole after a NAT rebind.
+        val http = DeviceWsClient.buildHttpClient()
 
         val enrollmentClient =
             EnrollmentClient(

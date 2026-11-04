@@ -34,7 +34,20 @@ data class EnrollResponse(
      * deadline so a device with a wrong clock still expires its code correctly.
      */
     @SerialName("expiresInSeconds") val expiresInSeconds: Long,
-)
+    /**
+     * How often to ask for the config while waiting to be claimed, in seconds.
+     *
+     * The config normally arrives over the held WebSocket the instant an operator
+     * claims the code, so this only bounds the fallback: a device whose socket is
+     * not up asks on this cadence instead of waiting indefinitely. Defaulted so an
+     * older server that does not send it still yields a sane cadence.
+     */
+    @SerialName("pollIntervalSeconds") val pollIntervalSeconds: Long = DEFAULT_POLL_INTERVAL_SECONDS,
+) {
+    companion object {
+        const val DEFAULT_POLL_INTERVAL_SECONDS = 10L
+    }
+}
 
 /**
  * The config re-fetch response: `GET /v1/device/:imei/config`. The device asks by

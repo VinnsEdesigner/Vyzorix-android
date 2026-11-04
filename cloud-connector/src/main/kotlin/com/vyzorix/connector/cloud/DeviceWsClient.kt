@@ -37,8 +37,35 @@ class DeviceWsClient(
     private val http: OkHttpClient,
     private val listener: Listener,
     private val backoff: Backoff = Backoff(),
+    private val heartbeat: Heartbeat = Heartbeat(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    /**
+     * The client's heartbeat.
+     *
+     * The server pings every 30s and reaps a peer that does not answer within 70s,
+     * so a connection is not reaped while it is idle. That keeps the *server* happy;
+     * it does not tell the *device* that the link has died. On a mobile network a
+     * socket can be silently dropped — a NAT rebind, a radio cycle — and the device
+     * would keep writing into a black hole, believing it is connected. The client
+     * therefore sends its own ping and treats a missing pong as a dead link, which
+     * fails the connection and lets the reconnect loop do its job.
+     *
+     * The interval is well under the server's reap window so a ping always beats it.
+     */
+    data class Heartbeat(
+        val intervalSeconds: Long = DEFAULT_PING_INTERVAL_SECONDS,
+    ) {
+        init {
+            require(intervalSeconds > 0) { "ping interval must be positive" }
+        }
+
+        companion object {
+            /** Under the server's 70s reap window, so a ping always arrives first. */
+            const val DEFAULT_PING_INTERVAL_SECONDS = 20L
+        }
+    }
+
     /** Callbacks for inbound traffic and lifecycle. */
     interface Listener {
         /** A text frame arrived. Its exact bytes matter; they are handed as-is. */
@@ -200,6 +227,24 @@ class DeviceWsClient(
 
     companion object {
         const val NORMAL_CLOSURE = 1000
+
+        /**
+         * Builds the OkHttp client the connection uses, with the heartbeat enabled.
+         *
+         * `pingInterval` is OkHttp's own WebSocket ping: it sends a ping every
+         * interval and, if the peer does not pong within that window, fails the
+         * socket. That is what turns a silently dead link into an `onFailure`, which
+         * is what the reconnect loop needs — without it a mobile network dropping the
+         * connection leaves the client writing into a black hole indefinitely.
+         *
+         * It is set here rather than on a shared client so the interval stays with
+         * the WebSocket that depends on it.
+         */
+        fun buildHttpClient(heartbeat: Heartbeat = Heartbeat()): OkHttpClient =
+            OkHttpClient
+                .Builder()
+                .pingInterval(java.time.Duration.ofSeconds(heartbeat.intervalSeconds))
+                .build()
     }
 }
 

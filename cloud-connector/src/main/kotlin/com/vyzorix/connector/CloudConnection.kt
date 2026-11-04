@@ -58,6 +58,9 @@ class CloudConnection(
         val wsClientFactory: (DeviceWsClient.Listener) -> DeviceWsClient,
         val dispatcherFactory: (deviceId: String) -> CommandDispatcher,
         val notification: PairingNotification,
+        // Supplies the telemetry readings. Built by the factory because it needs the
+        // platform, but the cadence and the frame live here.
+        val telemetrySource: TelemetryReporter.TelemetrySource,
         val tierHint: Int = DeviceFactsCollector.TIER_UNROOTED,
     )
 
@@ -70,10 +73,22 @@ class CloudConnection(
     private val wsClientFactory = deps.wsClientFactory
     private val dispatcherFactory = deps.dispatcherFactory
     private val notification = deps.notification
+    private val telemetrySource = deps.telemetrySource
     private val tierHint = deps.tierHint
     private val running = AtomicBoolean(false)
     private var wsClient: DeviceWsClient? = null
     private var dispatcher: CommandDispatcher? = null
+
+    /** Reports telemetry while the socket is up. Null until the connection starts. */
+    private var telemetry: TelemetryReporter? = null
+
+    /**
+     * How often to ask for the config while waiting to be claimed, in seconds.
+     *
+     * Set from the enroll response; the default matches the server's when it does
+     * not say. Used only until the device holds a config.
+     */
+    private var pollIntervalSeconds: Long = EnrollResponse.DEFAULT_POLL_INTERVAL_SECONDS
 
     /**
      * The device's id as the server knows it.
@@ -118,6 +133,10 @@ class CloudConnection(
     /** Stops the connection. The service calls this from `onDestroy`. */
     override fun stop() {
         running.set(false)
+        // Stop reporting before the socket goes: a telemetry tick after close would
+        // write into a closed socket.
+        telemetry?.stop()
+        telemetry = null
         // A terminal cannot outlive the socket it runs over: close every session so
         // no shell is left running with no way to reach it.
         terminalRelay?.let { relay ->
@@ -235,6 +254,7 @@ class CloudConnection(
             }
 
         deviceId = response.deviceId
+        pollIntervalSeconds = response.pollIntervalSeconds
         notification.show(
             PairingCode.from(
                 code = response.pairingCode,
@@ -270,6 +290,12 @@ class CloudConnection(
                     // was offline at claim time has none, and one whose config changed
                     // holds a stale version.
                     refetchConfigIfStale()
+
+                    // Report telemetry on this connection. Started here rather than at
+                    // start() so a report is never attempted before there is a socket,
+                    // and reported once immediately so a device that just came online is
+                    // not invisible for a whole interval.
+                    startTelemetry()
                 }
 
                 override fun onDisconnected(
@@ -339,10 +365,38 @@ class CloudConnection(
         try {
             val config = configStore.apply(document)
             notification.showConfigured(config.name)
-            Log.i(TAG, "applied config version $version")
+            // The config carries the reporting cadence, so applying it retunes the
+            // telemetry reporter: the server can slow a fleet's reporting without a
+            // new APK.
+            telemetry?.updateInterval(config.heartbeatSeconds)
+            Log.i(TAG, "applied config version $version (telemetry every ${config.heartbeatSeconds}s)")
         } catch (e: ConfigError) {
             Log.w(TAG, "refused a config: ${e.message}")
         }
+    }
+
+    /**
+     * Starts telemetry reporting on the current socket, reporting once immediately.
+     *
+     * Idempotent per connection: an `onConnected` after a reconnect restarts the
+     * reporter against the new socket. The interval starts from the config if one is
+     * held, so a reconnecting device reports at the operator's cadence from the
+     * first tick.
+     */
+    private fun startTelemetry() {
+        telemetry?.stop()
+
+        val reporter =
+            TelemetryReporter(
+                source = telemetrySource,
+                send = { frame -> wsClient?.sendText(frame) ?: false },
+                deviceId = deviceId,
+                initialIntervalSeconds =
+                    configStore.current()?.heartbeatSeconds
+                        ?: TelemetryReporter.DEFAULT_INTERVAL_SECONDS,
+            )
+        telemetry = reporter
+        reporter.start()
     }
 
     /**
