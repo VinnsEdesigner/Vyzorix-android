@@ -79,9 +79,11 @@ sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "s
 # Cloud connector
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
-# Published from VinnsEdesigner/libv via JitPack. Group is the JitPack coordinates,
-# not the source package (com.vyzorix.libv).
-libv = { module = "com.github.VinnsEdesigner.libv:libv", version.ref = "libv" }
+# Published from VinnsEdesigner/libv via JitPack. JitPack serves the artifact under
+# `com.github.<owner>` with the repository name as the artifactId — not the source
+# package (com.vyzorix.libv) and not a `com.github.<owner>.<repo>` group. This is
+# the coordinate JitPack actually resolves for the 1.0.0 tag.
+libv = { module = "com.github.VinnsEdesigner:libv", version.ref = "libv" }
 
 # Test
 junit4 = { module = "junit:junit", version.ref = "junit4" }

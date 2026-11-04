@@ -21,9 +21,11 @@ dependencyResolutionManagement {
         mavenLocal()
         maven {
             url = uri("https://jitpack.io")
-            // Scoped to the one group so nothing else resolves from JitPack.
+            // Scoped to the one group so nothing else resolves from JitPack. This is
+            // JitPack's own group for the repo (`com.github.<owner>`), not the source
+            // package and not a `com.github.<owner>.<repo>` path.
             content {
-                includeGroup("com.github.VinnsEdesigner.libv")
+                includeGroup("com.github.VinnsEdesigner")
             }
         }
     }
