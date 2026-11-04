@@ -1,6 +1,7 @@
 # Vyzorix Android — Headless Service Architecture
 
-**Status:** v3 — agreed design, pre-implementation
+**Status:** v3 + 2026-11-04 corrections. Layers 1 and 4 are **built and verified**;
+Layer 2 is specified (§6.1.1) and pending its rootfs asset; Layer 3 is pending.
 **Scope:** the Android agent (separate repository from this server repo)
 **Target:** headless Android service running a Debian Bookworm userspace + PTY + Android
 Gateway + Cloud WebSocket; scales to 120+ Android APIs and 100+ devices without
@@ -115,15 +116,26 @@ domains cannot write it either.
 Android device; the app never requires an SD card. Shared storage is also mounted
 `noexec`, so executables can never live there. See §6.1.
 
-### 1.3 Cloud auth is HMAC, not a bearer token
+### 1.3 Cloud auth is a device keypair, not a bearer token
+
+> **Superseded.** This section originally specified HMAC with a per-device secret
+> (`requireHMAC()`, `VerifyWebSocketConnect`). That flow pushed the secret to the
+> device over FCM — an unauthenticated channel — and is retired. The device now
+> generates an **EC P-256 keypair in the Keystore** and proves possession by
+> signature; nothing secret is ever transmitted. See
+> `doc/REGISTRATION_CONTRACT.md` §5. The server has implemented this
+> (`VerifyDeviceSignature` is the production verifier).
 
 Verified in `apps/api/internal/api/server_routes.go`: the device management group is
-wrapped in `RequestSigningMiddleware` + `MandatoryEncryptionMiddleware` + `requireHMAC()`,
-and the WebSocket upgrade calls `hmacVerifier.VerifyWebSocketConnect(r, deviceID)`.
+wrapped in `RequestSigningMiddleware` + `MandatoryEncryptionMiddleware` +
+`requireHMAC()`, and the WebSocket upgrade calls `verifyDeviceConnect`, which verifies
+the signed `connect|<deviceId>|<ts>|<nonce>` canonical string against the device's
+**registered public key** (with a 5-minute freshness window and a nonce replay guard).
 
-**Devices sign their requests** (timestamp + nonce + replay guard) with the per-device
-secret. There is no `?token=<jwt>` handshake. A permanent JWT in a URL would also leak
-into access logs and proxy history — do not do it.
+**Devices sign their requests** (timestamp + nonce + replay guard) with the private
+key they generated. There is no `?token=<jwt>` handshake, and no per-device shared
+secret. A permanent JWT in a URL would also leak into access logs and proxy history —
+do not do it.
 
 ### 1.4 Background survival: the OEM killer is the risk, not the phantom killer
 
@@ -136,8 +148,16 @@ into access logs and proxy history — do not do it.
 - The real threat is **OEM battery managers** (Xiaomi/Huawei/Samsung) and Doze killing
   the foreground service itself.
 
-**Mitigations:** `START_STICKY`, battery-optimization exemption request, high-priority
-FCM wake, and a watchdog that restarts the engine with crash backoff.
+**Mitigations:** `START_STICKY`, battery-optimization exemption request, and a
+watchdog that restarts the engine with crash backoff.
+
+> **FCM is deferred.** A high-priority FCM wake is *not* part of this build. It is a
+> later-version item (it needs a Firebase project, a `google-services.json`, and a
+> Play-adjacent dependency this sideload-only app does not otherwise carry). Until it
+> lands, delivery is live-socket only: a command sent while the device is offline is
+> missed, and the device does not drain pending commands on reconnect. The
+> `PATCH /v1/device/:imei/fcm-token` endpoint and the `GET .../commands/pending`
+> drain are correspondingly out of scope. See §8.
 
 ### 1.5 Foreground service type must be declared
 
@@ -170,7 +190,8 @@ Android OS (6 -> 15+; Samsung / Xiaomi / Nokia)
 │     FGS owner · boot · watchdog · cloud WS · PTY broker · USB broker · android.sock
 │
 ├─ Layer 2 — Debian Engine        (proot, read-only base + writable overlay)
-│     bash · android-* bridge · pty-agent (local only) · toolchain
+│     bash · android-* bridge · toolchain
+│     (the pty-agent multiplexer lives in Layer 1, not here — see §3)
 │
 ├─ Layer 3 — App Runtime          (C supervisor + bash wrappers)
 │     app lifecycle · inotify · http_proxy · persistent /home/apps
@@ -225,16 +246,11 @@ Vyzorix-android/
 │   │   └── debian-extended.tar.gz       # optional, on-demand extract
 │   ├── overlay/                         # writable prefix, survives base updates (§6.1)
 │   │   └── usr-local/  opt/  etc/       #   bind -> /usr/local, /opt, /etc/vyzorix
-│   ├── proot-launcher.sh                # binds + -0 + resolv.conf
-│   ├── first-boot.sh                    # extract, seed overlay, verify bash
 │   ├── android-bin/
 │   │   ├── apis.txt                     # camera, location, battery, ... (120)
 │   │   ├── generator.go                 # 1 binary + N symlinks
 │   │   └── src/bridge.cpp               # forwards JSON -> android.sock
-│   └── pty-agent/                       # Go — LOCAL multiplexer only
-│       ├── main.go                      # listens on files/pty.sock
-│       ├── pty_manager.go               # tracks sessions, resize, tmux attach
-│       └── frames.go                    # binary framing (§6.3)
+│   └── pty-agent/                       # built — see note below
 │
 ├── app-runtime/                         # Layer 3 — inside Debian
 │   ├── supervisor/
@@ -251,6 +267,19 @@ Vyzorix-android/
     └── AppProxyRelay.kt                 # http_proxy frames <-> supervisor
 ```
 
+**Layer 2 host-side pieces are Kotlin, not shell.** `pty-agent`, the proot launcher
+and first-boot are Kotlin classes in Layer 1's process, not separate Go programs or
+`.sh` files inside the image:
+
+| Piece | Where it lives now | Why |
+|:--|:--|:--|
+| `pty-agent` multiplexer | **Built** — `cloud-connector/.../terminal/TerminalRelay.kt` + `PtyFrame.kt` | The local multiplexer and binary framing are implemented and instrumented-tested. A Go program inside the image would be a second implementation of the same wire contract. |
+| proot launcher | `android-core/.../engine/ProotLauncher.kt` | Building the `proot` argv in Kotlin keeps it testable (`ProotLauncherTest`) and versioned with the code that depends on it. |
+| first-boot (extract, seed overlay, verify bash) | Layer 1 (Kotlin) | It runs once, from the app, before any userspace exists — so it cannot be a script *inside* that userspace. |
+
+Nothing in Layer 2 needs a Go toolchain. The only Go left in the design is the
+`android-bin` generator, and §12.1 defers it until the rootfs ships.
+
 ---
 
 ## 4. The fd-capability model
@@ -262,7 +291,7 @@ Do **not** rely on `/dev/ptmx` being reachable inside proot. Instead:
 1. Layer 1 (NDK) opens a PTY pair: `posix_openpt` → `grantpt` → `unlockpt` → `open(slave)`.
 2. A tiny native launcher does `setsid()` + `ioctl(slave, TIOCSCTTY, 0)` and `dup2`s the
    slave onto fd 0/1/2.
-3. It `exec`s `proot-launcher.sh`, which execs `bash`.
+3. It `exec`s the proot argv built by `ProotLauncher.kt` (Kotlin), which execs `bash`.
 4. **Layer 1 holds the master fd** and does all I/O on it. Layer 2 never opens `/dev/ptmx`.
 
 Result: PTY allocation works regardless of what proot can see, and the session's I/O
@@ -322,9 +351,9 @@ All paths verified against `apps/api/internal/api/server_routes.go`.
 | Device WS (commands + PTY + proxy) | `GET /v1/device/:imei/stream` | HMAC-signed handshake |
 | Register (new device) | `POST /v1/device/inbox` | public + idempotency |
 | Inbox status / ack | `GET /v1/device/inbox` · `POST /v1/device/inbox/:imei/ack` | org-scoped |
-| Pending commands | `GET /v1/device/:imei/commands/pending` | HMAC |
-| Command status | `GET /v1/command/:dispatchId/status` | HMAC |
-| FCM token update | `PATCH /v1/device/:imei/fcm-token` | HMAC |
+| Pending commands | `GET /v1/device/:imei/commands/pending` | HMAC — **out of scope (FCM deferred, §1.4)** |
+| Command status | `GET /v1/command/:dispatchId/status` | HMAC — **out of scope (FCM deferred)** |
+| FCM token update | `PATCH /v1/device/:imei/fcm-token` | HMAC — **out of scope (FCM deferred)** |
 | APK download | `GET /v1/apk/*name` | public |
 | Version / update | `GET /v1/version` · `GET /v1/check-update` · `POST /v1/download-progress` | public |
 | Command result (HTTP fallback) | `POST /v1/device/:imei/command/:dispatchId/result` | HMAC |
@@ -373,7 +402,7 @@ WebSocket instead (`GET /v1/device/:imei/terminal`, gated on the `shell.execute`
 scope), because a shell is stateful and bidirectional and does not fit the
 fire-and-forget command lifecycle. See §6.3 for the contract.
 
-**Exactly one WS owner.** Layer 1 (`DeviceWsClient.kt`) owns it. `pty-agent` and the
+**Exactly one WS owner.** Layer 1 (`DeviceWsClient.kt`) owns it. The PTY relay and the
 supervisor never dial the cloud; Layer 1 relays. This kills the v2 three-way ownership
 conflict.
 
@@ -417,9 +446,102 @@ Because we target SDK 28, `requestLegacyExternalStorage` is honoured and broad `
 access comes from `READ/WRITE_EXTERNAL_STORAGE` alone; `MANAGE_EXTERNAL_STORAGE` is not
 required.
 
+### 6.1.1 The rootfs asset — requirements
+
+`debian-engine/rootfs/` does not exist yet. This is the spec for the asset that
+unblocks §12 step 5, and the two Build 2 items left unproven (`PTY_SPIKE_RESULTS`
+and `BUILD_2_VERIFICATION` both stop at `/system/bin/sh` because there is no rootfs
+to exec). Everything else in Layer 2 is already written; the asset is the gap.
+
+**Packages.** Two tarballs, so the common case stays small. Build with `debootstrap`
++ `dpkg-repack`-style pruning, not a hand-assembled tree — a hand-built rootfs drifts
+from Debian's dependency graph and breaks `apt` the moment it is used.
+
+| Tarball | Contents | Why |
+|:--|:--|:--|
+| `debian-core.tar.gz` | `minbase` + `bash`, `coreutils`, `util-linux`, `procps`, `sed`, `grep`, `gawk`, `findutils`, `tar`, `gzip`, `xz-utils`, `ca-certificates`, `curl`, `socat`, `less`, `nano` | The floor: a login shell, the POSIX userland, TLS trust for the bridge, `socat` for the local socket, and an editor. `ca-certificates` is not optional — without it `curl` cannot reach an HTTPS endpoint and the bridge's own TLS fails. |
+| `debian-extended.tar.gz` | `git`, `python3`, `openssh-client`, `tmux`, `iproute2`, `iputils-ping`, `dnsutils`, `strace`, `htop` | Extracted on demand. `tmux` is what makes a dropped WS reattach (§6.3); `python3` and `git` are what most on-device tooling needs. Kept separate so a device that only wants a shell does not carry ~80 MB it never runs. |
+
+Deliberately **not** in either tarball: any init system (`systemd`, `sysvinit`) —
+there is no PID 1, proot execs `bash` directly; `sudo` — `-0` already fakes root, and
+a real `sudo` needs a setuid binary and a working `/etc/shadow`; and any compiler
+toolchain — that is the extended tier's job if it is ever needed, and it would triple
+the size.
+
+**Size budget.** `debian-core` ≈ 45–55 MB compressed (≈ 130–150 MB extracted);
+`debian-extended` ≈ 70–90 MB compressed. Both are `gzip -9` tarballs, not `.tar.zst`,
+because the Android side extracts with a Kotlin/tar path that must not need a
+`zstd` binary. A device that has both installed carries ≈ 250 MB in `files/rootfs` —
+budget for it in the storage check, and never assume `/data` has room without asking
+`StatFs`.
+
+**Structure.** A Debian FHS tree at the tarball root, so `-r files/rootfs` works
+with no wrapper:
+
+```
+bin -> usr/bin        lib -> usr/lib        lib64 -> usr/lib64
+sbin -> usr/sbin      usr/bin  usr/lib  usr/sbin  usr/share
+etc/  (resolv.conf present but replaced by the bind in §6.2)
+root/  home/  tmp/  var/  opt/  proc/  sys/  dev/
+```
+
+`/opt` and `/usr/local` exist but are **empty** — the overlay binds over them
+(§6.1). Do not ship content in either; it would be shadowed and look like a bug.
+
+**Files that must be present, or first-boot fails:**
+
+| Path | Why |
+|:--|:--|
+| `bin/bash` | `ProotLauncher.isReady()` literally checks `File(rootfs, "bin/bash").exists()`. Absent, the engine is "not ready" and the service silently falls back to the uncontained shell. |
+| `etc/resolv.conf` | The bind in §6.2 replaces it, but the *target* must exist for proot's `-b` to bind onto. An empty file is enough. |
+| `etc/passwd`, `etc/group` | `bash --login` reads them; a missing `passwd` makes the login shell complain on every start. |
+| `etc/ssl/certs/ca-certificates.crt` | `ca-certificates`. Without it, every HTTPS call from inside fails with a certificate error. |
+| `usr/bin/env` | The argv in §6.2 execs `/usr/bin/env` by absolute path. `coreutils` provides it; if it is ever moved, the launch breaks. |
+| `usr/bin/socat` | The bridge's container-side transport. |
+
+**Ownership and modes.** The tarball is built as root and extracted as the app's
+uid; proot's `-0` maps that to root *inside*. So: files `0644`, directories `0755`,
+and **nothing setuid** — a setuid bit is meaningless under proot and a red flag in
+review. `bin/bash` must be `0755`, not `0644`, or `canExecute()` is false.
+
+**Build reproducibility.** A script that runs `debootstrap --variant=minbase
+--include=… bookworm` in a Debian container, prunes `/var/cache/apt`,
+`/var/lib/apt/lists` and the docs, and writes the tarball at a pinned date. Pin
+`bookworm` (Debian 12), not `stable` — a moving target makes two builds differ and
+breaks the "base replaced wholesale" invariant. Record the `debootstrap` version and
+the package list in `debian-engine/rootfs/BUILD.md` so a rebuild is comparable.
+
+**Where it lives.** The tarball is a **build artifact, not a repo file** — 50 MB of
+binary in git is a permanent cost to every clone. Two viable homes:
+
+1. **Downloaded on first boot** from the release host (the server already serves
+   `GET /v1/apk/*name`; a sibling route for the rootfs, or a plain release asset).
+   Needs a checksum pinned in the app so a tampered download is refused.
+2. **Bundled in the APK** under `assets/`, extracted on first boot. Simpler and
+   works offline, at the cost of APK size — which for a sideloaded fleet is
+   acceptable.
+
+The launcher must verify a **pinned SHA-256** either way before extracting; an
+unverified rootfs is an attacker's userspace, the same argument as the pinned server
+key. `first-boot` (Kotlin, Layer 1) owns extract + verify + seed overlay + confirm
+`bin/bash`, and is idempotent: a second run is a no-op.
+
+**`libproot.so`.** `ProotLauncher.prootBinary()` expects proot at
+`nativeLibraryDir/libproot.so` — proot ships as a native library so its own file
+carries the executable bit (the `jniLibs` trick, §1.1). It is **not in the repo**;
+the tarball needs its counterpart build step (proot v5.x, statically linked, three
+ABIs). This is a separate asset from the rootfs and is the other half of the gap.
+
 ### 6.2 proot launch
 
-```bash
+The launcher is **Kotlin**, not a shell script: `android-core/.../engine/ProotLauncher.kt`
+builds the argv and execs it through the PTY broker. It is unit-tested
+(`ProotLauncherTest`) for the exact command line, which a `.sh` inside the image
+could not be — the script would not exist until the image it configures did.
+
+The argv it builds:
+
+```
 proot --kill-on-exit --link2symlink -0 \
   -r "$FILES/rootfs" \
   -b /dev -b /proc -b /sys \
@@ -439,6 +561,8 @@ Notes:
 - `-0` fakes userspace root (sufficient for apt/dpkg).
 - `resolv.conf` **must** be bound, or there is no DNS.
 - The socket path is `files/android.sock` everywhere; v2 had two different paths.
+- The PTY is allocated in Layer 1 (Kotlin + NDK) and the fd passed in; proot does
+  not allocate it. See §4.1.
 
 ### 6.3 PTY contract — implemented on the server
 
@@ -543,10 +667,12 @@ operator cannot inflate it. **The browser must ack, or output will be dropped.**
 - Emit `DATA` with the session prefix for all PTY output.
 - Send `CLOSE` when the shell exits on its own.
 
-**Not yet implemented on the server** (see the server-side status table in §13): the
-`shell.execute` scope is not in any default role set, session expiry is not yet
-scheduled, and there is no PTY audit or recording. Treat those as follow-ups, not
-as done.
+**Server-side status.** This paragraph previously listed the `shell.execute` scope,
+session expiry, PTY audit and recording as not yet implemented. All four have since
+landed — the scope is granted to `admin`/`super_admin` (deliberately absent from
+`viewer`/`operator`), `pty_expiry_worker.go` closes idle sessions on a ticker,
+`ActionPTYSessionOpened`/`Closed` are recorded with the reason and recording flag, and
+`pty_recorder.go` writes opt-in asciinema v2 casts. See the status table in §13.
 
 - **`SIGWINCH`** on resize via `TIOCSWINSZ` on the master fd (device side).
 - **`tmux` inside Debian** so a dropped WS reattaches instead of losing the session.
@@ -579,10 +705,13 @@ BOOT_COMPLETED -> BootReceiver -> GatewayService.startForeground(specialUse)
                                    ├─ acquire wake lock
                                    ├─ start android.sock
                                    ├─ start PTY / USB brokers
-                                   ├─ launch proot (Layer 2) + pty-agent + supervisor
-                                   ├─ connect cloud WS (HMAC)
+                                   ├─ launch proot (Layer 2) + supervisor
+                                   ├─ connect cloud WS (keypair handshake)
                                    └─ start watchdog (restart engine with backoff)
 ```
+
+The PTY multiplexer is not a separate process to launch: it is Layer 1's own
+`TerminalRelay`, in the service's process, reading the PTY it allocated. See §3.
 
 Onboarding must include, explicitly:
 
@@ -592,6 +721,12 @@ Onboarding must include, explicitly:
 3. Sideload acknowledgment (Unknown sources flow, older-Android warning).
 
 FCM wakes the FGS when offline; the device then reconnects and drains pending commands.
+
+> **Not in this build.** FCM is deferred (§1.4), so the wake and the pending-command
+> drain are both out of scope. Today the FGS is kept alive by `START_STICKY` plus the
+> watchdog, and command delivery is live-socket only. A device that is offline when a
+> command is dispatched misses it; the operator sees it stay `delivered`. When FCM
+> lands, this paragraph becomes the requirement again.
 
 ---
 
@@ -660,11 +795,13 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
 2. **Spike: USB fd via libusb.** `UsbManager` → `getFileDescriptor()` →
    `wrap_sys_device` → a control transfer. If this works, the USB pillar is proven.
 3. **Layer 1:** `android.sock` + `ApiRouter` + first 5 APIs + proot launch + watchdog.
-4. **Layer 4:** cloud WS against the real `/v1/device/:imei/stream` with HMAC;
-   `SHELL_EXEC` end to end (Phase 0 — ships value without PTY). The device agent
-   implements the executor; the server only classifies and dispatches it (see
+4. **Layer 4:** cloud WS against the real `/v1/device/:imei/stream` with the keypair
+   handshake; `SHELL_EXEC` end to end (Phase 0 — ships value without PTY). The device
+   agent implements the executor; the server only classifies and dispatches it (see
    §5).
-5. **Layer 2:** `pty-agent` multiplexer, binary framing, `tmux`.
+5. **Layer 2:** the Debian engine — rootfs assets, overlay, first-boot, `tmux`. The
+   `pty-agent` multiplexer and binary framing are **already built** (Kotlin, in Layer 1:
+   `TerminalRelay`/`PtyFrame`); what remains is the userspace they run inside.
 6. **Layer 3:** supervisor + `app-*` + inotify + PID start-time tokens.
 7. **Last:** public app proxy (wildcard DNS/TLS, streaming).
 
@@ -679,6 +816,12 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
 | Phantom-process-killer mitigation | 1 | Not a targetSdk-gated behaviour, and there is no `ActivityManager` API for it — `setPhantomProcessList` does not exist. The real lever (`settings_enable_monitor_phantom_procs`) needs shell/root or Shizuku. See the note on `VyzorixForegroundService`. |
 | Shizuku execution backend | — | Documented as post-v1.0. The `ExecutionBackend` interface is the insurance policy; only `proot` is implemented. |
 | USB pillar | 1 | Moved to last by decision: it needs real hardware to verify, and everything else can be proven on the emulator. |
+| **FCM wake + pending-command drain** | 1 | Deferred to a later version (§1.4). Needs a Firebase project and `google-services.json`, which a sideload-only app otherwise does not carry. Delivery is live-socket only until then. |
+
+> **Not deferred, and previously mis-filed here:** the `pty-agent` multiplexer and the
+> binary PTY framing. Both are **built** — Kotlin, in Layer 1
+> (`cloud-connector/.../terminal/TerminalRelay.kt`, `cloud/pty_frame.go` on the server
+> side). See §3 and §6.3.
 
 ---
 
@@ -688,7 +831,7 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
 |:--|:---------|:-------|:----|
 | 1 | targetSdk unstated | **28, hard constraint; sideload-only** | Android 10 exec restriction; SELinux domain mapping; Termux precedent |
 | 2 | `/data/local/debian`, `/data/local/vyzorix-apps` | **`files/` (app-private) + optional `/sdcard/Android/data/...`** | `/data/local` is root-owned `0751` |
-| 3 | `wss://…/ws/device?token=jwt` | **`/v1/device/:imei/stream`, HMAC-signed** | Actual server; no JWT in URL |
+| 3 | `wss://…/ws/device?token=jwt` | **`/v1/device/:imei/stream`, signed handshake** | Actual server; no JWT in URL. (The signing scheme is now the **device keypair**, not HMAC — see v4 below.) |
 | 4 | Kotlin WS **and** pty-agent WS | **Layer 1 only; pty-agent is local** | Single-owner invariant |
 | 5 | PTY allocated inside proot | **PTY allocated in Layer 1, fd passed in** | `/dev/ptmx` not guaranteed under proot |
 | 6 | Immutable base **and** apt on device | **Read-only base + writable overlay prefix** | No mount → no overlayfs; updates would wipe installs |
@@ -702,6 +845,21 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
 | 14 | No boot/FGS detail | **`specialUse` + battery exemption + OEM steps** | Android 12/14 FGS rules |
 | 15 | No DNS/resolv.conf | **Bind `resolv.conf`** | No DNS otherwise |
 | 16 | 120 APIs "no refactor" | **Honest table (§10)** | Server work is real |
+
+### Change log vs v3 (2026-11-04 review)
+
+Corrections found by reading this doc against the actual tree. Each was a claim that
+had drifted from reality, not a design change.
+
+| # | v3 claim | Correction | Why |
+|:--|:---------|:-----------|:----|
+| 1 | `pty-agent/` is a Go program in `debian-engine/`, "to build" (§3, §12 step 5) | **Built, and Kotlin** — `TerminalRelay.kt` + `PtyFrame.kt` in `cloud-connector` | The multiplexer and binary framing exist and are instrumented-tested. A Go program inside the image would be a second implementation of the same wire contract. |
+| 2 | `proot-launcher.sh` (§3, §6.2) | **Kotlin** — `engine/ProotLauncher.kt` | A `.sh` inside the image cannot configure the image that does not yet exist. Kotlin is testable (`ProotLauncherTest`) and versioned with its caller. |
+| 3 | `first-boot.sh` (§3) | **Kotlin, Layer 1** | It runs before any userspace exists, so it cannot live inside that userspace. |
+| 4 | Cloud auth is HMAC with a per-device secret (§1.3) | **Device keypair (EC P-256, Keystore)** | The HMAC secret travelled over FCM, an unauthenticated channel. Retired by `REGISTRATION_CONTRACT.md` §5; server has implemented it. |
+| 5 | FCM wake + pending-command drain (§1.4, §5, §8) | **Deferred to a later version** | Needs a Firebase project and `google-services.json` a sideload-only app otherwise does not carry. Delivery is live-socket only until then. |
+| 6 | `debian-engine/` described but no asset spec (§6.1) | **§6.1.1 added** — packages, size budget, structure, required files, modes, build reproducibility, hosting | The rootfs tarball and `libproot.so` are the actual gap; the spec is what makes them buildable. |
+| 7 | `shell.execute` scope, session expiry, PTY audit/recording "not yet implemented" (§6.3) | **All four landed** | The server-side status table in this section already said "Done"; §6.3's paragraph had not been updated. |
 
 ### Decisions taken in the v3 review (previously open questions)
 

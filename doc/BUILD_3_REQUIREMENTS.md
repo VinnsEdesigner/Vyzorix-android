@@ -12,6 +12,15 @@ a human answer before any code is written.
 
 ## 0. What exists, and what this build adds
 
+> **Status update (2026-11-04): this build is done.** The cloud side below is
+> implemented and verified — enroll, the signed device WebSocket, config verify +
+> apply + re-fetch, `SHELL_EXEC`, telemetry, and the interactive terminal relay.
+> It lives in the `cloud-connector` module (`com.vyzorix.connector`), not
+> `com.vyzorix.cloud` inside `android-core`; §3.1's option A was chosen over the
+> recommendation. Live end-to-end against a real server passes
+> (`CloudEnrollmentE2ETest`). Read the rest of this document as the contract it
+> implemented, not as pending work.
+
 Built and on the emulator (Build 1/2): the foreground service, the filesystem
 unix-socket bridge with per-session capability tokens, the PTY broker and reader,
 the proot launcher, the permission registry, and `SessionApi`. 44 JVM tests, 26
