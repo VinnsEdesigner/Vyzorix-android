@@ -468,12 +468,15 @@ a real `sudo` needs a setuid binary and a working `/etc/shadow`; and any compile
 toolchain — that is the extended tier's job if it is ever needed, and it would triple
 the size.
 
-**Size budget.** `debian-core` ≈ 45–55 MB compressed (≈ 130–150 MB extracted);
-`debian-extended` ≈ 70–90 MB compressed. Both are `gzip -9` tarballs, not `.tar.zst`,
-because the Android side extracts with a Kotlin/tar path that must not need a
-`zstd` binary. A device that has both installed carries ≈ 250 MB in `files/rootfs` —
-budget for it in the storage check, and never assume `/data` has room without asking
-`StatFs`.
+**Size budget.** Measured, not estimated: `debian-core` is **46 MB** compressed
+(≈ 145 MB extracted) and `debian-extended` is **108 MB** compressed. The extended
+figure is higher than the original 70–90 MB estimate, which was made before the
+package set was fixed — `git`, `python3` and `openssh-client` pull a large dependency
+graph. A device with both installed carries ≈ 300 MB in `files/rootfs`; budget for it
+in the storage check, and never assume `/data` has room without asking `StatFs`.
+
+Both are `gzip -9` tarballs, not `.tar.zst`, because the Android side extracts with a
+Kotlin/tar path that must not need a `zstd` binary.
 
 **Structure.** A Debian FHS tree at the tarball root, so `-r files/rootfs` works
 with no wrapper:
@@ -518,8 +521,21 @@ the package list in `debian-engine/rootfs/BUILD.md` so a rebuild is comparable.
 | Asset | Decision | Why |
 |:--|:--|:--|
 | `debian-core.tar.gz` | **Bundled in the APK** under `assets/`, `noCompress`, extracted streaming on first boot | The foundation must work offline. A download that fails leaves the device with no userspace and no fallback, and this fleet is sideloaded — there is no store to push a fix through. The APK signature covers it, so no separate checksum is needed for this one. |
-| `debian-extended.tar.gz` | **Downloaded on demand**, pinned SHA-256 | The ~80 MB optional tier. By the time it is wanted the userspace already works, so a failed download is an inconvenience, not a brick. |
+| `debian-extended.tar.gz` | **Downloaded on demand**, pinned SHA-256 | The ~108 MB optional tier. By the time it is wanted the userspace already works, so a failed download is an inconvenience, not a brick. |
 | `libproot.so` | **Built in-repo** from vendored, pinned source via CMake → `jniLibs` | It is an executable trust anchor — the thing that fakes root. Building it keeps source, flags and compiler in the repo and reviewed, and kills the version skew between proot's behaviour and the argv in §6.2. The NDK pipeline (`externalNativeBuild`, CMake 3.22.1, three `abiFilters`, `extractNativeLibs="true"`) already exists. |
+
+**The rootfs is per-architecture; `libproot.so` is per-ABI and they are not the same
+set.** `scripts/build-rootfs.sh --arch arm64|amd64` produces one tarball for one
+architecture, because a Debian userspace is a tree of native binaries — unlike proot,
+which is one small program we compile three times. The fleet is arm64 (Nokia C22,
+Unisoc SC9863A), so **`arm64` is the only tarball that ships**; `amd64` exists so the
+emulator can be used for engine work. An arm64 device cannot run an amd64 rootfs and
+vice versa, and mixing them up produces a `bin/bash` that exists and cannot execute.
+
+Building a foreign arch needs `qemu-user-static` **and a registered `binfmt_misc`
+handler** — debootstrap cannot finish its second stage without one, and the failure is
+a bare `Exec format error` that does not name the cause. See
+`debian-engine/rootfs/README.md`.
 
 Extraction is **streaming** (tar entries written straight to `files/rootfs`), never
 "unpack to temp then move": that needs 2× the space transiently and `/data` is often

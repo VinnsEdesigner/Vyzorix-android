@@ -30,3 +30,11 @@ __pycache__/
 # hard-won context (a platform quirk, a decision and its reason) survives.
 .openhands/memory/*.md
 !.openhands/memory/MEMORY.md
+
+# The Debian rootfs tarballs.
+#
+# A build artifact, not a repo file: ~150 MB of binary in git is a permanent cost to
+# every clone, and it would go stale the moment Debian updates. Rebuilt by
+# scripts/build-rootfs.sh, which records the exact package versions in BUILD.md so a
+# rebuild is comparable. The device verifies SHA256SUMS before extracting.
+/debian-engine/rootfs/dist/
