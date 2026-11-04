@@ -29,6 +29,9 @@ class VyzorixApplication : Application() {
         // production build: it runs as the app's uid, which the container prevents.
         TerminalShellPolicy.allowUncontainedShell(BuildConfig.ALLOW_UNCONTAINED_SHELL)
 
+        // The trust anchor is compiled in, and the build refuses to produce a release
+        // APK without one (see app/build.gradle.kts). A debug build may carry none,
+        // which is the deliberate bridge-only mode.
         val connection =
             try {
                 CloudConnectionFactory.create(
@@ -38,7 +41,11 @@ class VyzorixApplication : Application() {
                     appVersion = BuildConfig.VERSION_NAME,
                 )
             } catch (t: Throwable) {
-                Log.e(TAG, "cloud wiring failed; running bridge-only", t)
+                // A *malformed* anchor lands here, not the empty-anchor case (that
+                // returns null above). It is a fault, not a mode: the device has an
+                // anchor it cannot use, so it must not run half-configured. Log it
+                // loudly and stay bridge-only rather than pretend the cloud works.
+                Log.e(TAG, "cloud anchor is unusable; running bridge-only", t)
 
                 null
             }

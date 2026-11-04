@@ -8,16 +8,13 @@ import com.vyzorix.connector.command.CommandDispatcher
 import com.vyzorix.connector.command.ShellExecExecutor
 import com.vyzorix.connector.config.ConfigStore
 import com.vyzorix.connector.config.ConfigVerifier
+import com.vyzorix.connector.config.PinnedServerKeys
 import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
 import com.vyzorix.connector.identity.KeystoreDeviceIdentity
 import com.vyzorix.connector.telemetry.DeviceTelemetrySource
-import java.security.KeyFactory
 import java.security.KeyStore
-import java.security.PublicKey
-import java.security.spec.X509EncodedKeySpec
-import java.util.Base64
 
 /**
  * Builds a [CloudConnection] from a URL and the pinned server key.
@@ -29,12 +26,13 @@ import java.util.Base64
  */
 object CloudConnectionFactory {
     /**
-     * Builds the connection, or null when the configuration is unusable.
+     * Builds the connection, or null when there is no cloud configuration.
      *
-     * A null return is a valid state: a build with no cloud runs over the bridge
-     * alone. It is also what a bad pinned key yields, because a key that cannot be
-     * parsed cannot be trusted and continuing unverified would be worse than not
-     * connecting.
+     * A null return is a deliberate state: a build with no cloud runs over the bridge
+     * alone. It happens only when the base URL or the pinned key is *empty* — not
+     * when they are malformed. An anchor that will not parse throws
+     * [PinnedKeyError], because a device that cannot verify what the server sends
+     * must not present itself as configured; the caller decides how loud to be.
      */
     fun create(
         context: Context,
@@ -45,7 +43,11 @@ object CloudConnectionFactory {
     ): CloudConnection? {
         if (baseUrl.isEmpty() || serverPublicKeyPem.isEmpty()) return null
 
-        val serverKey = parsePublicKey(serverPublicKeyPem) ?: return null
+        // The anchor is a *set* of keys, so a rotation can overlap. A malformed anchor
+        // throws rather than returning null: "no anchor configured" is a deliberate
+        // bridge-only build, while "an anchor that will not parse" is a fault, and the
+        // two must not look the same. See PinnedServerKeys.
+        val serverKeys = PinnedServerKeys.parse(serverPublicKeyPem)
 
         val signer: DeviceSigner =
             KeystoreDeviceIdentity(KeyStore.getInstance(KeystoreDeviceIdentity.ANDROID_KEYSTORE))
@@ -69,7 +71,7 @@ object CloudConnectionFactory {
                 uuid = uuid,
                 appVersion = appVersion,
                 enrollmentClient = enrollmentClient,
-                configStore = ConfigStore(FileConfigStorage(context), ConfigVerifier(serverKey)),
+                configStore = ConfigStore(FileConfigStorage(context), ConfigVerifier(serverKeys)),
                 wsClientFactory = { listener ->
                     DeviceWsClient(
                         baseUrl = baseUrl,
@@ -82,7 +84,7 @@ object CloudConnectionFactory {
                 dispatcherFactory = { deviceId ->
                     CommandDispatcher(
                         deviceId = deviceId,
-                        serverPublicKey = serverKey,
+                        pinnedServerKeys = serverKeys,
                         executors = mapOf("SHELL_EXEC" to ShellExecExecutor(PtyBroker())),
                     )
                 },
@@ -94,29 +96,6 @@ object CloudConnectionFactory {
             ),
         )
     }
-
-    /**
-     * Parses the pinned server public key: PEM SubjectPublicKeyInfo on P-256.
-     *
-     * Returns null on any failure. The key is the device's only trust anchor for
-     * what the server sends, so an unparseable one disables the connection rather
-     * than leaving it unverified.
-     */
-    @Suppress("SwallowedException") // An unparseable pinned key disables the connection.
-    fun parsePublicKey(pem: String): PublicKey? =
-        try {
-            val body =
-                pem
-                    .replace("-----BEGIN PUBLIC KEY-----", "")
-                    .replace("-----END PUBLIC KEY-----", "")
-                    .replace(Regex("\\s"), "")
-
-            KeyFactory
-                .getInstance("EC")
-                .generatePublic(X509EncodedKeySpec(Base64.getDecoder().decode(body)))
-        } catch (t: Throwable) {
-            null
-        }
 
     /** File-backed uuid storage: the identity must survive a restart. */
     private class FileUuidStorage(

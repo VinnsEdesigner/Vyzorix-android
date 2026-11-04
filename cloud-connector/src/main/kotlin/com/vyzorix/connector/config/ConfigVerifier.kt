@@ -76,8 +76,25 @@ data class DeviceConfig(
  * produced it.
  */
 class ConfigVerifier(
-    private val pinnedServerKey: PublicKey,
+    private val pinnedServerKeys: PinnedServerKeys,
 ) {
+    /**
+     * Convenience for a single key. Kept because a caller that holds exactly one
+     * key — a test, or a build that pins one — should not have to build a keyring to
+     * say so. The anchor is still a set at the point of use, so rotation is the same
+     * code path.
+     */
+    constructor(pinnedServerKey: PublicKey) :
+        this(
+            PinnedServerKeys.parse(
+                // Round-trips through the same parser the anchor is built with, so a
+                // key handed in here is subject to the same P-256 check.
+                java.util.Base64.getEncoder().encodeToString(pinnedServerKey.encoded).let { b64 ->
+                    "-----BEGIN PUBLIC KEY-----\n$b64\n-----END PUBLIC KEY-----\n"
+                },
+            ),
+        )
+
     /**
      * Verifies [document] and returns the settings, or throws [ConfigError].
      *
@@ -100,10 +117,24 @@ class ConfigVerifier(
 
         assertNoSecrets(document)
 
-        try {
-            VVerifier.verify(parsed, document, ecdsaKey = pinnedServerKey, hmacKey = null)
-        } catch (e: VVerifyError) {
-            throw ConfigError.BadSignature(e)
+        // Try every pinned key: during a rotation the server may sign with either,
+        // and a document that verifies under one of them is authentic. A failure
+        // under all of them is a bad signature.
+        var lastError: Throwable? = null
+        val verified =
+            pinnedServerKeys.anyVerifies { key ->
+                try {
+                    VVerifier.verify(parsed, document, ecdsaKey = key, hmacKey = null)
+
+                    true
+                } catch (e: VVerifyError) {
+                    lastError = e
+
+                    false
+                }
+            }
+        if (!verified) {
+            throw ConfigError.BadSignature(lastError)
         }
 
         return read(parsed, document)

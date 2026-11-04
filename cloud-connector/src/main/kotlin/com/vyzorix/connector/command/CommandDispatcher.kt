@@ -6,6 +6,7 @@ import com.vyzorix.connector.cloud.RawJson
 import com.vyzorix.connector.cloud.Signatures
 import com.vyzorix.connector.cloud.TYPE_DEVICE_CONFIG
 import com.vyzorix.connector.cloud.frameTypeOf
+import com.vyzorix.connector.config.PinnedServerKeys
 import java.security.PublicKey
 import java.security.Signature
 import java.util.Base64
@@ -32,9 +33,27 @@ import kotlinx.serialization.json.jsonObject
  */
 class CommandDispatcher(
     private val deviceId: String,
-    private val serverPublicKey: PublicKey,
+    private val pinnedServerKeys: PinnedServerKeys,
     private val executors: Map<String, CommandExecutor>,
 ) {
+    /**
+     * Convenience for a single key, so a test or a single-key build need not build a
+     * keyring. The verification path is the same either way.
+     */
+    constructor(
+        deviceId: String,
+        serverPublicKey: PublicKey,
+        executors: Map<String, CommandExecutor>,
+    ) : this(
+        deviceId,
+        PinnedServerKeys.parse(
+            java.util.Base64.getEncoder().encodeToString(serverPublicKey.encoded).let { b64 ->
+                "-----BEGIN PUBLIC KEY-----\n$b64\n-----END PUBLIC KEY-----\n"
+            },
+        ),
+        executors,
+    )
+
     /** What handling a frame produced, for the caller to send back over the socket. */
     sealed class Handled {
         /** A command ran (or was reported failed); [result] goes back to the server. */
@@ -164,17 +183,22 @@ class CommandDispatcher(
                 args = argsRaw,
             )
 
-        return try {
-            val sig = Base64.getDecoder().decode(frame.signature)
-            val verifier = Signature.getInstance("SHA256withECDSA")
-            verifier.initVerify(serverPublicKey)
-            verifier.update(canonical.toByteArray(Charsets.UTF_8))
-            verifier.verify(sig)
-        } catch (t: Throwable) {
-            // Any failure — bad base64, wrong key, unsupported curve — means the
-            // signature does not verify. That is the entire answer, so nothing is
-            // carried out of the catch.
-            false
+        // Try every pinned key: during a rotation the server may sign with either.
+        // A command that verifies under one of them is authentic; one that verifies
+        // under none is not a command and is dropped.
+        return pinnedServerKeys.anyVerifies { key ->
+            try {
+                val sig = Base64.getDecoder().decode(frame.signature)
+                val verifier = Signature.getInstance("SHA256withECDSA")
+                verifier.initVerify(key)
+                verifier.update(canonical.toByteArray(Charsets.UTF_8))
+                verifier.verify(sig)
+            } catch (t: Throwable) {
+                // Any failure — bad base64, wrong key, unsupported curve — means the
+                // signature does not verify under this key. That is the entire answer,
+                // so nothing is carried out of the catch.
+                false
+            }
         }
     }
 

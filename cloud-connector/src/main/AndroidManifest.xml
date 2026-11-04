@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- This module is the device's network client: it enrolls over HTTP and holds
+         the cloud WebSocket. A library must declare the permission its own code
+         needs, or the requirement is invisible to anything that depends on it — and
+         an androidTest of this module gets no INTERNET and fails with EACCES on its
+         first socket. The app module repeats it for the merged manifest's sake; the
+         declaration here is what makes the module self-contained. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

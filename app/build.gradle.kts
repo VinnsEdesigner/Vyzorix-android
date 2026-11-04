@@ -17,18 +17,62 @@ fun cloudBaseUrl(): String =
         ?: ""
 
 /**
- * The pinned server public key, PEM. Empty when unset.
+ * The pinned server public key material, PEM. Empty when unset.
  *
  * A PEM has newlines, which cannot sit in a Gradle property, so it is supplied
  * with literal `\n` escapes. Those are kept as-is: the value goes into a Java
  * string literal via `buildConfigField`, and `\n` is exactly what a Java string
  * literal needs to become a newline at runtime. Unescaping here would put a real
  * newline into the generated Java source and break the build.
+ *
+ * **Rotation:** this value may hold more than one PEM block. The connector trusts
+ * every block it finds, so a build that carries `[new, old]` keeps working while
+ * the server switches to `new`; a later build drops `old`. See PinnedServerKeys.
  */
 fun serverPublicKey(): String =
     (findProperty("serverPublicKey") as String?)
         ?: System.getenv("VYZORIX_SERVER_KEY")
         ?: ""
+
+/**
+ * Fails a release build that has no cloud configuration.
+ *
+ * The trust anchor is compiled in and there is no way to add one after the fact, so
+ * a release built without it is a device that can never register and can never be
+ * fixed in the field — it is a sideload fleet, with no store to push an update
+ * through. Failing here turns that from a silent mis-build into a build error.
+ *
+ * Scoped to release tasks on purpose: debug builds (and `gate`) still work with no
+ * cloud configuration, which is the deliberate bridge-only mode used for tests.
+ */
+fun requireCloudConfigForRelease() {
+    val tasks = gradle.startParameter.taskNames
+    val buildingRelease = tasks.any { it.contains("Release", ignoreCase = true) }
+    if (!buildingRelease) {
+        return
+    }
+
+    val missing =
+        buildList {
+            if (serverPublicKey().isEmpty()) {
+                add("serverPublicKey (-PserverPublicKey=... or VYZORIX_SERVER_KEY)")
+            }
+            if (cloudBaseUrl().isEmpty()) {
+                add("cloudBaseUrl (-PcloudBaseUrl=... or VYZORIX_CLOUD_URL)")
+            }
+        }
+    if (missing.isNotEmpty()) {
+        throw GradleException(
+            "A release build needs a cloud configuration; missing: ${missing.joinToString(
+                "; ",
+            )}. " +
+                "The pinned server key is the device's only trust anchor and is compiled in — " +
+                "there is no way to add one to a shipped APK.",
+        )
+    }
+}
+
+requireCloudConfigForRelease()
 
 /**
  * Whether the terminal may run a plain device shell when the container engine is
