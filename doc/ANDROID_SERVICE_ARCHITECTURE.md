@@ -511,20 +511,22 @@ review. `bin/bash` must be `0755`, not `0644`, or `canExecute()` is false.
 breaks the "base replaced wholesale" invariant. Record the `debootstrap` version and
 the package list in `debian-engine/rootfs/BUILD.md` so a rebuild is comparable.
 
-**Where it lives.** The tarball is a **build artifact, not a repo file** — 50 MB of
-binary in git is a permanent cost to every clone. Two viable homes:
+**Where it lives — decided.** The tarball is a **build artifact, not a repo file**
+(50 MB of binary in git is a permanent cost to every clone), and the split is by
+*what a failure costs*:
 
-1. **Downloaded on first boot** from the release host (the server already serves
-   `GET /v1/apk/*name`; a sibling route for the rootfs, or a plain release asset).
-   Needs a checksum pinned in the app so a tampered download is refused.
-2. **Bundled in the APK** under `assets/`, extracted on first boot. Simpler and
-   works offline, at the cost of APK size — which for a sideloaded fleet is
-   acceptable.
+| Asset | Decision | Why |
+|:--|:--|:--|
+| `debian-core.tar.gz` | **Bundled in the APK** under `assets/`, `noCompress`, extracted streaming on first boot | The foundation must work offline. A download that fails leaves the device with no userspace and no fallback, and this fleet is sideloaded — there is no store to push a fix through. The APK signature covers it, so no separate checksum is needed for this one. |
+| `debian-extended.tar.gz` | **Downloaded on demand**, pinned SHA-256 | The ~80 MB optional tier. By the time it is wanted the userspace already works, so a failed download is an inconvenience, not a brick. |
+| `libproot.so` | **Built in-repo** from vendored, pinned source via CMake → `jniLibs` | It is an executable trust anchor — the thing that fakes root. Building it keeps source, flags and compiler in the repo and reviewed, and kills the version skew between proot's behaviour and the argv in §6.2. The NDK pipeline (`externalNativeBuild`, CMake 3.22.1, three `abiFilters`, `extractNativeLibs="true"`) already exists. |
 
-The launcher must verify a **pinned SHA-256** either way before extracting; an
-unverified rootfs is an attacker's userspace, the same argument as the pinned server
-key. `first-boot` (Kotlin, Layer 1) owns extract + verify + seed overlay + confirm
-`bin/bash`, and is idempotent: a second run is a no-op.
+Extraction is **streaming** (tar entries written straight to `files/rootfs`), never
+"unpack to temp then move": that needs 2× the space transiently and `/data` is often
+tight. A downloaded asset is verified against a **pinned SHA-256** before extracting —
+an unverified rootfs is an attacker's userspace, the same argument as the pinned
+server key. `first-boot` (Kotlin, Layer 1) owns extract + verify + seed overlay +
+confirm `bin/bash`, and is idempotent: a second run is a no-op.
 
 **`libproot.so`.** `ProotLauncher.prootBinary()` expects proot at
 `nativeLibraryDir/libproot.so` — proot ships as a native library so its own file

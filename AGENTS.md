@@ -327,11 +327,18 @@ module's tests under `tests/<module>/`.
 
 ```
 android-core/        the OS-facing library (foreground service, cloud WS,
-                     API bridge, fd capabilities)
-cloud-connector/     endpoint constants + app-proxy relay
+                     API bridge, fd capabilities, ProotLauncher)
+cloud-connector/     the cloud client: enroll, device WS, config, commands,
+                     telemetry, terminal relay (com.vyzorix.connector)
 app/                 the APK: manifest, permissions, nothing else
-debian-engine/       rootfs tarball, proot launcher, pty-agent, android-bin
-app-runtime/         supervisor (C) and app-* CLI wrappers
+debian-engine/       Layer 2 assets — rootfs tarballs + android-bin (not yet present)
+app-runtime/         Layer 3 — supervisor (C) and app-* CLI wrappers (not yet present)
 doc/                 architecture, the current build contract, spike results
 tests/               all tests, split per module (unit/ and instrumented/)
 ```
+
+`debian-engine/` and `app-runtime/` do not exist yet: they are Layers 2 and 3, and
+Layer 2 is blocked on the rootfs asset (see `doc/ANDROID_SERVICE_ARCHITECTURE.md`
+§6.1.1). Note the pty-agent, the proot launcher and first-boot are **not** files in
+`debian-engine/` — they are Kotlin in Layer 1 (`cloud-connector/.../terminal/`,
+`android-core/.../engine/`).

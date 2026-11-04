@@ -10,10 +10,14 @@ import android.os.SystemClock
  * Reads the device's telemetry from the platform.
  *
  * Only facts the app can read without a privileged permission, and only ones that
- * mean something to the operator: uptime and thermal state for device health. The
- * audio fields are honest zeros for now, because the audio engine does not exist
- * yet (Layer 2 is not in the repo); a dashboard that shows 0 knows the device is
- * reporting but has no engine, whereas a fabricated number would hide that.
+ * mean something to the operator: uptime and thermal state for device health.
+ *
+ * The `audioMode`, `bufferLevel` and `speakerOn` fields are reported as zeros
+ * because **this device has no audio engine** — the design is a headless Debian
+ * agent, not an audio router, and nothing in this repo produces those readings. The
+ * server's telemetry schema carries the fields, so they are sent rather than omitted;
+ * a dashboard that shows 0 can tell "no audio engine on this device" from "device not
+ * reporting", whereas a fabricated number would hide which.
  *
  * Uptime is in **seconds**, not milliseconds: the server's `TelemetryFrame.uptime`
  * and its `uptime` column are seconds, so a millisecond reading would make every
