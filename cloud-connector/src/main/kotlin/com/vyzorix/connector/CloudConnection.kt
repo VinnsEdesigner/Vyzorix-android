@@ -5,7 +5,6 @@ import android.util.Log
 import com.vyzorix.bridge.ApiRouter
 import com.vyzorix.connector.bridge.IdentityApi
 import com.vyzorix.connector.cloud.CloudError
-import com.vyzorix.connector.cloud.CloudJson
 import com.vyzorix.connector.cloud.CommandResultFrame
 import com.vyzorix.connector.cloud.DeviceWsClient
 import com.vyzorix.connector.cloud.EnrollRequest
@@ -18,8 +17,8 @@ import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceFactsCollector
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.service.CloudLink
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlinx.serialization.encodeToString
 
 /**
  * The cloud connection, end to end: enroll, hold the WebSocket, apply the config,
@@ -73,19 +72,42 @@ class CloudConnection(
     private val running = AtomicBoolean(false)
     private var wsClient: DeviceWsClient? = null
     private var dispatcher: CommandDispatcher? = null
-    private var deviceId: String = ""
+
+    /**
+     * The device's id as the server knows it.
+     *
+     * It is the uuid the device generated and enrolled with — the server stores the
+     * uuid as the device id — so it is known from the first run, before any network
+     * call. That matters for the config re-fetch: a device that is already claimed
+     * must still be able to ask for its config, and it needs this id to sign the
+     * request.
+     */
+    private var deviceId: String = uuid
 
     /**
      * Starts the connection: enroll if needed, then open the socket.
      *
      * Idempotent. Called by the service on first boot and on every start; a device
      * that is already enrolled skips straight to the socket.
+     *
+     * The work runs on a background thread because [start] is called from the
+     * service's `onStartCommand`, which is the main thread: enroll does a blocking
+     * HTTP call, and OkHttp refuses to run on the main thread
+     * (`NetworkOnMainThreadException`). Doing it here rather than making every
+     * caller remember keeps the one-correct-way rule.
      */
     override fun start() {
         if (!running.compareAndSet(false, true)) return
 
-        ensureEnrolled()
-        openSocket()
+        Thread({
+            if (!running.get()) return@Thread
+
+            ensureEnrolled()
+
+            if (!running.get()) return@Thread
+
+            openSocket()
+        }, "vyzorix-cloud-start").apply { isDaemon = true }.start()
     }
 
     /** Stops the connection. The service calls this from `onDestroy`. */
@@ -99,7 +121,7 @@ class CloudConnection(
     fun sendResult(result: CommandResultFrame): Boolean {
         val client = wsClient ?: return false
 
-        return client.sendText(CloudJson.json.encodeToString(result))
+        return client.sendText(result.toJson())
     }
 
     /** Sends a binary PTY frame. */
@@ -171,6 +193,16 @@ class CloudConnection(
                 Log.i(TAG, "enroll did not complete (retryable=${e.isRetryable}): ${e.message}")
 
                 return
+            } catch (
+                @Suppress("SwallowedException") e: IOException,
+            ) {
+                // Any transport failure — DNS, TLS, a blocked cleartext request — must
+                // not escape: this runs inside the foreground service's start path, so
+                // an uncaught exception takes the whole service down and the device
+                // stops answering commands. The socket's reconnect loop retries.
+                Log.w(TAG, "enroll failed at the transport: ${e.message}")
+
+                return
             }
 
         deviceId = response.deviceId
@@ -219,14 +251,34 @@ class CloudConnection(
     }
 
     private fun handleTextFrame(raw: String) {
-        val handled = dispatcher?.handle(raw) ?: return
+        val dispatcher =
+            this.dispatcher ?: run {
+                Log.w(TAG, "a frame arrived before the dispatcher existed; dropped")
+
+                return
+            }
+
+        val handled = dispatcher.handle(raw)
 
         when (handled) {
-            is CommandDispatcher.Handled.Result -> sendResult(handled.result)
+            is CommandDispatcher.Handled.Result -> {
+                // Report the outcome; if the socket is gone the send is lost, and the
+                // device's HTTP fallback (POST .../command/:id/result) is what a real
+                // deployment uses to close that gap.
+                val sent = sendResult(handled.result)
+                Log.i(
+                    TAG,
+                    "command ${handled.result.dispatchId} finished " +
+                        "(success=${handled.result.success}), result sent=$sent",
+                )
+            }
             is CommandDispatcher.Handled.Config -> applyConfig(handled.version, handled.document)
             is CommandDispatcher.Handled.Dropped -> {
-                // A refused frame is dropped; the dispatcher has already logged the
-                // reason. Nothing goes back to the server for a frame it did not send.
+                // A refused frame is dropped. The reason is logged here rather than in
+                // the dispatcher, which has no logger: a silently dropped frame is
+                // impossible to diagnose from a device, and a config frame that failed
+                // verification must leave a trace.
+                Log.w(TAG, "dropped a frame: ${handled.reason}")
             }
         }
     }

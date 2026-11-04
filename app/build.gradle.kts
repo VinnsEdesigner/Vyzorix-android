@@ -19,17 +19,16 @@ fun cloudBaseUrl(): String =
 /**
  * The pinned server public key, PEM. Empty when unset.
  *
- * A PEM has newlines, which cannot sit in a Gradle property, so the value is
- * passed with literal `\n` and unescaped here.
+ * A PEM has newlines, which cannot sit in a Gradle property, so it is supplied
+ * with literal `\n` escapes. Those are kept as-is: the value goes into a Java
+ * string literal via `buildConfigField`, and `\n` is exactly what a Java string
+ * literal needs to become a newline at runtime. Unescaping here would put a real
+ * newline into the generated Java source and break the build.
  */
-fun serverPublicKey(): String {
-    val raw =
-        (findProperty("serverPublicKey") as String?)
-            ?: System.getenv("VYZORIX_SERVER_KEY")
-            ?: ""
-
-    return raw.replace("\\n", "\n")
-}
+fun serverPublicKey(): String =
+    (findProperty("serverPublicKey") as String?)
+        ?: System.getenv("VYZORIX_SERVER_KEY")
+        ?: ""
 
 android {
     namespace = "com.vyzorix.agent"

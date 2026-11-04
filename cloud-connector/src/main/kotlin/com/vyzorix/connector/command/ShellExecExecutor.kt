@@ -56,7 +56,13 @@ class ShellExecExecutor(
                 request =
                     PtyRequest(
                         executable = shell,
-                        arguments = listOf("-c", command),
+                        // argv[0] must be the program name, not the first flag: the
+                        // native launcher uses this list verbatim as argv, so a list
+                        // starting with "-c" makes the shell treat "-c" as its own
+                        // name and the command as the next argument — it ran the wrong
+                        // thing. This mirrors ProotLauncher, whose argv starts with the
+                        // binary path.
+                        arguments = listOf(shell, "-c", command),
                         environment = listOf("TERM=dumb"),
                     ),
             )

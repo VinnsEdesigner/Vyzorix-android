@@ -2,6 +2,7 @@ package com.vyzorix.connector.cloud
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -20,6 +21,22 @@ object CloudJson {
         Json {
             ignoreUnknownKeys = true
             encodeDefaults = false
+            explicitNulls = false
+        }
+
+    /**
+     * The encoder for frames the device *sends*.
+     *
+     * `encodeDefaults = true` because every outbound frame carries a `type`
+     * discriminator that has a default value; the config above drops defaults, so
+     * using it silently omitted `type` and the server had nothing to route the frame
+     * by. A field that decides how a frame is handled must never be optional on the
+     * wire, so outbound frames use this encoder and inbound decoding uses [json].
+     */
+    val outbound: Json =
+        Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
             explicitNulls = false
         }
 }
@@ -55,7 +72,17 @@ data class CommandResultFrame(
     @SerialName("dispatchId") val dispatchId: String,
     @SerialName("success") val success: Boolean,
     @SerialName("output") val output: String = "",
-)
+) {
+    /**
+     * The JSON the server routes on.
+     *
+     * Encoded with [CloudJson.outbound], which keeps defaults: `type` has a default
+     * and the inbound config drops defaults, so using that config silently omitted
+     * the discriminator and the server could not route the frame — every command
+     * result was lost while the device believed it had reported it.
+     */
+    fun toJson(): String = CloudJson.outbound.encodeToString(this)
+}
 
 /**
  * A telemetry frame. Fields mirror the server's `TelemetryFrame`; every one but
