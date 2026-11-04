@@ -1,6 +1,24 @@
 # Build 2 contract — the service host
 
-Status: **agreed, pre-implementation**
+> **Status: met, and superseded in one place.** This is the contract Layer 1 was
+> built against; `BUILD_2_VERIFICATION.md` records the run that proved it. Read it as
+> the contract that was implemented, not as pending work.
+>
+> Two rows in §1 below have since gone stale and are left as written because the
+> document is a historical record:
+>
+> - *"Cloud WebSocket — Build 4. Needs the server's HMAC handshake."* The cloud
+>   WebSocket **shipped** (Build 3 / Layer 4, in `cloud-connector`), and the
+>   handshake is a **device keypair**, not HMAC — the HMAC secret travelled over FCM
+>   and was retired (`REGISTRATION_CONTRACT.md` §5).
+> - *"Full Debian rootfs packaging — Layer 2 work."* Still true, and now specified:
+>   see `ANDROID_SERVICE_ARCHITECTURE.md` §6.1.1.
+>
+> The §5 definition of done is met for items 1–5 and 8; items 6–7 are proven down to
+> the proot exec and are blocked on the rootfs asset, which is an asset gap, not a
+> code gap. See `BUILD_2_VERIFICATION.md`.
+
+Status: **agreed, pre-implementation** (historical — the build is met; see the banner above)
 Supersedes: nothing. Build 1 (`capability/`) is unchanged except where noted.
 Parent: `doc/ANDROID_SERVICE_ARCHITECTURE.md`, build order step 3.
 

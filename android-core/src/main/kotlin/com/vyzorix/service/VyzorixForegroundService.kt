@@ -106,6 +106,11 @@ class VyzorixForegroundService : Service() {
                 onPtyInput = ::onPtyInput,
                 onPtyCredit = ::onPtyCredit,
                 channelOwnedBy = broker::channelBelongsToSession,
+                // The §9 binding: a token must be for this device. A provider, not a
+                // value, because enrollment finishes after this server is built — the
+                // device id is empty until then, and the server binds it from the
+                // moment it arrives. Same shape as buildTerminalPort's deviceId.
+                selfDeviceId = { cloudLink?.deviceId()?.takeIf { it.isNotEmpty() } },
             )
 
         if (!bridge.start()) {
@@ -157,10 +162,11 @@ class VyzorixForegroundService : Service() {
      * The shell a terminal session runs.
      *
      * The container's login shell when the engine is installed, which is the
-     * architecture's terminal. When it is not — the rootfs is not in the repo yet —
-     * a plain device shell is used **only** if [TerminalShellPolicy] has explicitly
-     * allowed it, because that shell runs as the app's uid and can read the app's
-     * private files, which the container exists to prevent.
+     * architecture's terminal. When it is not — the rootfs asset has not shipped yet
+     * (see `ANDROID_SERVICE_ARCHITECTURE.md` §6.1.1) — a plain device shell is used
+     * **only** if [TerminalShellPolicy] has explicitly allowed it, because that shell
+     * runs as the app's uid and can read the app's private files, which the container
+     * exists to prevent.
      */
     private fun terminalShellRequest(token: String): PtyRequest =
         if (ProotLauncher.isReady(this)) {
@@ -205,8 +211,8 @@ class VyzorixForegroundService : Service() {
      * The session's allowlist is the full local API set, stated explicitly: a shell
      * session is an operator's terminal and may call every bridge API. It is spelled
      * out rather than left empty because an empty allowlist permits nothing — the
-     * fail-closed rule from the boundary contract (§7). When the server resolves a
-     * per-session allowlist (Build 3), it replaces this set.
+     * fail-closed rule from the boundary contract (§7). The server does not resolve a
+     * per-session allowlist yet; when it does, it replaces this set.
      */
     fun openSession(
         sessionId: String,

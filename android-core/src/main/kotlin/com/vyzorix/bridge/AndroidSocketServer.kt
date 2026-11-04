@@ -50,12 +50,16 @@ class AndroidSocketServer(
     /**
      * This device's own identity, or null when it has not been provisioned yet.
      *
-     * The contract's §9 clause `token.deviceId == self` needs the device to know
-     * its own ID, which arrives with registration (Build 3). Until then this is
-     * null and the check is skipped *loudly* — an unprovisioned device is reported
-     * once at startup rather than silently accepting any token's device ID.
+     * A **provider**, not a value: enrollment finishes after the service builds this
+     * server, so the id is not known at construction. It is read once at `start()`
+     * and again on each authentication, so a device that enrolls while the bridge is
+     * already up still gets the binding.
+     *
+     * The contract's §9 clause `token.deviceId == self`: without an id there is
+     * nothing to compare, and the token is accepted on the strength of the token
+     * alone. `start()` logs that state once so it is visible rather than assumed.
      */
-    private val selfDeviceId: String? = null,
+    private val selfDeviceId: () -> String? = { null },
 ) {
     private val running = AtomicBoolean(false)
     private val connections = AtomicInteger(0)
@@ -119,14 +123,14 @@ class AndroidSocketServer(
                 }
 
             Log.i(TAG, "bridge listening on ${socketPath.absolutePath}")
-            if (selfDeviceId == null) {
+            if (selfDeviceId() == null) {
                 // Stated once, loudly: the §9 device-identity clause is not enforced
-                // because the device does not know its own ID yet (registration is
-                // Build 3). Silence here would read as "enforced".
+                // because the device has not enrolled yet. Silence here would read as
+                // "enforced". See selfDeviceId.
                 Log.w(
                     TAG,
                     "device identity unset: tokens are not bound to this device " +
-                        "(registration lands in Build 3)",
+                        "(not enrolled yet)",
                 )
             }
 
@@ -303,12 +307,14 @@ class AndroidSocketServer(
             val presented = request.args[ARG_TOKEN_NAME] ?: return false
             val validated = tokens.validate(presented) ?: return false
 
-            // §9 binding: the token must be for THIS device. When the device is not
-            // yet provisioned there is no self ID to compare, and the token is
-            // accepted on the strength of the token alone; start() logs that state
-            // once so it is visible rather than assumed.
-            if (selfDeviceId != null && validated.deviceId != selfDeviceId) {
-                Log.w(TAG, "token for device ${validated.deviceId} presented to $selfDeviceId")
+            // §9 binding: the token must be for THIS device. The id is read here, not
+            // captured at start(), so a device that enrolls while the bridge is already
+            // up is bound from that moment. While unprovisioned there is no self ID to
+            // compare, and the token is accepted on the strength of the token alone;
+            // start() logs that state once so it is visible rather than assumed.
+            val self = selfDeviceId()
+            if (self != null && validated.deviceId != self) {
+                Log.w(TAG, "token for device ${validated.deviceId} presented to $self")
                 return false
             }
 

@@ -152,6 +152,127 @@ class AndroidSocketServerInstrumentedTest {
     }
 
     @Test
+    fun aTokenForAnotherDeviceIsRefused() {
+        // §9: the token must be for THIS device. A valid, correctly-scoped token
+        // minted for a different device must not authenticate — otherwise a token
+        // leaked from another device opens this one.
+        val foreign =
+            tokens.issue(
+                "s1",
+                "some-other-device",
+                "op-1",
+                apiAllowlist = setOf(BatteryApi.NAME),
+            )
+        val bound =
+            AndroidSocketServer(
+                context = context,
+                tokens = tokens,
+                router = ApiRouter().register(BatteryApi.NAME, BatteryApi),
+                onPtyInput = { _, _ -> },
+                onPtyCredit = { _, _ -> },
+                selfDeviceId = { "this-device" },
+            )
+        assertTrue(bound.start())
+        try {
+            LocalSocket()
+                .apply {
+                    connect(
+                        LocalSocketAddress(
+                            bound.socketPath.absolutePath,
+                            LocalSocketAddress.Namespace.FILESYSTEM,
+                        ),
+                    )
+                }.use { socket ->
+                    val out = socket.outputStream
+                    val input = socket.inputStream
+
+                    sendRequest(out, "1", API_AUTH_NAME, mapOf(ARG_TOKEN_NAME to foreign.token))
+
+                    val frame = runCatching { BridgeProtocol.read(input) }.getOrNull()
+                    assertTrue(
+                        "a foreign device's token must be refused, got $frame",
+                        frame == null,
+                    )
+                }
+        } finally {
+            bound.stop()
+        }
+    }
+
+    @Test
+    fun theBindingAppliesToAnIdThatArrivesAfterStart() {
+        // The id is a provider because enrollment finishes after the server is built.
+        // A device that enrolls while the bridge is already up must be bound from that
+        // moment, not left unbound for the life of the process.
+        var self: String? = null
+        val late =
+            AndroidSocketServer(
+                context = context,
+                tokens = tokens,
+                router = ApiRouter().register(BatteryApi.NAME, BatteryApi),
+                onPtyInput = { _, _ -> },
+                onPtyCredit = { _, _ -> },
+                selfDeviceId = { self },
+            )
+        assertTrue(late.start())
+        try {
+            val foreign =
+                tokens.issue(
+                    "s1",
+                    "some-other-device",
+                    "op-1",
+                    apiAllowlist = setOf(BatteryApi.NAME),
+                )
+
+            // Unprovisioned: no self id, so the token is accepted on its own merit.
+            LocalSocket()
+                .apply {
+                    connect(
+                        LocalSocketAddress(
+                            late.socketPath.absolutePath,
+                            LocalSocketAddress.Namespace.FILESYSTEM,
+                        ),
+                    )
+                }.use { socket ->
+                    sendRequest(
+                        socket.outputStream,
+                        "1",
+                        API_AUTH_NAME,
+                        mapOf(ARG_TOKEN_NAME to foreign.token),
+                    )
+                    val auth = readResponse(socket.inputStream)
+                    assertTrue("unprovisioned: the token authenticates on its own", auth.ok)
+                }
+
+            // Now the device enrolls. The same foreign token must be refused.
+            self = "this-device"
+            LocalSocket()
+                .apply {
+                    connect(
+                        LocalSocketAddress(
+                            late.socketPath.absolutePath,
+                            LocalSocketAddress.Namespace.FILESYSTEM,
+                        ),
+                    )
+                }.use { socket ->
+                    sendRequest(
+                        socket.outputStream,
+                        "1",
+                        API_AUTH_NAME,
+                        mapOf(ARG_TOKEN_NAME to foreign.token),
+                    )
+                    val frame = runCatching { BridgeProtocol.read(socket.inputStream) }.getOrNull()
+                    assertTrue(
+                        "once provisioned, the foreign token must be refused, got $frame",
+                        frame == null,
+                    )
+                }
+        } finally {
+            late.stop()
+        }
+    }
+
+    @Test
     fun tokenScopedToBatteryIsRefusedLogcat() {
         val token = tokens.issue("s1", "dev-1", "op-1", apiAllowlist = setOf(BatteryApi.NAME))
 

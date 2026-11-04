@@ -20,3 +20,13 @@ Thumbs.db
 # Python tooling cache
 __pycache__/
 *.pyc
+
+# Agent working memory.
+#
+# Daily logs are per-session scratch — a running commentary on whatever an agent was
+# doing that day, including dead ends. They churn constantly and are noise in review.
+# The curated MEMORY.md index is different: it is the durable, high-value summary and
+# is worth committing, because a fresh agent reads it at session start and it is how
+# hard-won context (a platform quirk, a decision and its reason) survives.
+.openhands/memory/*.md
+!.openhands/memory/MEMORY.md
