@@ -323,7 +323,11 @@ add_custom_command(
 # ProotLauncher.prootBinary() looks for, but is built as an executable.
 add_executable(proot ${PROOT_SOURCES} "${_loader_obj}")
 set_target_properties(proot PROPERTIES
-    # The output *name* stays libproot.so; only the ELF type changes.
+    # The ELF type changes; the *name* must stay libproot.so. Two independent
+    # requirements fix it: ProotLauncher.PROOT_LIBRARY looks for exactly that name in
+    # nativeLibraryDir, and AGP only packages `lib*.so` out of the native build dir —
+    # an executable called proot.so is silently left out of the APK.
+    PREFIX "lib"
     OUTPUT_NAME "proot"
     SUFFIX ".so"
     PIE TRUE)

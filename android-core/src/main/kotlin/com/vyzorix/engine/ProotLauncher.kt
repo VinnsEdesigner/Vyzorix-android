@@ -19,6 +19,19 @@ object ProotLauncher {
     const val OVERLAY_DIR = "overlay"
     const val PROOT_LIBRARY = "libproot.so"
 
+    /**
+     * proot's scratch directory, app-private.
+     *
+     * proot writes a temporary file — the loader it embeds — before every exec, and
+     * without this it fails with `can't create temporary file: No such file or
+     * directory` because `P_tmpdir` (`/data/local/tmp`) is not writable by an app.
+     * Found by running it on the emulator; nothing in the source says so.
+     */
+    const val TMP_DIR = "proot-tmp"
+
+    /** The env var proot reads for [TMP_DIR]. It reads its *own* environment. */
+    const val TMP_DIR_ENV = "PROOT_TMP_DIR"
+
     /** App-private directories that hold secrets and recordings, never bound. */
     const val SECRETS_DIR = "secrets"
     const val RECORDINGS_DIR = "recordings"
@@ -56,9 +69,21 @@ object ProotLauncher {
 
     fun socketPath(context: Context): File = File(context.filesDir, "android.sock")
 
-    /** True when the engine can be started at all. */
+    /** proot's scratch dir. Created on demand, because proot will not create it. */
+    fun tmpDir(context: Context): File = File(context.filesDir, TMP_DIR).apply { mkdirs() }
+
+    /**
+     * True when the engine can be started at all.
+     *
+     * Three things, and the third is the one that is easy to miss: the binary must be
+     * executable, the rootfs must hold `bin/bash`, and proot's scratch dir must be
+     * writable. Without the last, proot reports `can't create temporary file` on the
+     * first exec — a failure that looks like a broken rootfs but is not.
+     */
     fun isReady(context: Context): Boolean =
-        prootBinary(context).canExecute() && File(rootfs(context), "bin/bash").exists()
+        prootBinary(context).canExecute() &&
+            File(rootfs(context), "bin/bash").exists() &&
+            tmpDir(context).isDirectory
 
     /**
      * True when [hostPath] is inside the app's engine zone.
@@ -181,10 +206,15 @@ object ProotLauncher {
         PtyRequest(
             executable = prootBinary(context).absolutePath,
             arguments = loginShellArgs(context, token),
+            // The outer environment — what proot itself is started with. It is
+            // deliberately NOT in loginShellArgs' `env -i` list: that is the
+            // *container's* environment, and proot reads PROOT_TMP_DIR before it ever
+            // execs the shell. Putting it there would be too late.
             environment =
                 listOf(
                     "TERM=xterm-256color",
                     "LANG=C.UTF-8",
+                    "$TMP_DIR_ENV=${tmpDir(context).absolutePath}",
                 ),
         )
 

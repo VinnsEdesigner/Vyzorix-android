@@ -35,6 +35,44 @@ class ProotLauncherTest {
     }
 
     @Test
+    fun `PROOT_TMP_DIR rides in the OUTER environment`() {
+        // proot reads PROOT_TMP_DIR from its own environment, before it execs the
+        // container's shell. It must therefore be in the outer environment, and must
+        // NOT be in the `env -i` list — there it would be too late, and proot would
+        // fall back to P_tmpdir (/data/local/tmp), which an app cannot write, and
+        // fail with "can't create temporary file".
+        val request = ProotLauncher.loginShellRequest(context, token = "t")
+
+        val tmp = request.environment.firstOrNull { it.startsWith("${ProotLauncher.TMP_DIR_ENV}=") }
+        assertTrue("PROOT_TMP_DIR must be in the outer environment", tmp != null)
+        assertTrue(
+            "PROOT_TMP_DIR must point at the app-private dir",
+            tmp!!.endsWith(ProotLauncher.tmpDir(context).absolutePath),
+        )
+
+        // And it must not have leaked into argv.
+        val args = ProotLauncher.loginShellArgs(context, token = "t")
+        assertFalse(
+            "PROOT_TMP_DIR must not be in argv",
+            args.any { it.startsWith("${ProotLauncher.TMP_DIR_ENV}=") },
+        )
+    }
+
+    @Test
+    fun `the tmp dir is created, and isReady requires it`() {
+        // proot does not create its own scratch dir, so the launcher must.
+        val dir = ProotLauncher.tmpDir(context)
+        assertTrue("tmp dir must exist after tmpDir()", dir.isDirectory)
+
+        // isReady() must include it: a binary with no scratch dir reports "ready" and
+        // then fails on the first exec.
+        assertFalse(
+            "isReady must be false without a rootfs, even though the tmp dir exists",
+            ProotLauncher.isReady(context),
+        )
+    }
+
+    @Test
     fun `the socket is bound into the container at the documented path`() {
         val args = ProotLauncher.loginShellArgs(context, token = "t")
         val bind =

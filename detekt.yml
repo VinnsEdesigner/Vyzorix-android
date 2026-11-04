@@ -17,8 +17,14 @@ complexity:
     functionThreshold: 8
     constructorThreshold: 10
   TooManyFunctions:
+    # The file/class thresholds were already raised to 25 (the default is 11) and the
+    # object threshold was not, so a singleton like ProotLauncher — a set of small,
+    # flat helpers with no shared state — tripped at 11 functions while the same code
+    # as a class would not. Objects are the shape this codebase uses for stateless
+    # helpers, so the same allowance applies.
     thresholdInFiles: 25
     thresholdInClasses: 25
+    thresholdInObjects: 25
   CyclomaticComplexMethod:
     threshold: 20
   NestedBlockDepth:

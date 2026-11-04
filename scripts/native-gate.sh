@@ -28,8 +28,14 @@ fi
 
 # Every native source tree, discovered rather than listed, so a new module is
 # covered without editing this script.
+#
+# `third_party/` is excluded on purpose: it is vendored upstream code (proot, talloc)
+# kept byte-for-byte so an upgrade is a clean diff. Reformatting it would make every
+# future upstream merge a conflict and would be reformatting someone else's code to
+# our style for no benefit. The gate still covers everything we wrote.
 mapfile -t SOURCES < <(find "${ROOT}" \
   -path "${ROOT}/.git" -prune -o \
+  -path "${ROOT}/third_party" -prune -o \
   -path "*/build" -prune -o \
   -path "*/.cxx" -prune -o \
   \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.cc' \) -print)
