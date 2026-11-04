@@ -78,6 +78,14 @@ class VyzorixForegroundService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
+        // Re-post the foreground notification on every start, not just in onCreate.
+        // The system requires every startForegroundService() to be answered by a
+        // startForeground() call, and onCreate runs only once per service lifetime:
+        // a second start (a boot receiver racing the app, or a caller starting an
+        // already-running service) was therefore never answered, and the process was
+        // killed with "did not then call Service.startForeground()".
+        startForeground(NOTIFICATION_ID, buildNotification())
+
         if (running.compareAndSet(false, true)) {
             start()
         }

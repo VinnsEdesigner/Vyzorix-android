@@ -1,12 +1,11 @@
 package com.vyzorix.service
 
-import android.app.ActivityManager
-import android.content.Context
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -23,60 +22,74 @@ class VyzorixForegroundServiceInstrumentedTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-    private fun isServiceRunning(): Boolean {
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        @Suppress("DEPRECATION")
-        return manager.getRunningServices(Int.MAX_VALUE).any {
-            it.service.className == VyzorixForegroundService::class.java.name
+    /**
+     * The bridge socket the service binds while it runs and deletes in onDestroy.
+     *
+     * It is the reliable "is the service up" signal on an emulator:
+     * `ActivityManager.getRunningServices` lags teardown, so a test that polls it can
+     * believe the service is gone while the old instance is still being destroyed —
+     * and re-issuing `startForegroundService` against that instance leaves the system
+     * waiting for a `startForeground` the dying instance will never call, which kills
+     * the process.
+     */
+    private val socket = File(context.filesDir, "android.sock")
+
+    /** Polls [predicate] for up to 15s; returns whether it became true. */
+    private fun waitFor(predicate: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + 15_000
+        while (System.currentTimeMillis() < deadline) {
+            if (predicate()) return true
+            Thread.sleep(200)
         }
+
+        return predicate()
+    }
+
+    /** Each test starts from a stopped service, so a lingering instance cannot leak in. */
+    @Before
+    fun stopAnyRunningService() {
+        context.stopService(Intent(context, VyzorixForegroundService::class.java))
+        waitFor { !socket.exists() }
     }
 
     @Test
     fun serviceStartsAndIsRunning() {
         VyzorixForegroundService.start(context)
 
-        val deadline = System.currentTimeMillis() + 10_000
-        while (System.currentTimeMillis() < deadline && !isServiceRunning()) {
-            Thread.sleep(200)
-        }
-
-        assertTrue("service should be running after start", isServiceRunning())
+        assertTrue("service should bind its bridge socket after start", waitFor { socket.exists() })
     }
 
     @Test
     fun serviceSurvivesAProcessKillAndComesBack() {
         VyzorixForegroundService.start(context)
-
-        val deadline = System.currentTimeMillis() + 10_000
-        while (System.currentTimeMillis() < deadline && !isServiceRunning()) {
-            Thread.sleep(200)
-        }
-        assertTrue("service should be running before the kill", isServiceRunning())
+        assertTrue("service should be up before the restart", waitFor { socket.exists() })
 
         // START_STICKY is the mechanism under test. A real kill of the app's own
         // process would take this test process down with it, so the restart is
-        // asserted by re-issuing start and confirming the service is up, which is
-        // the same path the system takes on restart.
+        // simulated by stopping and re-issuing start, which is the same path the
+        // system takes on restart.
+        //
+        // The wait for the socket to disappear is load-bearing, not politeness:
+        // `stopService` is asynchronous, and the old instance deletes its socket only
+        // in onDestroy. Restarting before that leaves the system waiting for a
+        // startForeground the dying instance will never call, which kills the process.
         context.stopService(Intent(context, VyzorixForegroundService::class.java))
-        VyzorixForegroundService.start(context)
+        assertTrue("service should release its socket on stop", waitFor { !socket.exists() })
 
-        val back = System.currentTimeMillis() + 10_000
-        while (System.currentTimeMillis() < back && !isServiceRunning()) {
-            Thread.sleep(200)
-        }
-        assertTrue("service should be running again after restart", isServiceRunning())
+        VyzorixForegroundService.start(context)
+        assertTrue(
+            "service should bind its socket again after restart",
+            waitFor { socket.exists() },
+        )
     }
 
     @Test
     fun theBridgeSocketIsCreatedByTheRunningService() {
         VyzorixForegroundService.start(context)
 
-        val socket = File(context.filesDir, "android.sock")
-        val deadline = System.currentTimeMillis() + 10_000
-        while (System.currentTimeMillis() < deadline && !socket.exists()) {
-            Thread.sleep(200)
-        }
-
-        assertTrue("the running service should have bound files/android.sock", socket.exists())
+        assertTrue(
+            "the running service should have bound files/android.sock",
+            waitFor { socket.exists() },
+        )
     }
 }
