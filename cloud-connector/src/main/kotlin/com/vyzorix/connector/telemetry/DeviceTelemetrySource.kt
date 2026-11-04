@@ -15,6 +15,10 @@ import android.os.SystemClock
  * yet (Layer 2 is not in the repo); a dashboard that shows 0 knows the device is
  * reporting but has no engine, whereas a fabricated number would hide that.
  *
+ * Uptime is in **seconds**, not milliseconds: the server's `TelemetryFrame.uptime`
+ * and its `uptime` column are seconds, so a millisecond reading would make every
+ * device look as if it had been up for decades.
+ *
  * Thermal state is the reading that matters on the fleet's target hardware (the C22
  * throttles under sustained load), and `BatteryManager` reports it without a
  * permission. It is a battery temperature, not a CPU one — Android exposes no
@@ -26,7 +30,7 @@ class DeviceTelemetrySource(
 ) : TelemetryReporter.TelemetrySource {
     override fun sample(): TelemetryReporter.Sample =
         TelemetryReporter.Sample(
-            uptimeMs = SystemClock.elapsedRealtime(),
+            uptimeSeconds = SystemClock.elapsedRealtime() / MILLIS_PER_SECOND,
             thermalTemp = batteryTemperatureC(),
             riskScore = 0,
             audioMode = 0,
@@ -36,7 +40,9 @@ class DeviceTelemetrySource(
 
     /** Battery temperature in Celsius, or 0 when the platform will not say. */
     private fun batteryTemperatureC(): Double {
-        val status = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return 0.0
+        val status =
+            context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                ?: return 0.0
 
         // EXTRA_TEMPERATURE is tenths of a degree Celsius.
         val tenths = status.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)
@@ -46,5 +52,6 @@ class DeviceTelemetrySource(
 
     private companion object {
         const val TENTHS_PER_DEGREE = 10.0
+        const val MILLIS_PER_SECOND = 1000L
     }
 }

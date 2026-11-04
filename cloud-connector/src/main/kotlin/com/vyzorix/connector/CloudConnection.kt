@@ -6,8 +6,11 @@ import com.vyzorix.bridge.ApiRouter
 import com.vyzorix.connector.bridge.IdentityApi
 import com.vyzorix.connector.cloud.CloudError
 import com.vyzorix.connector.cloud.CommandResultFrame
+import com.vyzorix.connector.cloud.ConfigPoller
+import com.vyzorix.connector.cloud.DeviceRequestSigner
 import com.vyzorix.connector.cloud.DeviceWsClient
 import com.vyzorix.connector.cloud.EnrollRequest
+import com.vyzorix.connector.cloud.EnrollResponse
 import com.vyzorix.connector.cloud.EnrollmentClient
 import com.vyzorix.connector.command.CommandDispatcher
 import com.vyzorix.connector.config.ConfigError
@@ -16,6 +19,7 @@ import com.vyzorix.connector.enroll.PairingCode
 import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceFactsCollector
 import com.vyzorix.connector.identity.DeviceSigner
+import com.vyzorix.connector.telemetry.TelemetryReporter
 import com.vyzorix.connector.terminal.TerminalRelay
 import com.vyzorix.service.CloudLink
 import com.vyzorix.service.PtySessionPort
@@ -83,6 +87,16 @@ class CloudConnection(
     private var telemetry: TelemetryReporter? = null
 
     /**
+     * Asks for the config on the enroll cadence while the device waits to be claimed.
+     *
+     * Null once a config has arrived, and until [ensureEnrolled] has a cadence to
+     * give it. It is the fallback for the window where the socket is not up: a
+     * claimed device whose push was missed must not sit unconfigured until something
+     * else happens to trigger a fetch.
+     */
+    private var configPoller: ConfigPoller? = null
+
+    /**
      * How often to ask for the config while waiting to be claimed, in seconds.
      *
      * Set from the enroll response; the default matches the server's when it does
@@ -137,6 +151,10 @@ class CloudConnection(
         // write into a closed socket.
         telemetry?.stop()
         telemetry = null
+        // The poller's fetch needs the network and a signer; neither outlives the
+        // service, so it is reaped with the rest rather than left ticking.
+        configPoller?.stop()
+        configPoller = null
         // A terminal cannot outlive the socket it runs over: close every session so
         // no shell is left running with no way to reach it.
         terminalRelay?.let { relay ->
@@ -263,6 +281,56 @@ class CloudConnection(
                 expiresInSeconds = response.expiresInSeconds,
             ),
         )
+
+        // The code is shown; now wait to be claimed. The socket push is the primary
+        // path, but a device whose socket is not up yet would otherwise sit
+        // unconfigured after a claim, so the server's cadence is honoured here.
+        startConfigPolling()
+    }
+
+    /**
+     * Starts asking for the config on the cadence the enroll response gave.
+     *
+     * A no-op once a config is held: the poller is only for the unclaimed window,
+     * and the socket push and the reconnect-time version check keep it current after
+     * that. Idempotent.
+     */
+    private fun startConfigPolling() {
+        if (configStore.current() != null) return
+        if (configPoller != null) return
+
+        val poller =
+            ConfigPoller(
+                intervalSeconds = pollIntervalSeconds,
+                fetch = { fetchConfigOnce() },
+            )
+        configPoller = poller
+        poller.start()
+    }
+
+    /**
+     * Fetches the config once, applies it when it is new, and reports whether the
+     * device now holds one. Used by the poller as its cadence tick.
+     */
+    private fun fetchConfigOnce(): Boolean {
+        val requestSigner = wsRequestSigner() ?: return false
+
+        return try {
+            val response = enrollmentClient.fetchConfig(requestSigner)
+            if (configStore.isStale(response.version)) {
+                applyConfig(response.version, response.document)
+            }
+
+            // applyConfig stores it on success, so a config is held exactly when the
+            // store reports one. A refused document leaves the store empty and the
+            // poller keeps trying, which is what we want.
+            configStore.current() != null
+        } catch (e: CloudError) {
+            // Offline, or not claimed yet. The next tick retries.
+            Log.d(TAG, "config poll failed: ${e.message}")
+
+            false
+        }
     }
 
     private fun openSocket() {
@@ -289,7 +357,7 @@ class CloudConnection(
                     // The socket is the trigger to reconcile the config: a device that
                     // was offline at claim time has none, and one whose config changed
                     // holds a stale version.
-                    refetchConfigIfStale()
+                    fetchConfigOnce()
 
                     // Report telemetry on this connection. Started here rather than at
                     // start() so a report is never attempted before there is a socket,
@@ -365,11 +433,18 @@ class CloudConnection(
         try {
             val config = configStore.apply(document)
             notification.showConfigured(config.name)
+            // A config has arrived, so the waiting is over: the socket push and the
+            // reconnect-time version check own it from here.
+            configPoller?.stop()
+            configPoller = null
             // The config carries the reporting cadence, so applying it retunes the
             // telemetry reporter: the server can slow a fleet's reporting without a
             // new APK.
             telemetry?.updateInterval(config.heartbeatSeconds)
-            Log.i(TAG, "applied config version $version (telemetry every ${config.heartbeatSeconds}s)")
+            Log.i(
+                TAG,
+                "applied config version $version (telemetry every ${config.heartbeatSeconds}s)",
+            )
         } catch (e: ConfigError) {
             Log.w(TAG, "refused a config: ${e.message}")
         }
@@ -399,38 +474,11 @@ class CloudConnection(
         reporter.start()
     }
 
-    /**
-     * Re-fetches the config when the server's version differs from the held one.
-     *
-     * This is what makes a missed push recoverable: the device asks for its own
-     * config by version, and applies it if it is new. The version the server reports
-     * comes from the config frame itself, so a device that has none always asks.
-     */
-    @Suppress("SwallowedException")
-    private fun refetchConfigIfStale() {
-        // The version to compare against is only known once a config frame arrives or
-        // a fetch returns one. Asking unconditionally on connect is correct and cheap:
-        // the server returns the same document if nothing changed, and applying an
-        // identical version is a no-op.
-        val requestSigner = wsRequestSigner() ?: return
-
-        try {
-            val response = enrollmentClient.fetchConfig(requestSigner)
-            if (configStore.isStale(response.version)) {
-                applyConfig(response.version, response.document)
-            }
-        } catch (e: CloudError) {
-            // Network or auth failure: the next reconnect tries again. Nothing to do
-            // here, and the version stays stale so the retry is not skipped.
-            Log.d(TAG, "config re-fetch failed: ${e.message}")
-        }
-    }
-
     /** The per-request signer for the config re-fetch. Null before a device id exists. */
-    private fun wsRequestSigner(): com.vyzorix.connector.cloud.DeviceRequestSigner? {
+    private fun wsRequestSigner(): DeviceRequestSigner? {
         if (deviceId.isEmpty()) return null
 
-        return com.vyzorix.connector.cloud.DeviceRequestSigner(
+        return DeviceRequestSigner(
             signer = signer,
             deviceId = deviceId,
         )

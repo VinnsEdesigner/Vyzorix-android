@@ -2,8 +2,8 @@ package com.vyzorix.connector.telemetry
 
 import com.vyzorix.connector.cloud.CloudJson
 import com.vyzorix.connector.cloud.TelemetryFrame
-import kotlinx.serialization.encodeToString
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.serialization.encodeToString
 
 /**
  * Reports device telemetry on the cadence the config asks for.
@@ -38,7 +38,7 @@ class TelemetryReporter(
      * uptime is optional there, so a device reports what it has.
      */
     data class Sample(
-        val uptimeMs: Long = 0,
+        val uptimeSeconds: Long = 0,
         val riskScore: Int = 0,
         val audioMode: Int = 0,
         val bufferLevel: Int = 0,
@@ -52,12 +52,6 @@ class TelemetryReporter(
     private var intervalSeconds: Int = initialIntervalSeconds.coerceAtLeast(MIN_INTERVAL_SECONDS)
 
     private var thread: Thread? = null
-
-    /** True when reports are being sent. */
-    fun isRunning(): Boolean = running.get()
-
-    /** The cadence in use, in seconds. */
-    fun interval(): Int = intervalSeconds
 
     /**
      * Applies a new cadence. A value below [MIN_INTERVAL_SECONDS] is clamped: the
@@ -99,7 +93,7 @@ class TelemetryReporter(
             TelemetryFrame(
                 timestamp = clock(),
                 deviceId = deviceId,
-                uptime = sample.uptimeMs,
+                uptime = sample.uptimeSeconds,
                 riskScore = sample.riskScore,
                 audioMode = sample.audioMode,
                 bufferLevel = sample.bufferLevel,

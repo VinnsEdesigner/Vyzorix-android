@@ -12,12 +12,12 @@ import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
 import com.vyzorix.connector.identity.KeystoreDeviceIdentity
+import com.vyzorix.connector.telemetry.DeviceTelemetrySource
 import java.security.KeyFactory
 import java.security.KeyStore
 import java.security.PublicKey
 import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
-import okhttp3.OkHttpClient
 
 /**
  * Builds a [CloudConnection] from a URL and the pinned server key.
@@ -87,6 +87,9 @@ object CloudConnectionFactory {
                     )
                 },
                 notification = PairingNotification(context),
+                // Telemetry needs the platform (battery, uptime), so the source is built
+                // here; the cadence and the frame live in the connection.
+                telemetrySource = DeviceTelemetrySource(context),
                 tierHint = tierHint,
             ),
         )

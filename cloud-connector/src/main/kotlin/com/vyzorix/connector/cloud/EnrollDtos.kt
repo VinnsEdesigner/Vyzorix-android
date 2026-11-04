@@ -42,7 +42,8 @@ data class EnrollResponse(
      * not up asks on this cadence instead of waiting indefinitely. Defaulted so an
      * older server that does not send it still yields a sane cadence.
      */
-    @SerialName("pollIntervalSeconds") val pollIntervalSeconds: Long = DEFAULT_POLL_INTERVAL_SECONDS,
+    @SerialName("pollIntervalSeconds")
+    val pollIntervalSeconds: Long = DEFAULT_POLL_INTERVAL_SECONDS,
 ) {
     companion object {
         const val DEFAULT_POLL_INTERVAL_SECONDS = 10L

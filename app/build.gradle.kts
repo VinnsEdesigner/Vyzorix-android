@@ -37,9 +37,11 @@ fun serverPublicKey(): String =
  * Debian rootfs ships.
  */
 fun allowUncontainedShell(): Boolean =
-    ((findProperty("allowUncontainedShell") as String?)
-        ?: System.getenv("VYZORIX_ALLOW_UNCONTAINED_SHELL")
-        ?: "false").toBoolean()
+    (
+        (findProperty("allowUncontainedShell") as String?)
+            ?: System.getenv("VYZORIX_ALLOW_UNCONTAINED_SHELL")
+            ?: "false"
+    ).toBoolean()
 
 android {
     namespace = "com.vyzorix.agent"

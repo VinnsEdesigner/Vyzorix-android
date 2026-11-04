@@ -37,7 +37,6 @@ class DeviceWsClient(
     private val http: OkHttpClient,
     private val listener: Listener,
     private val backoff: Backoff = Backoff(),
-    private val heartbeat: Heartbeat = Heartbeat(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /**
@@ -237,8 +236,9 @@ class DeviceWsClient(
          * is what the reconnect loop needs — without it a mobile network dropping the
          * connection leaves the client writing into a black hole indefinitely.
          *
-         * It is set here rather than on a shared client so the interval stays with
-         * the WebSocket that depends on it.
+         * The same client is used for the device's HTTP calls, so it must not be given
+         * an application-level ping there; `pingInterval` only applies to WebSocket
+         * connections, which is exactly the scope the heartbeat needs.
          */
         fun buildHttpClient(heartbeat: Heartbeat = Heartbeat()): OkHttpClient =
             OkHttpClient

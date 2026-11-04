@@ -140,7 +140,9 @@ class VyzorixForegroundService : Service() {
             shellRequest = ::terminalShellRequest,
             // The container shell cannot start until the rootfs is installed; the
             // port refuses rather than opening a pty for a shell that dies at once.
-            canOpen = { ProotLauncher.isReady(this) || TerminalShellPolicy.isUncontainedShellAllowed() },
+            canOpen = {
+                ProotLauncher.isReady(this) || TerminalShellPolicy.isUncontainedShellAllowed()
+            },
         )
 
     /**

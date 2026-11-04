@@ -3,7 +3,6 @@ package com.vyzorix.service
 import android.util.Log
 import com.vyzorix.bridge.SessionTokenRegistry
 import com.vyzorix.capability.PtyBroker
-import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult

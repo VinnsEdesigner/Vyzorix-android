@@ -49,6 +49,9 @@ class ConfigPoller(
         thread = null
     }
 
+    // A failed fetch is the expected state while offline: the poller's whole job is
+    // to retry, so the exception carries nothing the caller can act on.
+    @Suppress("SwallowedException")
     private fun loop() {
         while (running.get()) {
             // Fetch first, then sleep: the first poll runs immediately, so a device
