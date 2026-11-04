@@ -123,13 +123,24 @@ object PtyFrame {
         sessionId: String,
         rows: Int,
         cols: Int,
-    ): ByteArray {
-        val size = ByteBuffer.allocate(RESIZE_PAYLOAD_SIZE).order(ByteOrder.BIG_ENDIAN)
-        size.putShort(rows.toShort())
-        size.putShort(cols.toShort())
+    ): ByteArray = encode(TYPE_RESIZE, resizePayload(rows, cols), sessionId)
 
-        return encode(TYPE_RESIZE, size.array(), sessionId)
-    }
+    /**
+     * The bare 4-byte resize payload, rows then cols as big-endian uint16.
+     *
+     * Used on its own for an OPEN frame, whose payload is the initial window size
+     * with no inner frame around it: the open frame is already the frame.
+     */
+    fun resizePayload(
+        rows: Int,
+        cols: Int,
+    ): ByteArray =
+        ByteBuffer
+            .allocate(RESIZE_PAYLOAD_SIZE)
+            .order(ByteOrder.BIG_ENDIAN)
+            .putShort(rows.toShort())
+            .putShort(cols.toShort())
+            .array()
 
     /** An ACK frame returning flow-control credit. */
     fun encodeAck(count: Int): ByteArray {
@@ -168,10 +179,13 @@ object PtyFrame {
 
         val body = raw.copyOfRange(HEADER_SIZE, HEADER_SIZE + length)
 
-        // Only the frames that name a session carry the header. CLOSE and ACK do not.
+        // The frames that name a session carry the session header. The server's
+        // pty_device.go reads CLOSE with DecodeSessionData and treats ERROR as a raw
+        // string, so CLOSE is session-prefixed and ERROR is not — the decoder has to
+        // match, or a close arrives with an empty id and is unroutable.
         val (sessionId, payload) =
             when (type) {
-                TYPE_DATA, TYPE_OPEN, TYPE_RESIZE -> {
+                TYPE_DATA, TYPE_OPEN, TYPE_RESIZE, TYPE_CLOSE -> {
                     val decoded = decodeSessionData(body)
                     decoded.first to decoded.second
                 }

@@ -311,7 +311,13 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
                 )
             else:
                 occurrences += len(re.findall(rf"\b{re.escape(name)}\b", text))
+                # strip_kotlin blanks string literals, so a use inside another file's
+                # interpolation (`"${relay.openCount()}"`) was invisible. Scanning only
+                # the declaring file's literals reported a name as test-only when
+                # production code used it — a false positive the gate must not make.
+                occurrences += count_interpolations(other, name)
 
+        # The declaring file's own interpolations, with its signature line excluded.
         occurrences += count_interpolations(path, name)
 
         test_occurrences = len(re.findall(rf"\b{re.escape(name)}\b", test_only_text))

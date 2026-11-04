@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.vyzorix.connector.CloudConnectionFactory
 import com.vyzorix.service.CloudLinkProvider
+import com.vyzorix.service.TerminalShellPolicy
 
 /**
  * Installs the cloud connection before anything else runs.
@@ -23,6 +24,10 @@ import com.vyzorix.service.CloudLinkProvider
 class VyzorixApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // Tell the service whether a terminal may run a plain device shell. Off in a
+        // production build: it runs as the app's uid, which the container prevents.
+        TerminalShellPolicy.allowUncontainedShell(BuildConfig.ALLOW_UNCONTAINED_SHELL)
 
         val connection =
             try {

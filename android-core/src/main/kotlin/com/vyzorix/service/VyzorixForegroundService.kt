@@ -22,6 +22,7 @@ import com.vyzorix.bridge.apis.StorageApi
 import com.vyzorix.capability.PtyBroker
 import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
+import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult
 import com.vyzorix.engine.ProotLauncher
 import com.vyzorix.permissions.PermissionRequester
@@ -110,13 +111,53 @@ class VyzorixForegroundService : Service() {
             ).also { it.start() }
 
         // The cloud connection, if the app installed one. Started after the bridge so
-        // the APIs it registers are ready before a frame can arrive.
+        // the APIs it registers are ready before a frame can arrive, and after the
+        // broker exists so the terminal port can be handed over.
         cloudLink = CloudLinkProvider.get()
         cloudLink?.registerApis(router)
+        cloudLink?.attachPtyPort(buildTerminalPort())
         cloudLink?.start()
 
         Log.i(TAG, "service started")
     }
+
+    /**
+     * Builds the PTY port the cloud terminal relay drives.
+     *
+     * The shell is the same proot login shell the bridge's terminal uses, so an
+     * operator's cloud terminal and a local one are the same environment. The
+     * allowlist is the full local API set, stated explicitly rather than left empty,
+     * because an empty allowlist permits nothing (boundary contract §7).
+     */
+    private fun buildTerminalPort(): PtySessionPort =
+        ServicePtySessionPort(
+            broker = broker,
+            tokens = tokens,
+            // A provider, not a value: the device id is not known until enrollment
+            // finishes, which is after this port is built.
+            deviceId = { cloudLink?.deviceId().orEmpty() },
+            apiAllowlist = { router.names().toSet() },
+            shellRequest = ::terminalShellRequest,
+            // The container shell cannot start until the rootfs is installed; the
+            // port refuses rather than opening a pty for a shell that dies at once.
+            canOpen = { ProotLauncher.isReady(this) || TerminalShellPolicy.isUncontainedShellAllowed() },
+        )
+
+    /**
+     * The shell a terminal session runs.
+     *
+     * The container's login shell when the engine is installed, which is the
+     * architecture's terminal. When it is not — the rootfs is not in the repo yet —
+     * a plain device shell is used **only** if [TerminalShellPolicy] has explicitly
+     * allowed it, because that shell runs as the app's uid and can read the app's
+     * private files, which the container exists to prevent.
+     */
+    private fun terminalShellRequest(token: String): PtyRequest =
+        if (ProotLauncher.isReady(this)) {
+            ProotLauncher.loginShellRequest(this, token)
+        } else {
+            ProotLauncher.uncontainedShellRequest(this, token)
+        }
 
     /**
      * Registers every API. Adding one is a line here plus a file in `apis/`.

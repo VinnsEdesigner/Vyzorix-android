@@ -16,7 +16,9 @@ import com.vyzorix.connector.enroll.PairingCode
 import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceFactsCollector
 import com.vyzorix.connector.identity.DeviceSigner
+import com.vyzorix.connector.terminal.TerminalRelay
 import com.vyzorix.service.CloudLink
+import com.vyzorix.service.PtySessionPort
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -84,6 +86,9 @@ class CloudConnection(
      */
     private var deviceId: String = uuid
 
+    /** The terminal relay, built once a [PtySessionPort] is attached. */
+    private var terminalRelay: TerminalRelay? = null
+
     /**
      * Starts the connection: enroll if needed, then open the socket.
      *
@@ -113,6 +118,12 @@ class CloudConnection(
     /** Stops the connection. The service calls this from `onDestroy`. */
     override fun stop() {
         running.set(false)
+        // A terminal cannot outlive the socket it runs over: close every session so
+        // no shell is left running with no way to reach it.
+        terminalRelay?.let { relay ->
+            Log.i(TAG, "stopping: reaping ${relay.openCount()} terminal session(s)")
+            relay.closeAll("connection_stopped")
+        }
         wsClient?.close()
         wsClient = null
     }
@@ -132,6 +143,24 @@ class CloudConnection(
 
     /** The device id, once known. Empty before enroll completes. */
     override fun deviceId(): String = deviceId
+
+    /**
+     * Attaches the PTY side, so operator terminal frames on the cloud socket reach
+     * the device's shells.
+     *
+     * The relay is built here because this is where the socket lives, but the shells
+     * are the service's; the port is the only thing it needs from it.
+     */
+    override fun attachPtyPort(port: PtySessionPort) {
+        terminalRelay =
+            TerminalRelay(
+                port = port,
+                sendFrame = { frame -> sendBinary(frame) },
+                onSessionClosed = { sessionId, reason ->
+                    Log.i(TAG, "terminal $sessionId ended ($reason)")
+                },
+            )
+    }
 
     /**
      * Registers the identity API, so the container can read the device's uuid and
@@ -224,9 +253,16 @@ class CloudConnection(
                 }
 
                 override fun onPtyFrame(bytes: ByteArray) {
-                    // Interactive PTY over the cloud socket is a later slice; the
-                    // operator terminal is served by the bridge today. Binary frames
-                    // are ignored here rather than mis-decoded.
+                    val relay = terminalRelay
+                    if (relay == null) {
+                        Log.w(TAG, "a binary PTY frame arrived with no port attached; dropped")
+
+                        return
+                    }
+
+                    if (!relay.onFrame(bytes)) {
+                        Log.w(TAG, "dropped a malformed PTY frame")
+                    }
                 }
 
                 override fun onConnected() {
@@ -240,8 +276,17 @@ class CloudConnection(
                     reason: String,
                     willRetry: Boolean,
                 ) {
-                    // Nothing to do: the client schedules its own reconnect. Kept as a
-                    // seam for a future liveness signal.
+                    // A terminal cannot outlive the socket: close every session so no
+                    // shell is left running with no way to reach it. The relay re-opens
+                    // sessions only when the operator asks again, which is correct —
+                    // the operator's own terminal shows the disconnect.
+                    terminalRelay?.let { relay ->
+                        Log.i(
+                            TAG,
+                            "socket dropped: reaping ${relay.openCount()} terminal session(s)",
+                        )
+                        relay.closeAll("socket_disconnected")
+                    }
                 }
             }
 

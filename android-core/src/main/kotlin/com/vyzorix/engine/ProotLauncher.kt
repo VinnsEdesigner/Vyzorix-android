@@ -187,4 +187,35 @@ object ProotLauncher {
                     "LANG=C.UTF-8",
                 ),
         )
+
+    /**
+     * A plain device shell, for when the container engine is not installed.
+     *
+     * This is **not** the architecture's terminal: it runs as the app's own uid, so
+     * it can read the app's private files, which the container exists to prevent. It
+     * exists only so the terminal path can be exercised before Layer 2 ships, and the
+     * caller must gate it on [com.vyzorix.service.TerminalShellPolicy].
+     *
+     * The bridge socket is bound to the app's real path here rather than the
+     * container's `/tmp/android.sock`, because there is no container to translate it.
+     */
+    fun uncontainedShellRequest(
+        context: Context,
+        token: String,
+    ): PtyRequest =
+        PtyRequest(
+            executable = UNCONTAINED_SHELL,
+            arguments = listOf(UNCONTAINED_SHELL, "-i"),
+            environment =
+                listOf(
+                    "TERM=xterm-256color",
+                    "LANG=C.UTF-8",
+                    "HOME=${context.filesDir.absolutePath}",
+                    "$BRIDGE_SOCKET_ENV=${socketPath(context).absolutePath}",
+                    "$BRIDGE_TOKEN_ENV=$token",
+                ),
+        )
+
+    /** The device's own shell, used only by [uncontainedShellRequest]. */
+    const val UNCONTAINED_SHELL = "/system/bin/sh"
 }

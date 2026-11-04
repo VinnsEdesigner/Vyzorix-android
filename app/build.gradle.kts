@@ -30,6 +30,17 @@ fun serverPublicKey(): String =
         ?: System.getenv("VYZORIX_SERVER_KEY")
         ?: ""
 
+/**
+ * Whether the terminal may run a plain device shell when the container engine is
+ * not installed. Default false: it is a real weakening, since that shell runs as the
+ * app's uid. A development build turns it on to exercise the terminal before the
+ * Debian rootfs ships.
+ */
+fun allowUncontainedShell(): Boolean =
+    ((findProperty("allowUncontainedShell") as String?)
+        ?: System.getenv("VYZORIX_ALLOW_UNCONTAINED_SHELL")
+        ?: "false").toBoolean()
+
 android {
     namespace = "com.vyzorix.agent"
     compileSdk =
@@ -59,6 +70,11 @@ android {
         // fetched — a fetched trust anchor is no anchor at all.
         buildConfigField("String", "CLOUD_BASE_URL", "\"${cloudBaseUrl()}\"")
         buildConfigField("String", "SERVER_PUBLIC_KEY", "\"${serverPublicKey()}\"")
+        // Allow the terminal to run a plain device shell when the container engine is
+        // not installed. Off unless asked for, because that shell runs as the app's
+        // uid and can read the app's private files, which the container exists to
+        // prevent. Set with -PallowUncontainedShell=true or VYZORIX_ALLOW_UNCONTAINED_SHELL.
+        buildConfigField("boolean", "ALLOW_UNCONTAINED_SHELL", "${allowUncontainedShell()}")
     }
 
     buildFeatures {

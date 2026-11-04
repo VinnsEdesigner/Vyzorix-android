@@ -34,6 +34,16 @@ interface CloudLink {
      */
     fun registerApis(router: ApiRouter)
 
+    /**
+     * Attaches the PTY side of the connection.
+     *
+     * Binary terminal frames arrive on the cloud socket and must reach the local
+     * PTY sessions, which only the service can drive; the service hands the
+     * connection a port rather than the connection reaching into the broker. Called
+     * once, before [start].
+     */
+    fun attachPtyPort(port: PtySessionPort)
+
     /** The device id once enrolled, or empty. Used for logging. */
     fun deviceId(): String = ""
 }

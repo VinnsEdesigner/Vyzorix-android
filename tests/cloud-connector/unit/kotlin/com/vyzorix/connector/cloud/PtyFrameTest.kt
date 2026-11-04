@@ -77,15 +77,26 @@ class PtyFrameTest {
     }
 
     @Test
-    fun `close frame has no session header`() {
-        // The server sends close without a session-prefixed payload; decoding must
-        // not try to read one.
-        val frame = PtyFrame.encode(PtyFrame.TYPE_CLOSE, ByteArray(0))
+    fun `close frame carries its session id`() {
+        // A close names its session: one device multiplexes several terminals, so a
+        // close without an id would be unroutable. The server's own close path sends
+        // EncodeSessionData, and the device-side handler reads it with
+        // DecodeSessionData, so the decoder must read it here too.
+        val frame = PtyFrame.encode(PtyFrame.TYPE_CLOSE, ByteArray(0), "sess-1")
 
         val decoded = PtyFrame.decode(frame)
         assertEquals(PtyFrame.TYPE_CLOSE, decoded.type)
-        assertEquals("", decoded.sessionId)
+        assertEquals("sess-1", decoded.sessionId)
         assertEquals(0, decoded.payload.size)
+    }
+
+    @Test
+    fun `close carries an exit code payload when present`() {
+        val frame = PtyFrame.encode(PtyFrame.TYPE_CLOSE, "0".toByteArray(), "sess-1")
+
+        val decoded = PtyFrame.decode(frame)
+        assertEquals("sess-1", decoded.sessionId)
+        assertEquals("0", String(decoded.payload))
     }
 
     @Test

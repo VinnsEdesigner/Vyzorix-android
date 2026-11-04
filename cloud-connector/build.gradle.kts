@@ -18,6 +18,10 @@ android {
             libs.versions.android.minSdk
                 .get()
                 .toInt()
+        // Instrumented tests need a runner declared or none are discovered: the task
+        // reports "Starting 0 tests" and passes, which looks green while proving
+        // nothing.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -42,6 +46,9 @@ android {
         getByName("test") {
             java.setSrcDirs(listOf("../tests/cloud-connector/unit/kotlin"))
         }
+        getByName("androidTest") {
+            java.setSrcDirs(listOf("../tests/cloud-connector/instrumented/kotlin"))
+        }
     }
 }
 
@@ -65,4 +72,8 @@ dependencies {
     testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
 }
