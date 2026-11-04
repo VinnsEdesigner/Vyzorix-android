@@ -42,7 +42,13 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MAIN_DIRS = [ROOT / "android-core" / "src" / "main"]
+# Every shipping module, not just the first. A module left out of this list has its
+# dead code silently tolerated, which is the failure mode the gate exists to stop.
+MAIN_DIRS = [
+    ROOT / "android-core" / "src" / "main",
+    ROOT / "cloud-connector" / "src" / "main",
+    ROOT / "app" / "src" / "main",
+]
 TEST_DIRS = [ROOT / "tests"]
 ALLOWLIST = ROOT / "config" / "deadcode-allowlist.txt"
 PUBLIC_API = ROOT / "config" / "deadcode-public-api.txt"
@@ -107,6 +113,12 @@ FRAMEWORK_CALLBACKS = {
     "onTaskRemoved",
     "onTimeout",
     "onNewIntent",
+    # OkHttp WebSocketListener callbacks: the client calls these, not our code.
+    "onOpen",
+    "onMessage",
+    "onClosing",
+    "onClosed",
+    "onFailure",
 }
 
 # The class name is the last component of a fully-qualified `android:name`.
@@ -120,13 +132,14 @@ def manifest_referenced_names() -> set[str]:
     from the manifest. Without this, every component would be reported as unused.
     """
     names: set[str] = set()
-    for manifest in MAIN_DIRS[0].rglob("AndroidManifest.xml"):
-        text = manifest.read_text()
-        for match in MANIFEST_CLASS.finditer(text):
-            value = match.group(1)
-            if "." not in value:
-                continue
-            names.add(value.rsplit(".", 1)[1])
+    for module in MAIN_DIRS:
+        for manifest in module.rglob("AndroidManifest.xml"):
+            text = manifest.read_text()
+            for match in MANIFEST_CLASS.finditer(text):
+                value = match.group(1)
+                if "." not in value:
+                    continue
+                names.add(value.rsplit(".", 1)[1])
     return names
 
 
@@ -143,11 +156,19 @@ def _blank(match: re.Match[str]) -> str:
 
 
 def strip_kotlin(text: str) -> str:
-    """Remove comments and string literals so prose does not count as a use."""
+    """Remove comments and string literals so prose does not count as a use.
+
+    Char literals are removed before strings, and that order matters: a char
+    literal like `'"'` contains a double quote, so a string regex applied first
+    treats it as an opening quote and blanks everything up to the next `"` —
+    which silently erases real code between them and makes the reference count
+    wrong. This is not hypothetical: it hid two genuine uses in `RawJson.kt`.
+    """
     text = re.sub(r"/\*.*?\*/", _blank, text, flags=re.DOTALL)
     text = re.sub(r"//[^\n]*", _blank, text)
     text = re.sub(r'""".*?"""', _blank, text, flags=re.DOTALL)
-    text = re.sub(r'"(?:[^"\\]|\\.)*"', _blank, text)
+    text = re.sub(r"'(?:[^'\\\n]|\\.)'", _blank, text)
+    text = re.sub(r'"(?:[^"\\\n]|\\.)*"', _blank, text)
     return text
 
 
@@ -159,16 +180,21 @@ def strip_cpp(text: str) -> str:
 
 
 def count_interpolations(path: Path, name: str) -> int:
-    """Counts `$name` and `${name}` uses, which live inside string literals.
+    """Counts uses inside string interpolation, which strip_kotlin blanks.
 
-    strip_kotlin blanks literals, so a name used only in interpolation would look
-    unused. This reads the raw file for that one shape. The declaration's own line
-    is excluded, so a default value in a signature is not counted as a use.
+    `"$FOO"` is a real use of `FOO`, and so is `${FOO.length}` — the name is not
+    immediately after the `$`, so a simple `$name` pattern misses it. This scans
+    every `${ ... }` block for the name instead, which covers both.
     """
-    pattern = re.compile(rf"\$\{{?{re.escape(name)}\b")
-    count = 0
-    for line in path.read_text().splitlines():
-        count += len(pattern.findall(line))
+    text = path.read_text()
+
+    simple = re.compile(rf"\$\{{?{re.escape(name)}\b")
+    count = len(simple.findall(text))
+
+    for block in re.findall(r"\$\{([^}]*)\}", text):
+        if simple.search("$" + block):
+            continue
+        count += len(re.findall(rf"\b{re.escape(name)}\b", block))
 
     return count
 

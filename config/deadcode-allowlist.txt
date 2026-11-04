@@ -31,3 +31,36 @@ kotlin-unused-decl:ensure                      # app-facing dialog path; first c
 kotlin-test-only-decl:requestedPermissions     # builds the array the app's Activity forwards to the system
 kotlin-test-only-decl:allGranted               # interprets the Activity's onRequestPermissionsResult
 
+# --- Build 3: cloud-connector ---
+# The PTY frame codec is complete for the wire format (mirrored from the server's
+# pty_frame.go); the device uses a subset today. Trimming it would make the codec
+# a lie — it would claim to speak a format it only half-parses — and the
+# interactive relay over the cloud socket is the next slice.
+kotlin-test-only-decl:encodeData        # PTY DATA frames; the cloud PTY relay is the next slice
+kotlin-test-only-decl:encodeResize      # PTY RESIZE frames; the cloud PTY relay is the next slice
+kotlin-test-only-decl:decodeResize      # PTY RESIZE decode; the cloud PTY relay is the next slice
+kotlin-test-only-decl:TYPE_CLOSE        # PTY close; the relay sends it on session end
+kotlin-unused-const:TYPE_ERROR          # PTY error frame type; server-defined, codec-complete
+
+# Pairing code countdown, shown in the enrollment notification.
+kotlin-test-only-decl:secondsRemaining  # pairing-code countdown; the notification shows it
+
+# The enrollment HTTP error surface. The client classifies a failure so the caller
+# can decide whether to retry; these two are that classification.
+kotlin-test-only-decl:isRetryable       # enroll retry policy
+kotlin-test-only-decl:isAlreadyClaimed  # "already onboarded, no code to show"
+
+# The cloud text-frame DTOs are the wire contract. A field the device does not yet
+# read is still part of what the server sends; dropping it would silently desync
+# the frame from the server's shape.
+kotlin-unused-decl:CommandFrame         # server -> device command frame (wire contract)
+kotlin-unused-decl:TelemetryFrame       # device -> server telemetry frame (wire contract)
+
+# Tier hints the server defines. The device reports one; the vocabulary is the
+# server's, kept whole rather than trimmed to the single value in use.
+kotlin-unused-const:TIER_ROOTED         # tier vocabulary; the server accepts all three
+kotlin-unused-const:TIER_ADVANCED       # tier vocabulary
+
+# PTY credit frame; the relay's flow control returns credit with it.
+kotlin-unused-decl:encodeAck            # PTY credit frame; the relay's flow control sends it
+

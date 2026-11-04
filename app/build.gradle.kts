@@ -5,6 +5,32 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+/**
+ * The cloud base URL. Empty when unset, which makes the app run bridge-only.
+ *
+ * Read from a Gradle property first (so a local build can override it), then the
+ * environment (so CI can), then empty.
+ */
+fun cloudBaseUrl(): String =
+    (findProperty("cloudBaseUrl") as String?)
+        ?: System.getenv("VYZORIX_CLOUD_URL")
+        ?: ""
+
+/**
+ * The pinned server public key, PEM. Empty when unset.
+ *
+ * A PEM has newlines, which cannot sit in a Gradle property, so the value is
+ * passed with literal `\n` and unescaped here.
+ */
+fun serverPublicKey(): String {
+    val raw =
+        (findProperty("serverPublicKey") as String?)
+            ?: System.getenv("VYZORIX_SERVER_KEY")
+            ?: ""
+
+    return raw.replace("\\n", "\n")
+}
+
 android {
     namespace = "com.vyzorix.agent"
     compileSdk =
@@ -24,6 +50,20 @@ android {
                 .toInt()
         versionCode = 1
         versionName = "0.1.0"
+
+        // Cloud configuration. Both default to empty, which is a valid state: a build
+        // with no cloud runs over the bridge alone (see VyzorixApplication). Supply
+        // them with -PcloudBaseUrl=... -PserverPublicKey=... or the env vars below.
+        //
+        // SERVER_PUBLIC_KEY is the pinned server signing key. It is the device's only
+        // trust anchor for what the server sends, so it is compiled in rather than
+        // fetched — a fetched trust anchor is no anchor at all.
+        buildConfigField("String", "CLOUD_BASE_URL", "\"${cloudBaseUrl()}\"")
+        buildConfigField("String", "SERVER_PUBLIC_KEY", "\"${serverPublicKey()}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

@@ -35,13 +35,34 @@ android {
             isReturnDefaultValues = true
         }
     }
+
+    // Tests live in the repo-root tests/ tree rather than alongside the sources,
+    // matching the other modules.
+    sourceSets {
+        getByName("test") {
+            java.setSrcDirs(listOf("../tests/cloud-connector/unit/kotlin"))
+        }
+    }
 }
 
 dependencies {
+    // The core module owns the PTY broker and the bridge; the connector feeds both,
+    // so it depends on it rather than duplicating either.
+    api(project(":android-core"))
+
     implementation(libs.androidx.annotation)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
+    // HTTP and the WebSocket. Hand-rolling TLS + WebSocket framing is where the
+    // bugs live, and OkHttp is the one third-party dependency this build adds.
+    implementation(libs.okhttp)
+
+    // The vyzorix.v format, for verifying a delivered config. Published via JitPack
+    // from VinnsEdesigner/libv; the parser and the canonicaliser must be the format's
+    // own, or the device and the server disagree about what was signed.
+    implementation(libs.libv)
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
 }

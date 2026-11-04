@@ -58,6 +58,7 @@ class VyzorixForegroundService : Service() {
     private lateinit var broker: PtyBroker
     private lateinit var bridge: AndroidSocketServer
     private lateinit var watchdog: ServiceWatchdog
+    private var cloudLink: CloudLink? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     /** Live PTY readers, keyed by channel. The reader owns the fd and closes it. */
@@ -107,6 +108,12 @@ class VyzorixForegroundService : Service() {
                 isEngineReady = { ProotLauncher.isReady(this) },
                 onEngineLost = { Log.w(TAG, "engine unavailable; will retry") },
             ).also { it.start() }
+
+        // The cloud connection, if the app installed one. Started after the bridge so
+        // the APIs it registers are ready before a frame can arrive.
+        cloudLink = CloudLinkProvider.get()
+        cloudLink?.registerApis(router)
+        cloudLink?.start()
 
         Log.i(TAG, "service started")
     }
@@ -274,6 +281,8 @@ class VyzorixForegroundService : Service() {
         if (::bridge.isInitialized) bridge.stop()
         if (::tokens.isInitialized) tokens.sweep()
         if (::watchdog.isInitialized) watchdog.stop()
+        cloudLink?.stop()
+        cloudLink = null
 
         releaseWakeLock()
         super.onDestroy()
