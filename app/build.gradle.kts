@@ -115,14 +115,29 @@ fun bundledRootfsFile(): File? =
  * the same file. Empty when no rootfs is bundled, which the installer reads as
  * "nothing to verify against" (the APK signature already covers a bundled asset).
  */
-fun bundledRootfsSha256(): String {
+fun bundledRootfsSha256(): String = sha256FromSums("debian-core-${bundledRootfsAbi()}.tar.gz")
+
+/**
+ * The SHA-256 of the **extended** tier, from the same SHA256SUMS.
+ *
+ * The extended tarball is never bundled — it is the ~108 MB optional tooling a
+ * shell-only device never runs — but the device still verifies it after downloading,
+ * so the expected sum has to be compiled in. It is read from the build's own
+ * SHA256SUMS, exactly as the core sum is, so the APK and the release cannot disagree.
+ *
+ * Empty when the file is absent or does not list the tarball, which the installer
+ * reads as "the extended tier is unavailable" — never as "do not verify".
+ */
+fun extendedRootfsSha256(): String = sha256FromSums("debian-extended-${bundledRootfsAbi()}.tar.gz")
+
+/** The first field of the SHA256SUMS line for [name], or empty. */
+fun sha256FromSums(name: String): String {
     val sums = rootProject.file("debian-engine/rootfs/dist/SHA256SUMS")
-    val abi = bundledRootfsAbi()
     if (!sums.isFile) return ""
 
     return sums
         .readLines()
-        .firstOrNull { it.endsWith("debian-core-$abi.tar.gz") }
+        .firstOrNull { it.endsWith(name) }
         ?.substringBefore(' ')
         ?.trim()
         .orEmpty()
@@ -202,6 +217,9 @@ android {
         // — the APK signature already covers a bundled asset.
         buildConfigField("String", "ROOTFS_ABI", "\"${bundledRootfsAbi()}\"")
         buildConfigField("String", "ROOTFS_SHA256", "\"${bundledRootfsSha256()}\"")
+        // The extended tier's checksum. It is downloaded, so it is verified after
+        // fetching; empty means the tier is unavailable, never unverified.
+        buildConfigField("String", "ROOTFS_EXTENDED_SHA256", "\"${extendedRootfsSha256()}\"")
         // Where a device whose ABI is not the bundled one fetches its rootfs. The
         // release that carries all three tarballs.
         buildConfigField("String", "ROOTFS_BASE_URL", "\"${rootfsBaseUrl()}\"")

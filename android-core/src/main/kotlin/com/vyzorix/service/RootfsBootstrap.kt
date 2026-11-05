@@ -51,4 +51,30 @@ object RootfsBootstrap {
 
         return installer.ensureInstalled()
     }
+
+    /**
+     * Ensures the optional extended tier is installed. Returns whether it is present.
+     *
+     * Separate from [ensureInstalled] because it is optional: the core tier gates the
+     * engine and a failure leaves the device bridge-only, while the extended tier is
+     * fetched on demand and a failure is only logged. See
+     * [RootfsInstaller.ensureExtended].
+     *
+     * Blocking I/O, so not the main thread.
+     */
+    fun ensureExtended(context: Context): Boolean {
+        val config = EngineConfig.get()
+
+        val installer =
+            RootfsInstaller(
+                context = context,
+                expectedSha256 = config?.sha256.orEmpty(),
+                download = config?.open,
+                baseUrl = config?.baseUrl.orEmpty(),
+                abi = config?.bundledAbi.orEmpty(),
+                extendedSha256 = config?.extendedSha256.orEmpty(),
+            )
+
+        return installer.ensureExtended()
+    }
 }

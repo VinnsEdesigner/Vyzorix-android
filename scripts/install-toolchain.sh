@@ -26,8 +26,9 @@
 #                    (the APK bundles one ABI's rootfs; the others are fetched)
 #   engine-build     debootstrap + qemu-user-static + binfmt-support, and the binfmt_misc
 #                    handlers  -> rebuilds a rootfs for ANY architecture (Layer 2)
-#   cross-compilers  gcc-aarch64-linux-gnu + gcc-arm-linux-gnueabihf  -> builds the
-#                    Layer 3 supervisor / cli-wrappers for the Debian userspace
+#   cross-compilers  gcc/g++ for aarch64 and armhf  -> builds android-bin (Layer 2)
+#                    and the Layer 3 supervisor / cli-wrappers, which run inside the
+#                    Debian userspace (glibc, not Android's bionic)
 #
 # On completion it writes <prefix>/env.sh; source it to get the toolchain on PATH.
 
@@ -213,13 +214,27 @@ if ! skipped engine-build; then
 fi
 
 # ------------------------------------------------------------ cross-compilers
-# Layer 3's supervisor and cli-wrappers are C, built for the Debian userspace.
+# `debian-engine/android-bin` (Layer 2) and Layer 3's supervisor / cli-wrappers are
+# built for the Debian userspace, whose libc is glibc — not Android's bionic — so
+# they need a GNU cross toolchain, not the NDK. C++ for android-bin, C for Layer 3,
+# hence both gcc- and g++- packages.
 if ! skipped cross-compilers; then
-  if ! have aarch64-linux-gnu-gcc; then
-    log "C cross-compilers (aarch64, armhf)"
-    sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+  # apt's mirror rate-limits under load; a transient 503 is not a real failure, so
+  # retry rather than leaving the toolchain half-installed.
+  if ! have aarch64-linux-gnu-g++ || ! have aarch64-linux-gnu-gcc; then
+    log "C/C++ cross-compilers (aarch64, armhf)"
+    for attempt in 1 2 3 4 5; do
+      if sudo apt-get install -y \
+           gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+           gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf; then
+        break
+      fi
+      warn "cross-compiler install attempt $attempt failed; retrying"
+      sleep 10
+    done
   fi
-  aarch64-linux-gnu-gcc --version 2>/dev/null | head -1 || warn "aarch64 cross-gcc missing"
+  aarch64-linux-gnu-g++ --version 2>/dev/null | head -1 || warn "aarch64 cross-g++ missing"
+  arm-linux-gnueabihf-g++ --version 2>/dev/null | head -1 || warn "armhf cross-g++ missing"
 fi
 
 # ------------------------------------------------------------------ env.sh

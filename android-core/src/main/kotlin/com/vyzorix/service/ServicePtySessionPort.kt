@@ -24,13 +24,18 @@ import java.util.concurrent.ConcurrentHashMap
  * The shell command is a seam ([shellRequest]) so the terminal can be exercised on
  * an emulator without the Debian rootfs: production passes the proot login shell,
  * a test passes a plain shell.
+ *
+ * The seam is given the **session id** as well as the token because the shell it
+ * builds is named after the session: production wraps the login shell in `tmux
+ * new-session -A -s vyzorix-<id>` so a dropped WebSocket reattaches to the same
+ * shell (§6.3). A shell request that could not see the session id could not do that.
  */
 class ServicePtySessionPort(
     private val broker: PtyBroker,
     private val tokens: SessionTokenRegistry,
     private val deviceId: () -> String,
     private val apiAllowlist: () -> Set<String>,
-    private val shellRequest: (token: String) -> PtyRequest,
+    private val shellRequest: (sessionId: String, token: String) -> PtyRequest,
     /**
      * Whether the engine can start a shell at all.
      *
@@ -76,7 +81,7 @@ class ServicePtySessionPort(
                 apiAllowlist = apiAllowlist(),
             )
 
-        val request = shellRequest(token.token).copy(rows = rows, cols = cols)
+        val request = shellRequest(sessionId, token.token).copy(rows = rows, cols = cols)
 
         val opened = broker.open(sessionId, deviceId(), "", request)
         if (opened is PtyResult.Err) {

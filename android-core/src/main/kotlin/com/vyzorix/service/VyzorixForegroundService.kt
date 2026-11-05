@@ -116,6 +116,17 @@ class VyzorixForegroundService : Service() {
                 // device that already has the rootfs this is three filesystem checks.
                 val ready = RootfsBootstrap.ensureInstalled(this)
                 Log.i(TAG, "rootfs install finished; engine ready=$ready")
+
+                // The extended tier (`git`, `python3`, `tmux`) is fetched on the same
+                // thread but after the core tier, and only once the engine is ready:
+                // it is ~108 MB over the network, so it must not delay the core
+                // install, and there is no point fetching tooling into a userspace
+                // that is not there. A failure here is logged and ignored — the
+                // engine works without it — and the next boot retries.
+                if (ready) {
+                    val extended = RootfsBootstrap.ensureExtended(this)
+                    Log.i(TAG, "extended tier install finished; installed=$extended")
+                }
             }, "vyzorix-rootfs-install").apply {
                 isDaemon = true
                 start()
@@ -191,9 +202,25 @@ class VyzorixForegroundService : Service() {
      * runs as the app's uid and can read the app's private files, which the container
      * exists to prevent.
      */
-    private fun terminalShellRequest(token: String): PtyRequest =
+    private fun terminalShellRequest(
+        sessionId: String,
+        token: String,
+    ): PtyRequest =
         if (ProotLauncher.isReady(this)) {
-            ProotLauncher.loginShellRequest(this, token)
+            // Wrap in tmux when it is available so a dropped WebSocket reattaches to
+            // the same shell instead of losing it (§6.3). The session name is the
+            // terminal's own id, so a reconnect with the same id attaches and a second
+            // terminal gets its own. `hasTmux` gates it because tmux lives in the
+            // extended tier, which is fetched on demand — a terminal opened before it
+            // lands gets a plain shell, which is the correct degradation.
+            val tmux =
+                if (ProotLauncher.hasTmux(this)) {
+                    TMUX_SESSION_PREFIX + sessionId
+                } else {
+                    null
+                }
+
+            ProotLauncher.loginShellRequest(this, token, tmuxSession = tmux)
         } else {
             ProotLauncher.uncontainedShellRequest(this, token)
         }
@@ -425,6 +452,14 @@ class VyzorixForegroundService : Service() {
 
     companion object {
         private const val TAG = "VyzorixService"
+
+        /**
+         * Prefix for a terminal's tmux session name.
+         *
+         * Prefixed so a container session is recognisable in `tmux ls` and
+         * cannot collide with a name an operator picks by hand.
+         */
+        private const val TMUX_SESSION_PREFIX = "vyzorix-"
         private const val CHANNEL_ID = "vyzorix-engine"
         private const val NOTIFICATION_ID = 1
         private const val SHUTDOWN_TIMEOUT_MS = 3000L

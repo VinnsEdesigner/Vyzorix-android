@@ -246,10 +246,11 @@ Vyzorix-android/
 │   │   └── debian-extended.tar.gz       # optional, on-demand extract
 │   ├── overlay/                         # writable prefix, survives base updates (§6.1)
 │   │   └── usr-local/  opt/  etc/       #   bind -> /usr/local, /opt, /etc/vyzorix
-│   ├── android-bin/
-│   │   ├── apis.txt                     # camera, location, battery, ... (120)
-│   │   ├── generator.go                 # 1 binary + N symlinks
-│   │   └── src/bridge.cpp               # forwards JSON -> android.sock
+│   ├── android-bin/                     # BUILT — C++, cross-compiled for glibc
+│   │   ├── apis.txt                     # battery, network, ... (the API names)
+│   │   ├── generator.cpp                # apis.txt -> catalog + N symlinks
+│   │   ├── Makefile
+│   │   └── src/{bridge,json,api_catalog}.cpp   # JSON -> android.sock
 │   └── pty-agent/                       # built — see note below
 │
 ├── app-runtime/                         # Layer 3 — inside Debian
@@ -277,8 +278,11 @@ and first-boot are Kotlin classes in Layer 1's process, not separate Go programs
 | proot launcher | `android-core/.../engine/ProotLauncher.kt` | Building the `proot` argv in Kotlin keeps it testable (`ProotLauncherTest`) and versioned with the code that depends on it. |
 | first-boot (extract, seed overlay, verify bash) | Layer 1 (Kotlin) | It runs once, from the app, before any userspace exists — so it cannot be a script *inside* that userspace. |
 
-Nothing in Layer 2 needs a Go toolchain. The only Go left in the design is the
-`android-bin` generator, and §12.1 defers it until the rootfs ships.
+**There is no Go anywhere in this design.** An earlier revision specified the
+`android-bin` generator in Go; it is C++ instead, like every other native piece, so
+the repo has exactly two languages — Kotlin (Gradle) and C++ — and the container's
+tools build with the same cross-compilers as Layer 3. `debian-engine/android-bin/`
+is built.
 
 ---
 
@@ -521,7 +525,7 @@ the package list in `debian-engine/rootfs/BUILD.md` so a rebuild is comparable.
 | Asset | Decision | Why |
 |:--|:--|:--|
 | `debian-core.tar.gz` | **Bundled in the APK** under `assets/`, `noCompress`, extracted streaming on first boot | The foundation must work offline. A download that fails leaves the device with no userspace and no fallback, and the app is sideloaded — there is no store to push a fix through. The APK signature covers it, so no separate checksum is needed for this one. |
-| `debian-extended.tar.gz` | **Downloaded on demand**, pinned SHA-256 | The ~108 MB optional tier. By the time it is wanted the userspace already works, so a failed download is an inconvenience, not a brick. |
+| `debian-extended.tar.gz` | **Downloaded on demand**, pinned SHA-256 | The ~108 MB optional tier. By the time it is wanted the userspace already works, so a failed download is an inconvenience, not a brick. Fetched after the core tier is ready (`RootfsInstaller.ensureExtended`), on the install thread; the checksum is compiled in from the build's `SHA256SUMS` (`ROOTFS_EXTENDED_SHA256`) and an empty one disables the tier rather than skipping verification. A marker in `files/` records completion, so a half-extracted tier is never mistaken for a whole one. |
 | `libproot.so` | **Built in-repo** from vendored, pinned source via CMake → `jniLibs` | It is an executable trust anchor — the thing that fakes root. Building it keeps source, flags and compiler in the repo and reviewed, and kills the version skew between proot's behaviour and the argv in §6.2. The NDK pipeline (`externalNativeBuild`, CMake 3.22.1, three `abiFilters`, `extractNativeLibs="true"`) already exists. |
 
 **The rootfs is per-architecture; `libproot.so` is per-ABI and they are not the same
@@ -820,9 +824,13 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
    handshake; `SHELL_EXEC` end to end (Phase 0 — ships value without PTY). The device
    agent implements the executor; the server only classifies and dispatches it (see
    §5).
-5. **Layer 2:** the Debian engine — rootfs assets, overlay, first-boot, `tmux`. The
-   `pty-agent` multiplexer and binary framing are **already built** (Kotlin, in Layer 1:
-   `TerminalRelay`/`PtyFrame`); what remains is the userspace they run inside.
+5. **Layer 2 — built.** The Debian engine: rootfs assets (core bundled, extended
+   fetched on demand, both checksum-verified), the writable overlay, first-boot
+   install, `android-bin` (the container-side bridge client), and `tmux` reattach
+   (`ProotLauncher.loginShellArgs` wraps the login shell in `tmux new-session -A -s
+   vyzorix-<sessionId>` when tmux is present). The `pty-agent` multiplexer and binary
+   framing were already built in Layer 1 (`TerminalRelay`/`PtyFrame`). The container
+   terminal is verified end to end by `:app`'s `EngineTerminalE2ETest`.
 6. **Layer 3:** supervisor + `app-*` + inotify + PID start-time tokens.
 7. **Last:** public app proxy (wildcard DNS/TLS, streaming).
 
@@ -832,7 +840,7 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
 
 | Item | Layer | Deferred because |
 |:-----|:------|:-----------------|
-| `android-bin` generator (`apis.txt`, `generator.go`, one binary + 120 symlinks) | 2 | It is Layer 2 work: the generator writes into the Debian userspace, which does not exist until the rootfs ships. The device side only needs the socket contract, which is already built. |
+| ~~`android-bin` generator~~ | 2 | **Built** — C++ (`debian-engine/android-bin/`), one binary + N symlinks, cross-compiled for glibc. The name list is `apis.txt`, kept in step with the router by `ApiCatalogTest`. |
 | `app_process` supervisor spawn | 3 | Layer 3 sits on Layer 2. Spawning a supervisor before there is a userspace to supervise inverts the build order. |
 | Phantom-process-killer mitigation | 1 | Not a targetSdk-gated behaviour, and there is no `ActivityManager` API for it — `setPhantomProcessList` does not exist. The real lever (`settings_enable_monitor_phantom_procs`) needs shell/root or Shizuku. See the note on `VyzorixForegroundService`. |
 | Shizuku execution backend | — | Documented as post-v1.0. The `ExecutionBackend` interface is the insurance policy; only `proot` is implemented. |

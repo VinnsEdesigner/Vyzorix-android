@@ -37,6 +37,7 @@ class VyzorixApplication : Application() {
             EngineConfig(
                 bundledAbi = BuildConfig.ROOTFS_ABI,
                 sha256 = BuildConfig.ROOTFS_SHA256,
+                extendedSha256 = BuildConfig.ROOTFS_EXTENDED_SHA256,
                 baseUrl = BuildConfig.ROOTFS_BASE_URL,
                 // A plain URL stream. The rootfs is fetched once, from a release, and
                 // the checksum is what makes it trustworthy — an HTTP client would add

@@ -60,6 +60,14 @@ class RootfsInstaller(
     private val baseUrl: String = "",
     /** This device's ABI, so the right tarball is fetched. */
     private val abi: String = "",
+    /**
+     * The SHA-256 the extended tarball must match.
+     *
+     * Empty disables the extended tier: it is downloaded, so unlike the bundled core
+     * there is no APK signature over it, and an unverified download is an attacker's
+     * userspace. Refusing to fetch without a checksum is the whole point.
+     */
+    private val extendedSha256: String = "",
 ) {
     /**
      * Installs the rootfs if it is not already installed. Returns whether the engine
@@ -86,6 +94,87 @@ class RootfsInstaller(
 
             false
         }
+    }
+
+    /**
+     * Installs the optional extended tier (`git`, `python3`, `tmux`, ...), which is
+     * always downloaded.
+     *
+     * Returns whether the extended tier is present afterwards. Safe to call on every
+     * boot and on every terminal open: the common path is a marker-file check.
+     *
+     * ## Why this is separate from [ensureInstalled]
+     *
+     * The core tier is the foundation: bundled in the APK, installed before anything
+     * can run, and a failure leaves the device bridge-only. The extended tier is
+     * ~108 MB of tooling most devices never need, so it must not gate the engine, and
+     * a failure must not look like a broken install. It is fetched on demand — when a
+     * terminal opens, which is the first moment `tmux` matters — and a failure is
+     * logged and forgotten; the next open retries.
+     *
+     * ## Extraction is into the same rootfs, and that is deliberate
+     *
+     * The extended packages are ordinary Debian files that belong at their FHS paths
+     * (`/usr/bin/git`), so they extract over the core tree. That is not a "replacement
+     * of the base" — the base and extended sets do not overlap in files, because the
+     * extended build is `core + EXTENDED_PACKAGES` and dpkg lays each package out once.
+     * A marker records completion so a half-extracted tier is not mistaken for a whole
+     * one.
+     */
+    fun ensureExtended(): Boolean {
+        if (isExtendedInstalled()) return true
+        if (extendedSha256.isEmpty()) {
+            // Not configured. Not an error: a debug build carries no checksum and
+            // simply has no extended tier.
+            Log.i(TAG, "extended tier not configured; skipping")
+
+            return false
+        }
+
+        return try {
+            installExtended()
+
+            true
+        } catch (e: IOException) {
+            Log.w(TAG, "extended tier install failed; core engine is unaffected", e)
+
+            false
+        }
+    }
+
+    /**
+     * True when the extended tier's marker exists.
+     *
+     * A marker, not a file probe: the extended set's contents may change between
+     * releases, so "is `git` present" is the wrong question. The marker is written
+     * only after a verified, complete extraction.
+     */
+    fun isExtendedInstalled(): Boolean = extendedMarker(context).isFile
+
+    private fun installExtended() {
+        val fetcher =
+            download
+                ?: throw IOException("no download configured for the extended tier")
+        if (baseUrl.isEmpty() || abi.isEmpty()) {
+            throw IOException("no rootfs download configured for $abi")
+        }
+
+        val url = "$baseUrl/$EXTENDED_PREFIX$abi$SUFFIX"
+        Log.i(TAG, "fetching the $abi extended tier from $url")
+
+        val rootfs = ProotLauncher.rootfs(context)
+
+        // A stale marker from a previous failed attempt would make the next call
+        // think the tier is whole, so it is cleared before extracting.
+        extendedMarker(context).delete()
+
+        fetcher(url).use { TarGz.extract(it, rootfs, extendedSha256) }
+
+        if (!extendedMarker(context).createNewFile()) {
+            throw IOException("could not write the extended-tier marker")
+        }
+
+        Log.i(TAG, "extended tier installed")
     }
 
     private fun install() {
@@ -212,11 +301,29 @@ class RootfsInstaller(
          */
         const val DEFAULT_ASSET = "rootfs/debian-core.rootfs"
 
-        /** The tarball name on the release, matching build-rootfs.sh's output. */
+        /** The tarball names on the release, matching build-rootfs.sh's output. */
         const val CORE_PREFIX = "debian-core-"
+        const val EXTENDED_PREFIX = "debian-extended-"
         const val SUFFIX = ".tar.gz"
 
-        /** The bind targets `ProotLauncher.binds` expects under the overlay. */
-        val OVERLAY_DIRS = listOf("usr-local", "opt")
+        /**
+         * Marks a complete extended-tier extraction.
+         *
+         * In `files/`, not the rootfs: a rootfs replacement must not carry a stale
+         * "extended is installed" marker into a tree that has no extended files.
+         */
+        const val EXTENDED_MARKER = "extended.installed"
+
+        fun extendedMarker(context: Context): File = File(context.filesDir, EXTENDED_MARKER)
+
+        /**
+         * The bind targets `ProotLauncher.binds` expects under the overlay.
+         *
+         * `usr-local` and `opt` bind over the rootfs's `/usr/local` and `/opt`;
+         * `etc` binds to the container's `/etc/vyzorix` (architecture doc §6.1), the
+         * config area that survives a rootfs replacement. All three must exist as
+         * directories or proot fails the bind.
+         */
+        val OVERLAY_DIRS = listOf("usr-local", "opt", "etc")
     }
 }

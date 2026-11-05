@@ -139,10 +139,23 @@ object ProotLauncher {
                 // root and never files/.
                 "$overlay/usr-local:/usr/local",
                 "$overlay/opt:/opt",
+                // The config area that survives a rootfs replacement (§6.1). The
+                // target is /etc/vyzorix, a directory the rootfs does not ship, so
+                // the overlay is the only thing there — which is the point: an
+                // update swaps files/rootfs and leaves on-device config alone.
+                "$overlay/etc:/etc/vyzorix",
                 // The bridge socket, so the container can reach the API bridge. The
                 // socket file only, not the directory that holds the secret store.
                 "${socketPath(context).absolutePath}:$BRIDGE_SOCKET_IN_CONTAINER",
             )
+
+        // The architecture doc's §6.2 argv sketch also shows
+        // `-b $SDCARD/Android/data/<pkg>/files:/sdcard`. It is deliberately NOT
+        // here: §6.1 says /sdcard is "an optional export target, never a
+        // dependency", and binding it into the container by default would hand the
+        // container broad shared-storage access that nothing in the design requires.
+        // It is added when an export feature needs it, with the path passed in,
+        // not assumed from the app's package name.
 
         // Assert the invariant rather than trusting the list above. A path that is
         // not engine-zone but is also not one of the expected shapes is still
@@ -172,6 +185,20 @@ object ProotLauncher {
         context: Context,
         token: String,
         workingDir: String = "/root",
+        /**
+         * Wrap the shell in `tmux` under this session name, or null for a bare shell.
+         *
+         * A **stable** name is what makes a dropped WebSocket reattach: `tmux
+         * new-session -A -s NAME` creates the session the first time and *attaches*
+         * to it afterwards, so a client that reconnects with the same name finds its
+         * shell still running instead of starting a new one. The name is the caller's
+         * — it must be the same across reconnects and different between terminals,
+         * which is exactly what a terminal session id is.
+         *
+         * Null is the default and the fallback: `tmux` is in the extended tier, which
+         * a device may not have, and a shell without reattach is better than no shell.
+         */
+        tmuxSession: String? = null,
     ): List<String> {
         val args =
             mutableListOf(
@@ -200,12 +227,45 @@ object ProotLauncher {
                 "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                 "$BRIDGE_SOCKET_ENV=$BRIDGE_SOCKET_IN_CONTAINER",
                 "$BRIDGE_TOKEN_ENV=$token",
-                "/bin/bash",
-                "--login",
             )
+
+        if (tmuxSession != null) {
+            // `new-session -A -s NAME` is the reattach: create NAME, or attach if it
+            // exists. The shell is given explicitly rather than left to tmux's default
+            // (`$SHELL`, which `env -i` has just cleared), so the container always
+            // gets `bash --login` whether it is the first attach or the tenth.
+            //
+            // One consequence worth knowing: the tmux *server* outlives any single
+            // client, and it keeps the environment of the client that started it. A
+            // reconnect therefore reuses the original session's bridge token rather
+            // than the new one. That is the desired behaviour — the shell keeps the
+            // session it was opened under — but it means a token rotation does not
+            // reach an already-running shell.
+            args +=
+                listOf(
+                    TMUX_BINARY,
+                    "new-session",
+                    "-A",
+                    "-s",
+                    tmuxSession,
+                    "/bin/bash",
+                    "--login",
+                )
+        } else {
+            args += listOf("/bin/bash", "--login")
+        }
 
         return args
     }
+
+    /**
+     * True when `tmux` is present in the rootfs.
+     *
+     * `tmux` ships in the extended tier, which is fetched on demand, so a device may
+     * not have it. The caller checks this rather than assuming, so a terminal opened
+     * before the extended tier lands gets a plain shell instead of a failed exec.
+     */
+    fun hasTmux(context: Context): Boolean = File(rootfs(context), "usr/bin/tmux").canExecute()
 
     /**
      * The full request to run a login shell on a fresh PTY, with the bridge token
@@ -214,10 +274,11 @@ object ProotLauncher {
     fun loginShellRequest(
         context: Context,
         token: String,
+        tmuxSession: String? = null,
     ): PtyRequest =
         PtyRequest(
             executable = prootBinary(context).absolutePath,
-            arguments = loginShellArgs(context, token),
+            arguments = loginShellArgs(context, token, tmuxSession = tmuxSession),
             // The outer environment — what proot itself is started with. It is
             // deliberately NOT in loginShellArgs' `env -i` list: that is the
             // *container's* environment, and proot reads PROOT_TMP_DIR before it ever
@@ -260,4 +321,11 @@ object ProotLauncher {
 
     /** The device's own shell, used only by [uncontainedShellRequest]. */
     const val UNCONTAINED_SHELL = "/system/bin/sh"
+
+    /**
+     * `tmux` inside the container, absolute.
+     *
+     * It ships in the extended tier, so it may be absent; [hasTmux] is the check.
+     */
+    const val TMUX_BINARY = "/usr/bin/tmux"
 }

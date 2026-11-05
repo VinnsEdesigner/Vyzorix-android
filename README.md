@@ -113,6 +113,20 @@ scripts/build-rootfs.sh --arch armeabi-v7a  # older 32-bit devices
 scripts/build-rootfs.sh --arch x86_64       # emulators, x86 tablets
 ```
 
+### `debian-engine/android-bin/` (its own Makefile)
+
+The container-side bridge client — one binary, one symlink per API name — is built
+by its own `Makefile`, not Gradle, because it runs *inside* the Debian userspace
+(glibc, not Android's bionic):
+
+```bash
+cd debian-engine/android-bin
+make check                         # JSON unit tests, on the host
+make CXX=aarch64-linux-gnu-g++     # build for arm64
+```
+
+See `debian-engine/android-bin/README.md`.
+
 ---
 
 ## Build and test

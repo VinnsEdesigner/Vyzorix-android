@@ -42,9 +42,11 @@ class TerminalRelayInstrumentedTest {
                 tokens = SessionTokenRegistry(),
                 deviceId = { "test-device" },
                 apiAllowlist = { setOf("identity") },
-                shellRequest = { token ->
-                    // A plain shell, not proot: the PTY path is the same and the
-                    // rootfs is not in the repo.
+                // The session id is ignored here: production names the shell's tmux
+                // session after it so a reconnect reattaches, but this test drives a
+                // plain device shell (the rootfs is not in this APK), so there is
+                // nothing to name.
+                shellRequest = { _, _ ->
                     PtyRequest(
                         executable = "/system/bin/sh",
                         arguments = listOf("/system/bin/sh"),

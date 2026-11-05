@@ -26,6 +26,16 @@ data class EngineConfig(
     val bundledAbi: String,
     /** SHA-256 the archive must match. Empty means "nothing to verify against". */
     val sha256: String,
+    /**
+     * SHA-256 the **extended** tier must match when it is fetched.
+     *
+     * The extended tier always downloads — it is never bundled, because it is the
+     * ~108 MB optional tooling (`git`, `python3`, `tmux`) that a shell-only device
+     * never runs — so unlike [sha256] there is no APK signature covering it. A
+     * downloaded rootfs with no checksum is an attacker's userspace, so an empty
+     * value here means the extended tier is unavailable rather than unverified.
+     */
+    val extendedSha256: String,
     /** Where a device of another ABI fetches its rootfs. Empty disables the fallback. */
     val baseUrl: String,
     /**
