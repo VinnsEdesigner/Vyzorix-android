@@ -25,6 +25,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <unistd.h>
 
 #include <sys/stat.h>
 
@@ -42,7 +43,7 @@ constexpr const char *kDefaultSocket = "/home/apps/supervisor.sock";
 /** The server whose loop a signal must stop. */
 vsup::ControlServer *g_server = nullptr;
 
-void OnSignal(int /*signal*/) {
+void OnSignal(int /*signum*/) {
     if (g_server != nullptr) {
         g_server->Stop();
     }
@@ -174,6 +175,11 @@ int main(int argc, char **argv) {
     std::signal(SIGINT, OnSignal);
     // A crashed app is reaped by the loop, not by a signal handler.
     std::signal(SIGCHLD, SIG_DFL);
+
+    // A control client that disconnects mid-write must not kill the supervisor.
+    // Without this, a CLI interrupted at the wrong moment terminates the server by
+    // SIGPIPE — the default action — and every app it supervises is orphaned.
+    std::signal(SIGPIPE, SIG_IGN);
 
     manager.StartAutostart();
     std::cerr << "supervisor: ready on " << socketPath << "\n";

@@ -72,6 +72,13 @@ echo "native-gate: clang-format"
 # exclusions: a file is tidy'd exactly when the database can describe how to build
 # it. Adding a module to the NDK build therefore brings it under tidy with no change
 # here, which is the property a hand-list loses.
+DB="$(find "${ROOT}" -path "*/.cxx/*/arm64-v8a/compile_commands.json" -print -quit 2>/dev/null || true)"
+if [[ -z "${DB}" ]]; then
+  echo "native-gate: no compile database. Run:" >&2
+  echo "  ./gradlew -PexportCompileCommands=true :android-core:configureCMakeDebug" >&2
+  exit 1
+fi
+
 mapfile -t DB_FILES < <(python3 -c "
 import json, sys
 with open(sys.argv[1]) as f:

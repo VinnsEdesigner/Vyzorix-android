@@ -337,12 +337,21 @@ void ControlServer::Run() {
             if (errno == EINTR || errno == EAGAIN) {
                 continue;
             }
-            // The listener was closed under us (Stop). Leave.
-            break;
+            // A transient failure must not take the supervisor down: it is the only
+            // thing serving the control socket, and the engine, the bridge and the
+            // terminal all depend on it staying up. Only a closed listener is fatal.
+            std::fprintf(stderr, "supervisor: accept failed: %s\n", std::strerror(errno));
+            if (errno == EBADF || errno == EINVAL) {
+                break;
+            }
+
+            continue;
         }
 
+        // ServeOne owns `client` from here — its Connection closes it — so there is
+        // deliberately no close() in this loop. A second close would close whatever
+        // descriptor the number had been reused for.
         ServeOne(client);
-        ::close(client);
 
         manager_->Poll();
     }

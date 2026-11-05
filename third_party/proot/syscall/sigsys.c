@@ -254,6 +254,18 @@ void rewrite_poll(Tracee *tracee)
  * mask" and nothing else needs setting — there is no seventh register to write, and
  * reaching for one would not compile.
  */
+void rewrite_accept(Tracee *tracee)
+{
+    /* accept(fd, addr, len) -> accept4(fd, addr, len, 0).
+     *
+     * `accept` is blocked by the filter and `accept4` is allowed. This one matters
+     * more than it looks: a control server that cannot accept leaves a connected
+     * client hanging until it times out, which reads as "the supervisor is up but
+     * dead" — the listener is there, the socket connects, and nothing is served. */
+    poke_reg(tracee, SYSARG_4, 0);
+    set_sysnum(tracee, PR_accept4);
+}
+
 void rewrite_select(Tracee *tracee)
 {
     poke_reg(tracee, SYSARG_6, 0); // {sigmask, sigsetsize} pair, or NULL
@@ -291,6 +303,7 @@ int handle_sigsys_event(Tracee *tracee, long blocked_sysnum)
     case PR_epoll_wait: rewrite_epoll_wait(tracee); break;
     case PR_poll:      rewrite_poll(tracee); break;
     case PR_select:    rewrite_select(tracee); break;
+    case PR_accept:    rewrite_accept(tracee); break;
 
     default:
         /* No *at equivalent: report ENOSYS. The policy would have killed the
