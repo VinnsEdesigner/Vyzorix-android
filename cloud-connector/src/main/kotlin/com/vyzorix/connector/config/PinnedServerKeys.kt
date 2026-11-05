@@ -14,7 +14,7 @@ import java.security.PublicKey
  *
  *  1. **No rotation.** A single key means rotating the server's signing key bricks
  *     every deployed device at once, because the only way to trust a new key is a
- *     new APK. A device fleet that sideloads has no store to push one through.
+ *     new APK. A sideloaded app has no store to push one through.
  *  2. **Fail-open on an empty anchor.** An empty string parsed to "no key", and
  *     `CloudConnectionFactory` answered that by returning a *bridge-only* connection
  *     — the device simply ran without the cloud and without a trust anchor, which

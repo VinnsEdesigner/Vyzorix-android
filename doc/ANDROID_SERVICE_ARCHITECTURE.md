@@ -184,7 +184,7 @@ Reference:
 ## 2. Layer contract (4 layers, no "2.5")
 
 ```
-Android OS (6 -> 15+; Samsung / Xiaomi / Nokia)
+Android OS (6 -> 15+; any OEM)
 │
 ├─ Layer 1 — Android Gateway      (Kotlin + NDK)   <- the ONLY layer that touches the OS
 │     FGS owner · boot · watchdog · cloud WS · PTY broker · USB broker · android.sock
@@ -520,17 +520,20 @@ the package list in `debian-engine/rootfs/BUILD.md` so a rebuild is comparable.
 
 | Asset | Decision | Why |
 |:--|:--|:--|
-| `debian-core.tar.gz` | **Bundled in the APK** under `assets/`, `noCompress`, extracted streaming on first boot | The foundation must work offline. A download that fails leaves the device with no userspace and no fallback, and this fleet is sideloaded — there is no store to push a fix through. The APK signature covers it, so no separate checksum is needed for this one. |
+| `debian-core.tar.gz` | **Bundled in the APK** under `assets/`, `noCompress`, extracted streaming on first boot | The foundation must work offline. A download that fails leaves the device with no userspace and no fallback, and the app is sideloaded — there is no store to push a fix through. The APK signature covers it, so no separate checksum is needed for this one. |
 | `debian-extended.tar.gz` | **Downloaded on demand**, pinned SHA-256 | The ~108 MB optional tier. By the time it is wanted the userspace already works, so a failed download is an inconvenience, not a brick. |
 | `libproot.so` | **Built in-repo** from vendored, pinned source via CMake → `jniLibs` | It is an executable trust anchor — the thing that fakes root. Building it keeps source, flags and compiler in the repo and reviewed, and kills the version skew between proot's behaviour and the argv in §6.2. The NDK pipeline (`externalNativeBuild`, CMake 3.22.1, three `abiFilters`, `extractNativeLibs="true"`) already exists. |
 
 **The rootfs is per-architecture; `libproot.so` is per-ABI and they are not the same
 set.** `scripts/build-rootfs.sh --arch arm64|amd64` produces one tarball for one
 architecture, because a Debian userspace is a tree of native binaries — unlike proot,
-which is one small program we compile three times. The fleet is arm64 (Nokia C22,
-Unisoc SC9863A), so **`arm64` is the only tarball that ships**; `amd64` exists so the
-emulator can be used for engine work. An arm64 device cannot run an amd64 rootfs and
-vice versa, and mixing them up produces a `bin/bash` that exists and cannot execute.
+which is one small program we compile three times.
+
+This targets the general Android public, so **every ABI the APK ships needs a matching
+rootfs**: `arm64` (the large majority of current devices), `armeabi-v7a` (older
+32-bit), and `x86_64` (emulators, and the rare x86 tablet). A rootfs for one
+architecture cannot run on another — the failure is a `bin/bash` that exists and
+cannot execute, which reads as a corrupt rootfs rather than a wrong-arch one.
 
 Building a foreign arch needs `qemu-user-static` **and a registered `binfmt_misc`
 handler** — debootstrap cannot finish its second stage without one, and the failure is

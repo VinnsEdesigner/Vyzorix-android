@@ -30,9 +30,9 @@ kotlin-test = "1.9.23"
 # session registry use ConcurrentHashMap.compute/computeIfPresent (API 24) and
 # Process.waitFor(timeout)/destroyForcibly (API 26). It was declared 23 for a while,
 # which was never true — lint's NewApi check found seven unguarded calls that would
-# have thrown NoSuchMethodError on a 23 device. The fleet is Android 13, so raising
-# the floor excludes nothing and makes the declaration honest rather than guarding
-# seven call sites to support an OS nothing runs.
+# have thrown NoSuchMethodError on a 23 device. Nothing supported runs below 26, so
+# raising the floor excludes nothing and makes the declaration honest rather than
+# guarding seven call sites to support an OS nothing runs.
 android-compileSdk = "34"
 android-minSdk = "26"
 android-targetSdk = "28"

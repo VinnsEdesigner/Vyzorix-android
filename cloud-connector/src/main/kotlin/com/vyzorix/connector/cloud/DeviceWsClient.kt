@@ -252,7 +252,7 @@ class DeviceWsClient(
  * Bounded exponential backoff with jitter.
  *
  * Bounded because an unbounded one would leave a device silent for hours after a
- * brief outage; jittered so a fleet coming back from a server restart does not
+ * brief outage; jittered so many devices returning after a server restart do not
  * reconnect in lockstep. The server advertises `backoff 1s>30s` in the config;
  * these are the defaults until it does.
  */

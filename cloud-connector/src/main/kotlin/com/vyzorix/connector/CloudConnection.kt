@@ -438,7 +438,7 @@ class CloudConnection(
             configPoller?.stop()
             configPoller = null
             // The config carries the reporting cadence, so applying it retunes the
-            // telemetry reporter: the server can slow a fleet's reporting without a
+            // telemetry reporter: the server can slow reporting across devices without a
             // new APK.
             telemetry?.updateInterval(config.heartbeatSeconds)
             Log.i(

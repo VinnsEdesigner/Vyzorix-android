@@ -15,7 +15,7 @@ import kotlinx.serialization.encodeToString
  * rather than as "not reporting".
  *
  * The interval comes from the config (`vvv hb 60s`), not a constant, so the server
- * can slow reporting across a fleet without shipping a new APK. [updateInterval]
+ * can slow reporting across devices without shipping a new APK. [updateInterval]
  * takes effect on the next tick.
  *
  * The readings come from a [TelemetrySource] rather than being collected here, so
@@ -55,7 +55,7 @@ class TelemetryReporter(
 
     /**
      * Applies a new cadence. A value below [MIN_INTERVAL_SECONDS] is clamped: the
-     * server owns the value, but a typo in a config must not turn a fleet into a
+     * server owns the value, but a typo in a config must not turn every device into a
      * request flood.
      */
     fun updateInterval(seconds: Int) {

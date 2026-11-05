@@ -4,18 +4,24 @@ The tarballs here are **build artifacts, not repo files** (`dist/` is gitignored
 Build them with `scripts/build-rootfs.sh`.
 
 ```
-scripts/build-rootfs.sh --arch arm64          # the fleet target
-scripts/build-rootfs.sh --arch amd64          # for engine work on an x86_64 emulator
+scripts/build-rootfs.sh --arch arm64          # most current devices
+scripts/build-rootfs.sh --arch armeabi-v7a    # older 32-bit devices
+scripts/build-rootfs.sh --arch x86_64         # emulators, and x86 tablets
 ```
+
+Build all three for a release. A rootfs for one architecture cannot run on another.
 
 Produces, in `dist/`:
 
 | File | What |
 |:--|:--|
-| `debian-core.tar.gz` | The floor — shell, POSIX userland, TLS trust, `socat`. **Bundled in the APK** and extracted on first boot. |
-| `debian-extended.tar.gz` | `git`, `python3`, `tmux` and friends. Downloaded on demand. |
-| `SHA256SUMS` | Verified by the device before extracting. |
-| `BUILD.md` | The build record: suite, mirror, package sets, and the exact resolved versions. |
+| `debian-core-<abi>.tar.gz` | The floor — shell, POSIX userland, TLS trust, `socat`. **Bundled in the APK** and extracted on first boot. |
+| `debian-extended-<abi>.tar.gz` | `git`, `python3`, `tmux` and friends. Downloaded on demand. |
+| `SHA256SUMS` | Every tarball, all architectures, in one file. Verified by the device before extracting. |
+| `BUILD-<abi>.md` | The build record: suite, mirror, package sets, and the exact resolved versions. |
+
+The ABI is in the filename because three architectures ship and a name without it
+would overwrite itself on the second build.
 
 `doc/ANDROID_SERVICE_ARCHITECTURE.md` §6.1.1 is the spec — what is in each tarball and
 why, the size budget, the required files and modes. Read it before changing the
@@ -54,7 +60,17 @@ unlike `libproot.so`, which is one program compiled for three ABIs. An arm64 dev
 cannot run an amd64 rootfs: `bin/bash` will exist and fail to execute, which reads as a
 corrupt rootfs rather than a wrong-arch one.
 
-The fleet is **arm64** (Nokia C22, Unisoc SC9863A). Only `--arch arm64` ships.
+This targets the general Android public, so **every ABI the APK ships needs a matching
+rootfs**:
+
+| Android ABI | Debian arch | Covers |
+|:--|:--|:--|
+| `arm64` | `arm64` | The large majority of current devices |
+| `armeabi-v7a` | `armhf` | Older 32-bit devices |
+| `x86_64` | `amd64` | Emulators, and the rare x86 tablet |
+
+Android and Debian do not use the same words for these — `armeabi-v7a` is `armhf` — so
+the script maps between them rather than taking a Debian arch directly.
 
 ## The two things that will look like bugs
 

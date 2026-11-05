@@ -112,8 +112,8 @@ class CloudEnrollmentE2ETest {
                 EnrollRequest(
                     deviceUuid = deviceUuid,
                     publicKey = pem(key),
-                    model = "C22",
-                    manufacturer = "Nokia",
+                    model = "Pixel 7a",
+                    manufacturer = "Google",
                     osVersion = "13",
                     appVersion = "0.1.0",
                     deviceClass = "phone",

@@ -108,7 +108,7 @@ Three real defects survived the JVM tests and only appeared on a device:
 ## Caveats
 
 - `userdebug`, Android 9. This settles logic and syscalls; it does **not** settle
-  SELinux policy on a production `user` build. The Nokia C22 still needs to confirm.
+  SELinux policy on a production `user` build. A real device still needs to confirm.
 - The reader/writer socket protocol has no in-repo client; the reference client is
   the Debian-side agent (a later build). The contract shape is asserted by
   `theFrameShapeIsTheContractShape`.

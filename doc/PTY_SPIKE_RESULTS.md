@@ -121,13 +121,13 @@ All three are the reason `AGENTS.md` has a threading/fd-ownership section.
 
 - **Android 13 behaviour.** This ran on Android 9. Policy tightened between them.
 - **A `user` build.** The emulator is `userdebug`, which is more permissive in
-  some paths. The Nokia C22 is a production `user` build with stricter policy.
+  some paths. Production devices ship `user` builds with stricter policy.
 - **proot.** The spike exec'd `/system/bin/sh` and a shell script — deliberately
   not proot, so a failure would isolate one variable. Whether proot itself
   launches from app storage is the next thing to prove.
 
 ## Outstanding
 
-Re-run the same two cases on the Nokia C22 (Android 13, `user`) before treating
-the PTY pillar as settled. The emulator makes a failure unlikely; it does not make
-it impossible.
+Re-run the same two cases on a production `user` build before treating the PTY
+pillar as settled. The emulator makes a failure unlikely; it does not make it
+impossible.

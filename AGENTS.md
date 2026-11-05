@@ -203,9 +203,9 @@ adb logcat -d | grep -i <your tag>
 
 The image is **Android 9, `userdebug`**. Two caveats that matter:
 
-- **`userdebug` is more permissive than `user`.** A production device (the Nokia
-  C22) is a `user` build with stricter SELinux policy. Passing here is strong
-  evidence, not proof.
+- **`userdebug` is more permissive than `user`.** A production device ships a
+  `user` build with stricter SELinux policy. Passing here is strong evidence, not
+  proof.
 - **It is Android 9, not 13.** Policy tightened between them.
 
 So: the emulator settles *logic* and *syscall* questions well. It does not
@@ -307,7 +307,7 @@ module's tests under `tests/<module>/`.
 
 - JVM/Robolectric unit tests are the default; they run anywhere.
 - Anything touching real syscalls (PTY, USB, exec) cannot run on the JVM. Those
-  go in `instrumented/` and are verified on the emulator or the C22.
+  go in `instrumented/` and are verified on the emulator or a real device.
 - Do not claim a platform-behaviour change is verified unless it ran on the
   emulator or a device. Compiling is not verifying.
 

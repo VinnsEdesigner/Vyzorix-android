@@ -23,7 +23,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                // The capability layer is PTY and USB work; arm64 is the fleet
+                // The capability layer is PTY and USB work; arm64 covers current
                 // target, armeabi-v7a covers older handsets, x86_64 keeps
                 // emulator builds working for CI.
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")

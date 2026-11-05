@@ -3,6 +3,7 @@ package com.vyzorix.agent
 import android.app.Application
 import android.util.Log
 import com.vyzorix.connector.CloudConnectionFactory
+import com.vyzorix.engine.EngineConfig
 import com.vyzorix.service.CloudLinkProvider
 import com.vyzorix.service.TerminalShellPolicy
 
@@ -28,6 +29,21 @@ class VyzorixApplication : Application() {
         // Tell the service whether a terminal may run a plain device shell. Off in a
         // production build: it runs as the app's uid, which the container prevents.
         TerminalShellPolicy.allowUncontainedShell(BuildConfig.ALLOW_UNCONTAINED_SHELL)
+
+        // Park the engine config where the service can read it. BuildConfig lives in
+        // this module and the service is in :android-core, so the values have to be
+        // handed across — the same shape as TerminalShellPolicy above.
+        EngineConfig.install(
+            EngineConfig(
+                bundledAbi = BuildConfig.ROOTFS_ABI,
+                sha256 = BuildConfig.ROOTFS_SHA256,
+                baseUrl = BuildConfig.ROOTFS_BASE_URL,
+                // A plain URL stream. The rootfs is fetched once, from a release, and
+                // the checksum is what makes it trustworthy — an HTTP client would add
+                // a dependency without adding a guarantee here.
+                open = { url -> java.net.URL(url).openStream() },
+            ),
+        )
 
         // The trust anchor is compiled in, and the build refuses to produce a release
         // APK without one (see app/build.gradle.kts). A debug build may carry none,

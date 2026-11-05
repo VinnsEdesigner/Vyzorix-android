@@ -76,7 +76,7 @@ Three consequences, and they are the whole point:
 
 7. The user, already signed in on the web app, opens `/pair` and types the code.
 8. The server looks it up: code valid, not expired, not already claimed.
-9. The server shows the device's facts — *"Nokia C22 · Android 13 · 4 GB · added 40
+9. The server shows the device's facts — *"Pixel 7a · Android 13 · 4 GB · added 40
    seconds ago"* — and the user confirms it is theirs, picks the organization, a
    name, and the policy.
 10. The server binds the device: owner, org, name, tier cap. It consumes the code
@@ -228,7 +228,7 @@ is orphaned and nothing is ambiguous.
   the capability (the fd), per boundary contract §9.1.
 - **IMEI is not the identity.** On Android 10+ `getImei()` needs
   `READ_PRIVILEGED_PHONE_STATE`, which is system-only; a normal app gets null or an
-  exception, on the C22 as anywhere. IMEI is collected as a best-effort *attribute*
+  exception, on any device. IMEI is collected as a best-effort *attribute*
   and may be absent. The stable ID is the device-generated UUID.
 - **The pairing code is the only unauthenticated step**, by necessity — the device
   has no credential yet. Its safety rests on entropy + TTL + single-use + rate

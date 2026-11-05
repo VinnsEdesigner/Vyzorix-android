@@ -64,8 +64,8 @@ class EnrollmentClientTest {
                 EnrollRequest(
                     deviceUuid = "dev-1",
                     publicKey = signer.publicKeyPem(),
-                    model = "C22",
-                    manufacturer = "Nokia",
+                    model = "Pixel 7a",
+                    manufacturer = "Google",
                     osVersion = "13",
                     appVersion = "0.1.0",
                     deviceClass = "phone",

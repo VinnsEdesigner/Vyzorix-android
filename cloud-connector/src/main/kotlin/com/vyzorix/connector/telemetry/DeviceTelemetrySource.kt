@@ -23,7 +23,7 @@ import android.os.SystemClock
  * and its `uptime` column are seconds, so a millisecond reading would make every
  * device look as if it had been up for decades.
  *
- * Thermal state is the reading that matters on the fleet's target hardware (the C22
+ * Thermal state is the reading that matters most on hardware that throttles
  * throttles under sustained load), and `BatteryManager` reports it without a
  * permission. It is a battery temperature, not a CPU one — Android exposes no
  * unprivileged CPU sensor — so it is documented as such rather than presented as

@@ -24,7 +24,9 @@ import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult
+import com.vyzorix.engine.EngineConfig
 import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.engine.RootfsInstaller
 import com.vyzorix.permissions.PermissionRequester
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -65,6 +67,29 @@ class VyzorixForegroundService : Service() {
     /** Live PTY readers, keyed by channel. The reader owns the fd and closes it. */
     private val readers = ConcurrentHashMap<Int, PtyReader>()
 
+    /**
+     * Extracts the bundled rootfs on first boot.
+     *
+     * Built here rather than injected because it needs only the context, and because
+     * the service is created by the system from an `Intent` — there is nowhere to
+     * inject into. The asset name and checksum come from the build config.
+     */
+    private val rootfsInstaller =
+        RootfsInstaller(
+            context = this,
+            // BuildConfig belongs to :app, so the values are parked in EngineConfig by
+            // Application.onCreate and read here — the same shape as CloudLinkProvider.
+            // Null means no engine config was installed: the installer then finds no
+            // bundled asset and no fallback, and the device runs bridge-only.
+            expectedSha256 = EngineConfig.get()?.sha256.orEmpty(),
+            download = EngineConfig.get()?.open,
+            baseUrl = EngineConfig.get()?.baseUrl.orEmpty(),
+            abi = EngineConfig.get()?.bundledAbi.orEmpty(),
+        )
+
+    /** The one-shot install thread, kept so `onDestroy` can join it. */
+    private var installThread: Thread? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -97,6 +122,23 @@ class VyzorixForegroundService : Service() {
         tokens = SessionTokenRegistry()
         broker = PtyBroker()
         router = buildRouter()
+
+        // Install the container's userspace if it is not already there, before
+        // anything asks whether the engine is ready. Off the main thread: it extracts
+        // ~145 MB on first boot, and `start()` runs from `onStartCommand`.
+        //
+        // A failure is not fatal — the device runs bridge-only — so this does not
+        // block the bridge or the cloud connection below. The watchdog's
+        // `isEngineReady` gate then keeps the terminal closed until it succeeds, and
+        // the next boot retries.
+        installThread =
+            Thread({
+                val ready = rootfsInstaller.ensureInstalled()
+                Log.i(TAG, "rootfs install finished; engine ready=$ready")
+            }, "vyzorix-rootfs-install").apply {
+                isDaemon = true
+                start()
+            }
 
         bridge =
             AndroidSocketServer(
@@ -341,6 +383,13 @@ class VyzorixForegroundService : Service() {
         cloudLink?.stop()
         cloudLink = null
 
+        // The install is I/O, so it is not interruptible mid-write; joining briefly
+        // is better than leaving a half-written rootfs for the next boot to clear.
+        installThread?.let { thread ->
+            runCatching { thread.join(INSTALL_JOIN_TIMEOUT_MS) }
+        }
+        installThread = null
+
         releaseWakeLock()
         super.onDestroy()
     }
@@ -398,6 +447,15 @@ class VyzorixForegroundService : Service() {
         private const val CHANNEL_ID = "vyzorix-engine"
         private const val NOTIFICATION_ID = 1
         private const val SHUTDOWN_TIMEOUT_MS = 3000L
+
+        /**
+         * How long `onDestroy` waits for a rootfs install to finish.
+         *
+         * Short on purpose: extraction takes seconds, and blocking service teardown on
+         * it would trade a rare half-written rootfs for a guaranteed slow shutdown.
+         * The next boot clears and retries either way.
+         */
+        private const val INSTALL_JOIN_TIMEOUT_MS = 2000L
 
         /** Event topic pushed when a PTY session's child exits. */
         const val EVENT_SESSION_EXIT = "session.exit"

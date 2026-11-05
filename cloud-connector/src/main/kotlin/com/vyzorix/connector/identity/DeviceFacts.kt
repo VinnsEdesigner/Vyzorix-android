@@ -13,7 +13,7 @@ import java.util.UUID
  *
  * **IMEI is deliberately absent.** On Android 10+ `getImei()` needs
  * `READ_PRIVILEGED_PHONE_STATE`, which is system-only; a normal app gets null or an
- * exception, on the C22 as anywhere. The stable identity is the device-generated
+ * exception, on any device. The stable identity is the device-generated
  * UUID, and the IMEI — where it exists at all — is a best-effort attribute the
  * server does not require. See doc/REGISTRATION_CONTRACT.md §9.
  */

@@ -119,8 +119,8 @@ Request:
 {
   "deviceUuid":   "d_01H…",          // required, the stable id (device-generated)
   "publicKey":    "-----BEGIN PUBLIC KEY-----\n…",  // required, P-256 SubjectPublicKeyInfo PEM
-  "model":        "C22",
-  "manufacturer": "Nokia",
+  "model":        "Pixel 7a",
+  "manufacturer": "Google",
   "osVersion":    "13",
   "appVersion":   "0.1.0",
   "deviceClass":  "phone",
