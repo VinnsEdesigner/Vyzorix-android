@@ -36,6 +36,28 @@ below or in the doc.
 
 ### Installation (fresh machine)
 
+**One command, into a persistent prefix:**
+
+```bash
+scripts/install-toolchain.sh          # default prefix /workspace/toolchain
+source /workspace/toolchain/env.sh    # then build
+```
+
+That installs everything this repo needs: JDK 21, the Android SDK (platform 34,
+build-tools 34.0.0, NDK 26.3.11579264, CMake 3.22.1), the emulator and the
+`android-28;default;x86_64` image with the `x86test` AVD, the Debian rootfs
+tarballs, `debootstrap` + `qemu-user-static` with the `binfmt_misc` handlers, and
+the ARM cross-compilers for Layer 3. It is re-runnable — each step is skipped when
+its artifact exists — and writes `<prefix>/env.sh`.
+
+It defaults to a prefix outside the ephemeral root because **everything outside
+`/workspace` is wiped when the sandbox restarts**; `/opt/android-sdk` would not
+survive. Use `--prefix DIR` for a different root, `--skip STEP` to omit a step,
+and `--rootfs-abi ABI` to choose which rootfs tarballs to fetch.
+
+The manual steps below are what the script does, kept for a machine where the
+script cannot run.
+
 Debian/Ubuntu:
 
 ```bash

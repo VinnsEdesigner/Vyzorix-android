@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+#
+# Install the full build + test toolchain for this repo, into a persistent prefix.
+#
+# Everything outside /workspace is wiped when the sandbox restarts, so the prefix
+# defaults to /workspace/toolchain (and GRADLE_USER_HOME to /workspace/gradle-home).
+# Re-runnable: every step checks whether its artifact already exists, so a second run
+# is a no-op and a run after a partial failure resumes.
+#
+# Usage:
+#   scripts/install-toolchain.sh [--prefix DIR] [--skip STEP]... [--rootfs-abi ABI]...
+#
+#   --prefix DIR        install root (default /workspace/toolchain)
+#   --skip STEP         skip a step; repeatable. Steps: jdk android-sdk emulator
+#                       rootfs engine-build cross-compilers
+#   --rootfs-abi ABI    rootfs tarball to fetch; repeatable (default: x86_64 arm64)
+#   --help
+#
+# What each step is for:
+#   jdk              JDK 21 (AGP 8.3.2 accepts 17-21; trixie ships 21)
+#   android-sdk      cmdline-tools, platform-34, build-tools 34.0.0, NDK 26.3.11579264,
+#                    CMake 3.22.1, platform-tools  -> builds :android-core, :app
+#   emulator         emulator + system-images;android-28;default;x86_64 + the `x86test`
+#                    AVD  -> runs the instrumented suite (no KVM: x86_64, -accel off)
+#   rootfs           the Debian userspace tarballs, fetched from the public release
+#                    (the APK bundles one ABI's rootfs; the others are fetched)
+#   engine-build     debootstrap + qemu-user-static + binfmt-support, and the binfmt_misc
+#                    handlers  -> rebuilds a rootfs for ANY architecture (Layer 2)
+#   cross-compilers  gcc-aarch64-linux-gnu + gcc-arm-linux-gnueabihf  -> builds the
+#                    Layer 3 supervisor / cli-wrappers for the Debian userspace
+#
+# On completion it writes <prefix>/env.sh; source it to get the toolchain on PATH.
+
+set -uo pipefail
+
+PREFIX="/workspace/toolchain"
+GRADLE_HOME_DEFAULT="/workspace/gradle-home"
+ROOTFS_ABIS=()
+SKIP=()
+ROOTFS_ABI_SET=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix)       PREFIX="$2"; shift 2 ;;
+    --skip)         SKIP+=("$2"); shift 2 ;;
+    --rootfs-abi)
+      # Repeatable. The first use replaces the default set; later uses append.
+      if [[ "$ROOTFS_ABI_SET" == 0 ]]; then ROOTFS_ABIS=(); ROOTFS_ABI_SET=1; fi
+      ROOTFS_ABIS+=("$2"); shift 2 ;;
+    --help|-h)      sed -n '2,40p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1 (try --help)" >&2; exit 2 ;;
+  esac
+done
+
+# Default to the two ABIs that matter here: x86_64 for the emulator, arm64 because
+# that is the one bundled in the APK.
+if [[ ${#ROOTFS_ABIS[@]} -eq 0 ]]; then ROOTFS_ABIS=("x86_64" "arm64"); fi
+
+skipped() {
+  local step="$1"
+  for s in "${SKIP[@]:-}"; do [[ "$s" == "$step" ]] && return 0; done
+  return 1
+}
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SDK="$PREFIX/android-sdk"
+GRADLE_HOME="${GRADLE_USER_HOME:-$GRADLE_HOME_DEFAULT}"
+ANDROID_USER="$PREFIX/android-user"
+AVD_HOME="$PREFIX/avd"
+
+NDK_VERSION="26.3.11579264"
+BUILD_TOOLS="34.0.0"
+CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+ASSETS_REPO="VinnsEdesigner/gz-_ASSETS"
+
+log()  { printf '\n=== %s\n' "$*"; }
+warn() { printf '\n!!! %s\n' "$*" >&2; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+mkdir -p "$PREFIX" "$GRADLE_HOME" "$ANDROID_USER" "$AVD_HOME"
+
+# --------------------------------------------------------------------------- JDK
+if ! skipped jdk; then
+  if [[ ! -x "$PREFIX/jdk/bin/java" ]]; then
+    log "JDK 21"
+    sudo apt-get update -qq
+    sudo apt-get install -y openjdk-21-jdk-headless unzip curl
+    # Copy rather than symlink: /usr/lib/jvm is wiped on restart, the prefix is not.
+    sudo mkdir -p "$PREFIX/jdk"
+    sudo cp -a /usr/lib/jvm/java-21-openjdk-amd64/. "$PREFIX/jdk/"
+    sudo chown -R "$(id -un):$(id -gn)" "$PREFIX/jdk"
+  fi
+  export JAVA_HOME="$PREFIX/jdk"
+  "$JAVA_HOME/bin/java" -version 2>&1 | head -1
+fi
+
+export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+export ANDROID_USER_HOME="$ANDROID_USER" ANDROID_AVD_HOME="$AVD_HOME"
+export PATH="$PREFIX/jdk/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/emulator:$PATH"
+
+# --------------------------------------------------------------- Android SDK
+if ! skipped android-sdk; then
+  mkdir -p "$SDK/cmdline-tools"
+  if [[ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]]; then
+    log "Android command-line tools"
+    curl -sSL -o /tmp/cmdline-tools.zip "$CMDLINE_TOOLS_URL"
+    unzip -q -o /tmp/cmdline-tools.zip -d "$SDK/cmdline-tools"
+    mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
+  fi
+
+  # Licenses must be accepted non-interactively or sdkmanager stalls and installs
+  # nothing — the single most common setup failure.
+  mkdir -p "$SDK/licenses"
+  printf '24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\n' \
+    > "$SDK/licenses/android-sdk-license"
+  printf '33b6a2b64607f11b759f320ef9dff4ae5c47d97a\n' \
+    > "$SDK/licenses/android-sdk-preview-license"
+
+  log "sdkmanager: platform 34, build-tools $BUILD_TOOLS, NDK $NDK_VERSION, CMake 3.22.1"
+  yes | sdkmanager --sdk_root="$SDK" --install \
+    "platform-tools" "platforms;android-34" "build-tools;$BUILD_TOOLS" \
+    "ndk;$NDK_VERSION" "cmake;3.22.1"
+fi
+
+# --------------------------------------------------------------- Emulator + AVD
+if ! skipped emulator; then
+  log "emulator + android-28 x86_64 system image"
+  yes | sdkmanager --sdk_root="$SDK" --install \
+    "emulator" "system-images;android-28;default;x86_64"
+
+  if [[ ! -d "$AVD_HOME/x86test.avd" ]]; then
+    log "creating AVD x86test"
+    # AGENTS.md prescribes this image. `no` declines the custom hardware profile.
+    echo "no" | avdmanager create avd -n x86test \
+      -k "system-images;android-28;default;x86_64" -d pixel --force
+  fi
+fi
+
+# -------------------------------------------------------------------- rootfs
+if ! skipped rootfs; then
+  DIST="$REPO_ROOT/debian-engine/rootfs/dist"
+  mkdir -p "$DIST"
+
+  # The assets live in a separate repo. It is public, so no auth is needed; $GIT is
+  # used when present because it also works if the repo is ever made private.
+  AUTH=()
+  [[ -n "${GIT:-}" ]] && AUTH=(-H "Authorization: Bearer $GIT")
+
+  for abi in "${ROOTFS_ABIS[@]}"; do
+    target="$DIST/debian-core-$abi.tar.gz"
+    if [[ -s "$target" ]]; then
+      continue
+    fi
+    log "fetching debian-core-$abi.tar.gz"
+    url="https://github.com/$ASSETS_REPO/releases/latest/download/debian-core-$abi.tar.gz"
+    if ! curl -sSL "${AUTH[@]}" -o "$target" "$url" || [[ ! -s "$target" ]]; then
+      warn "could not fetch $url; skipping $abi"
+      rm -f "$target"
+    fi
+  done
+  [[ -s "$DIST/SHA256SUMS" ]] || \
+    curl -sSL "${AUTH[@]}" -o "$DIST/SHA256SUMS" \
+      "https://github.com/$ASSETS_REPO/releases/latest/download/SHA256SUMS" || true
+
+  # Verify against the release's own SHA256SUMS, not a recomputed one. Only the
+  # tarballs that were actually fetched are checked: SHA256SUMS lists every ABI, and
+  # `sha256sum -c` fails on a listed file that is not present.
+  if [[ -s "$DIST/SHA256SUMS" ]]; then
+    log "verifying rootfs checksums"
+    ( cd "$DIST" && grep -E 'debian-core-.*\.tar\.gz$' SHA256SUMS ) \
+      | while read -r sum name; do
+          [[ -s "$DIST/$name" ]] || continue
+          actual="$(sha256sum "$DIST/$name" | cut -d' ' -f1)"
+          if [[ "$actual" == "$sum" ]]; then
+            echo "  ok       $name"
+          else
+            warn "  MISMATCH $name"
+          fi
+        done
+  fi
+  ls -lh "$DIST"/*.tar.gz 2>/dev/null || true
+fi
+
+# --------------------------------------------------------------- engine-build
+# Needed to *rebuild* a rootfs for another architecture, and to run a foreign-arch
+# userspace locally. debootstrap's second stage executes target binaries, so it needs
+# qemu-user-static AND a registered binfmt_misc handler — qemu alone gives a bare
+# "Exec format error".
+if ! skipped engine-build; then
+  if ! have debootstrap; then
+    log "debootstrap + qemu-user-static + binfmt-support"
+    sudo apt-get install -y debootstrap qemu-user-static binfmt-support
+  fi
+
+  log "binfmt_misc handlers"
+  for handler in qemu-aarch64 qemu-arm qemu-x86_64; do
+    if [[ -e "/proc/sys/fs/binfmt_misc/$handler" ]]; then
+      echo "  $handler: registered"
+      continue
+    fi
+    # binfmt_misc is often mounted read-only in a container; the remount is the part
+    # that matters. If it is refused, cross-arch builds must happen elsewhere.
+    sudo mount -o remount,rw /proc/sys/fs/binfmt_misc 2>/dev/null || true
+    if sudo systemctl restart binfmt-support 2>/dev/null; then
+      echo "  $handler: registered via binfmt-support"
+    elif [[ -x /usr/lib/systemd/systemd-binfmt ]]; then
+      sudo /usr/lib/systemd/systemd-binfmt 2>/dev/null && echo "  $handler: registered" \
+        || warn "  $handler: could not register (cross-arch rootfs builds unavailable here)"
+    else
+      warn "  $handler: could not register (cross-arch rootfs builds unavailable here)"
+    fi
+  done
+fi
+
+# ------------------------------------------------------------ cross-compilers
+# Layer 3's supervisor and cli-wrappers are C, built for the Debian userspace.
+if ! skipped cross-compilers; then
+  if ! have aarch64-linux-gnu-gcc; then
+    log "C cross-compilers (aarch64, armhf)"
+    sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+  fi
+  aarch64-linux-gnu-gcc --version 2>/dev/null | head -1 || warn "aarch64 cross-gcc missing"
+fi
+
+# ------------------------------------------------------------------ env.sh
+log "writing $PREFIX/env.sh"
+cat > "$PREFIX/env.sh" <<EOF
+# Source this to get the vyzorix-android toolchain on PATH.
+# Installed by scripts/install-toolchain.sh into a persistent prefix.
+export VYZORIX_TC="$PREFIX"
+export JAVA_HOME="$PREFIX/jdk"
+export ANDROID_HOME="$SDK"
+export ANDROID_SDK_ROOT="$SDK"
+export ANDROID_USER_HOME="$ANDROID_USER"
+export ANDROID_AVD_HOME="$AVD_HOME"
+export GRADLE_USER_HOME="$GRADLE_HOME"
+export PATH="\$JAVA_HOME/bin:$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/emulator:\$PATH"
+EOF
+
+log "done"
+cat <<EOF
+
+Toolchain root : $PREFIX
+Gradle home    : $GRADLE_HOME
+Environment    : source $PREFIX/env.sh
+
+Next:
+  source $PREFIX/env.sh
+  cd $REPO_ROOT && echo "sdk.dir=\$ANDROID_HOME" > local.properties
+  ./gradlew gate
+  # emulator (no KVM here: x86_64 image, -accel off, boot ~90s)
+  emulator -avd x86test -no-window -no-audio -no-boot-anim \\
+    -gpu swiftshader_indirect -no-snapshot -accel off &
+  ./gradlew :app:connectedDebugAndroidTest -ProotfsAbi=x86_64
+EOF
