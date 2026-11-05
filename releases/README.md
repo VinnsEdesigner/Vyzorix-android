@@ -1,8 +1,17 @@
 # `releases/` — published engine assets
 
-The rootfs tarballs are built here and published to a GitHub release. This directory
-is the **staging area**, not the home: the tarballs are ~150 MB each and are
-gitignored, so what lives in git is this README and the manifest.
+The rootfs tarballs are built here and published to a GitHub release **in a different,
+public repository**: [`VinnsEdesigner/vyzorix-engine-assets`](https://github.com/VinnsEdesigner/vyzorix-engine-assets).
+
+**This repository is private, and that decides where the release lives.** GitHub
+serves a private repository's release assets only to authenticated callers, so a
+device in a member of the public's hands gets a 404 from
+`.../Vyzorix-android/releases/latest/download/...`. The tarballs are Debian packages,
+public upstream, so they belong somewhere public. The code stays private; the assets
+do not.
+
+This directory is the **staging area**, not the home: the tarballs are ~150 MB each
+and are gitignored, so what lives in git is this README and the manifest.
 
 ## What is published
 
@@ -29,7 +38,7 @@ That produces, per ABI:
 ```bash
 VERSION=v1.0.0
 gh release create "$VERSION" \
-  --repo VinnsEdesigner/Vyzorix-android \
+  --repo VinnsEdesigner/vyzorix-engine-assets \
   --title "Engine assets $VERSION" \
   --notes "Rootfs tarballs for arm64, armeabi-v7a and x86_64." \
   debian-engine/rootfs/dist/*.tar.gz \
@@ -37,9 +46,12 @@ gh release create "$VERSION" \
   debian-engine/rootfs/dist/BUILD-*.md
 ```
 
-The app fetches from `.../releases/latest/download/`, so a release marked **latest**
-is what devices pick up. `ROOTFS_BASE_URL` in the build config points there; a fork
-overrides it with `-ProotfsBaseUrl=...`.
+Note the `--repo`: the **public assets repository**, not this one.
+
+The app fetches from
+`https://github.com/VinnsEdesigner/vyzorix-engine-assets/releases/latest/download/`, so
+a release marked **latest** is what devices pick up. `ROOTFS_BASE_URL` in the build
+config points there; a fork overrides it with `-ProotfsBaseUrl=...`.
 
 ## Why the app needs the checksum from the release
 

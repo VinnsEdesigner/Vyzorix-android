@@ -137,7 +137,13 @@ fun bundledRootfsSha256(): String {
 fun rootfsBaseUrl(): String =
     (findProperty("rootfsBaseUrl") as String?)
         ?: System.getenv("VYZORIX_ROOTFS_URL")
-        ?: "https://github.com/VinnsEdesigner/Vyzorix-android/releases/latest/download"
+        // The PUBLIC assets repo, not this one.
+        //
+        // This repo is private, and GitHub serves a private repo's release assets only
+        // to authenticated callers — so a device in a member of the public's hands
+        // gets a 404. The tarballs are Debian packages, public upstream, so they live
+        // in their own public repo and the code stays private.
+        ?: "https://github.com/VinnsEdesigner/vyzorix-engine-assets/releases/latest/download"
 
 /**
  * Whether the terminal may run a plain device shell when the container engine is
