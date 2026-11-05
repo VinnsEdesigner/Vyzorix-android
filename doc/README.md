@@ -11,11 +11,12 @@ owner). Every other document here either refines it or records a build against i
 
 If a document disagrees with it, the architecture doc wins.
 
-> **Not in this repo.** Earlier revisions of this repository carried a `README.md`
-> and two sync workflows belonging to a *different* project (VyzorixAudioRouter —
-> audio routing, "Layers 0–8", `MediaProjection`). They were deleted on 2026-11-04
-> because they described a repo this is not. There is **no audio engine** in this
-> design. Do not resurrect them.
+> **A note on the root `README.md`.** Earlier revisions of this repository carried a
+> `README.md` and two sync workflows belonging to a *different* project
+> (VyzorixAudioRouter — audio routing, "Layers 0–8", `MediaProjection`). They were
+> deleted on 2026-11-04 because they described a repo this is not, and a **new,
+> correct** `README.md` was written for this repo on 2026-11-05. There is **no
+> audio engine** in this design. Do not resurrect the old one.
 
 ## Status at a glance
 
