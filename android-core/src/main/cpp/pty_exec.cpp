@@ -135,29 +135,49 @@ Status SpawnOnPty(const PtyPair &pair, const ExecRequest &request, pid_t *out_pi
             _exit(kExecFailedExitCode + 1);
         }
 
+        // Relocate the pair out of the stdio range BEFORE touching 0/1/2.
+        //
+        // An Android app process has fds 0/1/2 closed, so `posix_openpt` hands back
+        // fd 0 and the slave lands on fd 1. `dup2(slave, 0..2)` then overwrites the
+        // slave fd itself, and the later `close(master)` closes fd 0 — which by then
+        // is the child's stdin. The shell started with a closed stdin, read EOF at
+        // once, and exited 0 having printed only the terminal's echo of the input.
+        //
+        // F_DUPFD returns the lowest free descriptor at or above the argument, so 3
+        // is guaranteed free once these two calls return. Both must be moved before
+        // either dup2, because the first dup2 can free the fd the second still needs.
+        int master = fcntl(pair.master, F_DUPFD, 3);
+        if (master < 0) {
+            _exit(kExecFailedExitCode + 5);
+        }
+
+        int slave = fcntl(pair.slave, F_DUPFD, 3);
+        if (slave < 0) {
+            _exit(kExecFailedExitCode + 6);
+        }
+
         // Take the PTY slave as the controlling terminal for that session. This
         // is what makes the shell behave as an interactive tty.
-        if (ioctl(pair.slave, TIOCSCTTY, 0) != 0) {
+        if (ioctl(slave, TIOCSCTTY, 0) != 0) {
             _exit(kExecFailedExitCode + 2);
         }
 
-        if (dup2(pair.slave, STDIN_FILENO) < 0 || dup2(pair.slave, STDOUT_FILENO) < 0 ||
-            dup2(pair.slave, STDERR_FILENO) < 0) {
+        if (dup2(slave, STDIN_FILENO) < 0 || dup2(slave, STDOUT_FILENO) < 0 ||
+            dup2(slave, STDERR_FILENO) < 0) {
             _exit(kExecFailedExitCode + 3);
         }
 
         // The child has no use for the master or the original slave fd.
-        if (pair.slave > STDERR_FILENO) {
-            close(pair.slave);
+        if (slave > STDERR_FILENO) {
+            close(slave);
         }
-        close(pair.master);
+        close(master);
 
         if (!request.working_dir.empty()) {
             if (chdir(request.working_dir.c_str()) != 0) {
                 _exit(kExecFailedExitCode + 4);
             }
         }
-
         execve(request.path.c_str(), argv, envp);
 
         // execve only returns on failure. Encode the errno so the parent can

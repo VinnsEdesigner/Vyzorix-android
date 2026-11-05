@@ -166,22 +166,39 @@ class EngineTerminalE2ETest {
         // satisfy the wait. A single literal marker does not work: the echo arrives
         // first and the reader stops there.
         val commandLine = "$command\nprintf '%s%s\\n' $SENTINEL_LEFT $SENTINEL_RIGHT\n"
-        val wrote = session.write(commandLine.toByteArray())
-        assertTrue("writing to the session failed: $wrote", wrote is PtyResult.Ok)
 
         val collected = StringBuilder()
         val deadline = System.currentTimeMillis() + OUTPUT_TIMEOUT_MS
+        var attempts = 0
+
         while (System.currentTimeMillis() < deadline) {
-            collected.setLength(0)
-            output.forEach { collected.append(String(it)) }
+            // Re-send until the shell answers, rather than writing once.
+            //
+            // proot is ptrace-based: between fork and the shell reading its tty it
+            // writes its loader, execs, and takes the pty as its controlling terminal.
+            // Input that arrives in that window is echoed by the line discipline and
+            // then discarded — which is why a single write produced a terminal that
+            // echoed the command and never ran it. The tty echo is real output, so the
+            // reader sees it and the wait for the marker would otherwise time out.
+            val wrote = session.write(commandLine.toByteArray())
+            assertTrue("writing to the session failed: $wrote", wrote is PtyResult.Ok)
+            attempts++
+
+            val until = minOf(deadline, System.currentTimeMillis() + ATTEMPT_WINDOW_MS)
+            while (System.currentTimeMillis() < until) {
+                collected.setLength(0)
+                output.forEach { collected.append(String(it)) }
+
+                if (collected.contains(SENTINEL)) break
+
+                Thread.sleep(POLL_MS)
+            }
 
             if (collected.contains(SENTINEL)) break
-
-            Thread.sleep(POLL_MS)
         }
 
         assertTrue(
-            "the shell never produced the end marker " +
+            "the shell never produced the end marker after $attempts attempt(s) " +
                 "(child exit code ${session.childExitCode}); output was: " +
                 collected.toString().take(400),
             collected.contains(SENTINEL),
