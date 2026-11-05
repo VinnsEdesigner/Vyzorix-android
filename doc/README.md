@@ -37,6 +37,7 @@ If a document disagrees with it, the architecture doc wins.
 | `BUILD_2_VERIFICATION.md` | The emulator run that turned Build 2 from "compiles" into "proven", and the three device-only bugs it found. | **Pass** for items 1–5, 8; 6–7 blocked on the rootfs |
 | `BUILD_3_REQUIREMENTS.md` | The cloud side: the server blockers, the wire contracts byte for byte, the file list, the tests. | **Done** — read as the contract it implemented |
 | `PTY_SPIKE_RESULTS.md` | The experiment that de-risked the PTY pillar: `/dev/ptmx` reachable, and `execve` from app storage works at `targetSdk 28`. | **Pass** on emulator; real-device confirmation outstanding |
+| `LAYER_3_REQUIREMENTS.md` | Layer 3 (the app runtime) as a work item: components, the contracts it sits between, the decisions needed first, the build order. | **Proposed, for discussion** — nothing built |
 
 ## Elsewhere
 
