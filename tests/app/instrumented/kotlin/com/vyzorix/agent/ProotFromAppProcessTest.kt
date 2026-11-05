@@ -43,22 +43,42 @@ class ProotFromAppProcessTest {
         val proot = ProotLauncher.prootBinary(context).absolutePath
         val tmp = ProotLauncher.tmpDir(context).absolutePath
 
-        val process =
-            ProcessBuilder(
-                proot, "--link2symlink", "-0",
-                "-r", rootfs,
-                "-b", "/dev", "-b", "/proc", "-b", "/sys",
-                "-w", "/root",
-                "/bin/bash", "-c", "cat /etc/debian_version; id -u",
+        val command =
+            listOf(
+                proot,
+                "--link2symlink",
+                "-0",
+                "-r",
+                rootfs,
+                "-b",
+                "/dev",
+                "-b",
+                "/proc",
+                "-b",
+                "/sys",
+                "-w",
+                "/root",
+                "/bin/bash",
+                "-c",
+                "cat /etc/debian_version; id -u",
             )
-                .redirectErrorStream(true)
-                // proot writes its loader to a temp file before every exec, and without
-                // this it fails with "can't create temporary file" — the app cannot
-                // write the default /data/local/tmp. Setting it here mirrors what
-                // loginShellRequest puts in the child's environment.
-                .apply { environment()["PROOT_TMP_DIR"] = tmp }
-                .start()
 
+        // proot writes its loader to a temp file before every exec, and without
+        // PROOT_TMP_DIR it fails with "can't create temporary file" — the app cannot
+        // write the default /data/local/tmp. PATH is set for the same reason
+        // loginShellRequest sets it: the container's bash is started directly, not
+        // through a login shell, so without it `cat` and `id` are not found. Both
+        // mirror what production puts in the child's environment.
+        val environment =
+            mapOf(
+                "PROOT_TMP_DIR" to tmp,
+                "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            )
+
+        val builder = ProcessBuilder(command).redirectErrorStream(true)
+        environment.forEach { (key, value) -> builder.environment()[key] = value }
+
+        val process = builder.start()
         val out = process.inputStream.bufferedReader().readText()
         val code = process.waitFor()
 

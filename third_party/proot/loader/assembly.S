@@ -50,6 +50,22 @@ syscall_3:
 	popl	%ebx
 	ret
 
+.globl	syscall_4
+.type	syscall_4, @function
+syscall_4:
+	/* Kernel arg4 is %esi, which is callee-saved, so it must be preserved.
+	 * Arg4 sits at 0xc(%esp) after the two pushes. */
+	pushl	%ebx
+	pushl	%esi
+	mov	%edx, %ebx
+//	mov	%ecx, %ecx
+	mov	0x0c(%esp), %edx
+	mov	0x10(%esp), %esi
+	int	$0x80
+	popl	%esi
+	popl	%ebx
+	ret
+
 .globl	syscall_1
 .type	syscall_1, @function
 syscall_1:

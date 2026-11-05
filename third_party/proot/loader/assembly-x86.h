@@ -55,11 +55,14 @@ extern word_t syscall_6(word_t number,
 extern word_t syscall_3(word_t number, word_t arg1, word_t arg2,
 			word_t arg3);
 
+extern word_t syscall_4(word_t number, word_t arg1, word_t arg2,
+			word_t arg3, word_t arg4);
+
 extern word_t syscall_1(word_t number, word_t arg1);
 
 #define SYSCALL(number, nb_args, args...) syscall_##nb_args(number, args)
 
-#define OPEN	5
+#define OPENAT	295
 #define CLOSE	6
 #define MMAP	192
 #define MMAP_OFFSET_SHIFT 12

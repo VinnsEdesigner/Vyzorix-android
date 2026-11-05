@@ -48,6 +48,7 @@ set(PROOT_SOURCES
     syscall/enter.c
     syscall/exit.c
     syscall/sysnum.c
+    syscall/sigsys.c
     syscall/socket.c
     syscall/heap.c
     syscall/rlimit.c
@@ -265,6 +266,13 @@ add_custom_command(
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/loader.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly.S"
+        # The per-architecture syscall numbers live in these headers, so a change to
+        # one must rebuild the loader. Without them in DEPENDS a corrected syscall
+        # number is silently ignored and the stale loader ships.
+        "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-x86_64.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-x86.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-arm64.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-arm.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/arch.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/compat.h"
     COMMENT "proot: building the ${ANDROID_ABI} loader"

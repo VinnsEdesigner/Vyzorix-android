@@ -60,3 +60,42 @@ The wire contracts the device must match, all read off the server at `b3fb0790`:
   match or Gradle fails.
 - detekt wants named constants for protocol masks/widths; `@OptIn(ExperimentalSerializationApi::class)`
   is needed on the `Json { }` builder.
+
+## The proot-on-Android PTY defect (FIXED 2026-11-05)
+
+The container terminal was broken because **Android's app seccomp filter kills
+PRoot's syscalls**. The filter uses `SECCOMP_RET_TRAP`, which cancels the syscall
+*before* PRoot's `PTRACE_TRACEME` and outranks it, so PRoot never sees the call
+and cannot translate it. The filter blocks the legacy `open(2)`, `access(2)`,
+`set_robust_list(2)` … that a Debian **x86_64** glibc issues; PRoot's own
+embedded loader also used `open(2)`. The guest died with `terminated with signal
+31` (SIGSYS) having printed nothing.
+
+- **Diagnosis tool**: `siginfo.si_syscall` from `PTRACE_GETSIGINFO` on the SIGSYS
+  is the authoritative blocked syscall. `get_sysnum(tracee, CURRENT)` reads the
+  *wrong* register at a SIGSYS and reports a stale number — it cost an hour.
+- **Fix**: `third_party/proot/syscall/sigsys.[ch]` (new) rewrites the blocked
+  syscall to its `*at` form and restarts it; a blocked call with no `*at` form is
+  answered `-ENOSYS` (glibc falls back). Loader `open`→`openat`. See
+  `third_party/README.md` §"Local changes to proot" for the full list — that
+  section must be carried forward on any upstream proot bump.
+- **arm64 is unaffected** (glibc uses `openat` there); this is an x86_64-emulator
+  issue that nonetheless must be fixed, since the code ships for all ABIs.
+- **Regression tests**: `:app`'s `EngineTerminalE2ETest` (4) and
+  `ProotFromAppProcessTest` now pass. `ProotFromAppProcessTest` is flaky when run
+  right after `EngineTerminalE2ETest` (a `libtinfo.so.6 … Operation not
+  permitted` race); it passes standalone. Not yet diagnosed.
+
+### Emulator/toolchain notes for this repo
+- Toolchain is installed under `/workspace/toolchain` (survives the sandbox wipe
+  of everything outside `/workspace`): JDK 21, Android SDK 34 + build-tools 34.0.0
+  + NDK 26.3.11579264 + cmake 3.22.1 + emulator + `system-images;android-28;default;x86_64`.
+  Source `/workspace/env.sh`; `GRADLE_USER_HOME=/workspace/gradle-home`.
+- Build the APK for the emulator with `-ProotfsAbi=x86_64` (the bundled rootfs is
+  arm64 otherwise). Fetch it from the public `VinnsEdesigner/gz-_ASSETS` release
+  into `debian-engine/rootfs/dist/`; the asset repo is private, so use `$GIT` and
+  the assets API (`Accept: application/octet-stream`) rather than the raw URL.
+- The `emulator` + `adb install` wedge under repeated install/uninstall; `adb emu
+  kill` then relaunch (`-wipe-data` if needed). Gradle's device discovery also
+  races the adb server — `./gradlew --stop` + restart helps.
+- Tests run one class at a time reliably; run the whole suite in one go sparingly.

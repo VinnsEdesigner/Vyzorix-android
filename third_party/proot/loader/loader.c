@@ -136,6 +136,9 @@ void _start(void *cursor)
 	    /* Fall through.  */
 
 	case LOAD_ACTION_OPEN:
+	/* openat(2), never open(2): Android's app seccomp filter blocks the legacy
+	 * open syscall and delivers SIGSYS, which kills this loader before the
+	 * guest program starts. Every loader arch now defines OPENAT. */
 #if defined(OPEN)
 	    fd = SYSCALL(OPEN, 3, stmt->open.string_address, O_RDONLY, 0);
 #else

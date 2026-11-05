@@ -21,6 +21,34 @@ the version are all reviewable and pinned.
 - `talloc/`'s waf build, `lib/replace/*.c` (nothing is replaced on bionic),
   and the tests.
 
+## Local changes to proot (re-apply on any upstream bump)
+
+proot is upstream code, but Android's app seccomp policy breaks it as shipped, so
+this tree carries a fix. A future `proot` upgrade must carry it forward:
+
+- **`syscall/sigsys.c` + `syscall/sigsys.h` (new)** — a SIGSYS handler. Android's
+  app seccomp filter uses `SECCOMP_RET_TRAP`, which cancels a syscall *before*
+  PRoot's `PTRACE_TRACEME` and outranks it, so PRoot never sees the call. The
+  filter blocks the legacy `open(2)`, `access(2)`, `set_robust_list(2)` and
+  others that a Debian **x86_64** glibc issues. The handler rewrites the blocked
+  syscall into its `*at` form (`open`→`openat`, `access`→`faccessat`, …) and
+  restarts it so PRoot translates the path; a blocked call with no `*at` form is
+  answered `-ENOSYS`, which glibc treats as "not implemented" and falls back
+  from. Without this a guest dies with `terminated with signal 31` (SIGSYS)
+  having printed nothing. Upstream proot has no equivalent; Termux's fork does.
+- **`tracee/event.c`** — a `case SIGSYS` in the event loop dispatches to that
+  handler when `siginfo.si_code == SYS_SECCOMP`.
+- **`syscall/sysnum.[ch]`** — `translate_sysnum` is made non-static so the handler
+  can map the number from `siginfo` (the cancelled call's number is not in the
+  register a tracer would normally read).
+- **`loader/assembly-*.h` + `loader/assembly.S`** — the embedded loader must use
+  `openat`, not `open`, for the same reason. The loader is freestanding, so it
+  has no libc to fall back: it needs `PREPARE_ARGS_4`/`OUTPUT_CONTRAINTS_4`
+  (arm, x86_64) and a `syscall_4` (x86). arm64 already used `openat`.
+- **`CMakeLists.txt`** — adds `syscall/sigsys.c` to the sources, and lists the
+  `loader/assembly-*.h` headers in the loader's `DEPENDS` so a change to a
+  syscall number actually rebuilds the loader.
+
 ## Building
 
 Both are `add_subdirectory`d from `android-core/src/main/cpp/CMakeLists.txt`, so the

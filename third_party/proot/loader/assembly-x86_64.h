@@ -56,6 +56,10 @@
 	register word_t arg2 asm("rsi") = arg2_;	\
 	register word_t arg3 asm("rdx") = arg3_;	\
 
+#define PREPARE_ARGS_4(arg1_, arg2_, arg3_, arg4_)      \
+       PREPARE_ARGS_3(arg1_, arg2_, arg3_)             \
+       register word_t arg4 asm("r10") = arg4_;        \
+
 #define PREPARE_ARGS_6(arg1_, arg2_, arg3_, arg4_, arg5_, arg6_)	\
 	PREPARE_ARGS_3(arg1_, arg2_, arg3_)				\
 	register word_t arg4 asm("r10") = arg4_;			\
@@ -68,6 +72,10 @@
 #define OUTPUT_CONTRAINTS_3			\
 	OUTPUT_CONTRAINTS_1,			\
 	"r" (arg2), "r" (arg3)
+
+#define OUTPUT_CONTRAINTS_4                    \
+       OUTPUT_CONTRAINTS_3,                    \
+       "r" (arg4)
 
 #define OUTPUT_CONTRAINTS_6			\
 	OUTPUT_CONTRAINTS_3,			\
@@ -87,7 +95,7 @@
 			result;						\
 	})
 
-#define OPEN	2
+#define OPENAT 257
 #define CLOSE	3
 #define MMAP	9
 #define EXECVE	59

@@ -44,6 +44,7 @@
 #include "path/binding.h"
 #include "syscall/syscall.h"
 #include "syscall/seccomp.h"
+#include "syscall/sigsys.h"
 #include "ptrace/wait.h"
 #include "extension/extension.h"
 #include "execve/elf.h"
@@ -842,6 +843,22 @@ int handle_tracee_event(Tracee *tracee, int tracee_status)
 		signal = 0;
 	    }
 	    break;
+
+	case SIGSYS:{
+		/* A SIGSYS from the host seccomp policy is not a guest fault: the
+		 * policy used SECCOMP_RET_TRAP, which cancels the syscall before
+		 * PRoot's PTRACE_TRACEME could see it. Rewrite the cancelled
+		 * syscall into a form the policy allows and let PRoot translate
+		 * the restarted one. A SIGSYS the guest itself raised (si_code
+		 * != SYS_SECCOMP) is delivered as-is. */
+		siginfo_t si = {};
+
+		if (ptrace(PTRACE_GETSIGINFO, tracee->pid, NULL, &si) == 0
+		    && si.si_code == SYS_SECCOMP) {
+			signal = handle_sigsys_event(tracee, si.si_syscall);
+		}
+		break;
+	}
 
 	default:
 	    /* Deliver this signal as-is.  */

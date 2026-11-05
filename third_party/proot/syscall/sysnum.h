@@ -38,6 +38,7 @@ typedef enum {
 #undef SYSNUM
 
 extern Sysnum get_sysnum(const Tracee * tracee, RegVersion version);
+extern Sysnum translate_sysnum(Abi abi, word_t sysnum);
 extern void set_sysnum(Tracee * tracee, Sysnum sysnum);
 extern word_t detranslate_sysnum(Abi abi, Sysnum sysnum);
 extern const char *stringify_sysnum(Sysnum sysnum);
