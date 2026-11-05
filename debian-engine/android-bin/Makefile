@@ -23,8 +23,18 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Werror
 HOST_CXX ?= g++
 BUILD := build
 
-SRC := src/json.cpp src/bridge.cpp src/bridge_main.cpp
+# json, frame and apps come from the shared native/lib, linked in rather than
+# copied, so the repo has one JSON reader and one framing implementation.
+LIB := ../../native/lib
+
+SRC := src/bridge.cpp src/bridge_main.cpp
 OBJ := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRC))
+
+# The shared lib's translation units, compiled here with the lib's include path.
+# Kept separate from OBJ because their sources live outside src/ and so do not
+# match the src/%.cpp pattern rule.
+LIB_SRC := $(LIB)/src/json.cpp
+LIB_OBJ := $(BUILD)/json.o
 
 .PHONY: all check clean
 
@@ -44,9 +54,12 @@ $(BUILD)/api_catalog.o: $(BUILD)/api_catalog.cpp
 	$(CXX) $(CXXFLAGS) -Isrc -c $< -o $@
 
 $(BUILD)/%.o: src/%.cpp | $(BUILD)
-	$(CXX) $(CXXFLAGS) -Isrc -I$(BUILD) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Isrc -I$(BUILD) -I$(LIB)/include -c $< -o $@
 
-$(BUILD)/bin/android-bin: $(OBJ) $(BUILD)/api_catalog.o
+$(LIB_OBJ): $(LIB_SRC) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -I$(LIB)/include -c $< -o $@
+
+$(BUILD)/bin/android-bin: $(OBJ) $(LIB_OBJ) $(BUILD)/api_catalog.o
 	@mkdir -p $(BUILD)/bin
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
@@ -59,8 +72,8 @@ $(BUILD):
 # The JSON reader is the one part with logic worth testing off-device; the bridge
 # client needs a live socket and is covered by the on-device suite.
 check: | $(BUILD)
-	$(HOST_CXX) -std=c++17 -O2 -Wall -Wextra -Werror -Isrc \
-		-o $(BUILD)/json_test src/json.cpp test/json_test.cpp
+	$(HOST_CXX) -std=c++17 -O2 -Wall -Wextra -Werror -I$(LIB)/include \
+		-o $(BUILD)/json_test $(LIB)/src/json.cpp test/json_test.cpp
 	$(BUILD)/json_test
 
 clean:

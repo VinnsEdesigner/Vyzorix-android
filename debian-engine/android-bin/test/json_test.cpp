@@ -11,7 +11,7 @@
 #include <iostream>
 #include <string>
 
-#include "json.h"
+#include "vyzorix/json.h"
 
 namespace {
 
@@ -25,53 +25,53 @@ void Check(bool condition, const std::string &what) {
 }
 
 void TestScalars() {
-    Check(abjson::Parse("null").IsNull(), "null parses to null");
-    Check(abjson::Parse("true").boolean, "true parses to true");
-    Check(!abjson::Parse("false").boolean, "false parses to false");
-    Check(abjson::Parse("42").number == 42.0, "integer");
-    Check(abjson::Parse("-3.5e2").number == -350.0, "float with exponent");
-    Check(abjson::Parse("\"hi\"").string == "hi", "plain string");
+    Check(vjson::Parse("null").IsNull(), "null parses to null");
+    Check(vjson::Parse("true").boolean, "true parses to true");
+    Check(!vjson::Parse("false").boolean, "false parses to false");
+    Check(vjson::Parse("42").number == 42.0, "integer");
+    Check(vjson::Parse("-3.5e2").number == -350.0, "float with exponent");
+    Check(vjson::Parse("\"hi\"").string == "hi", "plain string");
 }
 
 void TestStrings() {
-    Check(abjson::Parse("\"a\\nb\"").string == "a\nb", "\\n escape");
-    Check(abjson::Parse("\"q\\\"q\"").string == "q\"q", "escaped quote");
-    Check(abjson::Parse("\"\\u0041\"").string == "A", "\\u escape");
-    Check(abjson::Parse("\"\\u00e9\"").string == "\xc3\xa9", "\\u escape to UTF-8");
-    Check(abjson::Escape("a\"b\\c\nd") == "a\\\"b\\\\c\\nd", "Escape round-trips");
+    Check(vjson::Parse("\"a\\nb\"").string == "a\nb", "\\n escape");
+    Check(vjson::Parse("\"q\\\"q\"").string == "q\"q", "escaped quote");
+    Check(vjson::Parse("\"\\u0041\"").string == "A", "\\u escape");
+    Check(vjson::Parse("\"\\u00e9\"").string == "\xc3\xa9", "\\u escape to UTF-8");
+    Check(vjson::Escape("a\"b\\c\nd") == "a\\\"b\\\\c\\nd", "Escape round-trips");
 }
 
 void TestObjects() {
-    const abjson::Value v = abjson::Parse("{\"id\":\"7\",\"ok\":true,\"n\":3}");
-    Check(v.type == abjson::Value::Type::Object, "object type");
+    const vjson::Value v = vjson::Parse("{\"id\":\"7\",\"ok\":true,\"n\":3}");
+    Check(v.type == vjson::Value::Type::Object, "object type");
     Check(v.Find("id") != nullptr && v.Find("id")->string == "7", "object member");
     Check(v.Find("ok") != nullptr && v.Find("ok")->boolean, "object bool member");
     Check(v.Find("absent") == nullptr, "absent member is nullptr");
 
-    const abjson::Value nested = abjson::Parse("{\"a\":{\"b\":[1,2,3]}}");
-    const abjson::Value *a = nested.Find("a");
+    const vjson::Value nested = vjson::Parse("{\"a\":{\"b\":[1,2,3]}}");
+    const vjson::Value *a = nested.Find("a");
     Check(a != nullptr, "nested object");
-    const abjson::Value *b = a->Find("b");
-    Check(b != nullptr && b->type == abjson::Value::Type::Array && b->array.size() == 3,
+    const vjson::Value *b = a->Find("b");
+    Check(b != nullptr && b->type == vjson::Value::Type::Array && b->array.size() == 3,
           "nested array");
 }
 
 // The three response shapes the bridge sends, verbatim from BridgeProtocol.kt.
 void TestBridgeShapes() {
-    const abjson::Value auth =
-        abjson::Parse("{\"id\":\"auth\",\"ok\":true,\"result\":\"{\\\"session\\\":\\\"s-1\\\"}\"}");
+    const vjson::Value auth =
+        vjson::Parse("{\"id\":\"auth\",\"ok\":true,\"result\":\"{\\\"session\\\":\\\"s-1\\\"}\"}");
     Check(auth.Find("ok") != nullptr && auth.Find("ok")->boolean, "auth ok");
-    const abjson::Value *result = auth.Find("result");
+    const vjson::Value *result = auth.Find("result");
     Check(result != nullptr && result->IsString(), "auth result is a string");
-    const abjson::Value inner = abjson::Parse(result->string);
+    const vjson::Value inner = vjson::Parse(result->string);
     Check(inner.Find("session") != nullptr && inner.Find("session")->string == "s-1",
           "auth result carries the session");
 
-    const abjson::Value ok =
-        abjson::Parse("{\"id\":\"1\",\"ok\":true,\"result\":\"{\\\"v\\\":1}\"}");
+    const vjson::Value ok =
+        vjson::Parse("{\"id\":\"1\",\"ok\":true,\"result\":\"{\\\"v\\\":1}\"}");
     Check(ok.Find("result") != nullptr, "success carries a result");
 
-    const abjson::Value err = abjson::Parse(
+    const vjson::Value err = vjson::Parse(
         "{\"id\":\"2\",\"ok\":false,\"error\":{\"kind\":\"unknown_api\",\"detail\":\"no api\"}}");
     Check(err.Find("error") != nullptr, "failure carries an error");
     Check(err.Find("error")->Find("kind")->string == "unknown_api", "error kind");
@@ -86,8 +86,8 @@ void TestMalformed() {
     for (const char *text : bad) {
         bool threw = false;
         try {
-            abjson::Parse(text);
-        } catch (const abjson::Error &) {
+            vjson::Parse(text);
+        } catch (const vjson::Error &) {
             threw = true;
         }
         Check(threw, std::string("rejects malformed: ") + text);

@@ -28,7 +28,7 @@
 
 #include "api_catalog.h"
 #include "bridge.h"
-#include "json.h"
+#include "vyzorix/json.h"
 
 namespace {
 
@@ -69,7 +69,7 @@ std::string ArgsFromPairs(const std::vector<std::string> &pairs) {
 
         const std::string key = pair.substr(0, equals);
         const std::string value = pair.substr(equals + 1);
-        json += "\"" + abjson::Escape(key) + "\":\"" + abjson::Escape(value) + "\"";
+        json += "\"" + vjson::Escape(key) + "\":\"" + vjson::Escape(value) + "\"";
     }
 
     json += "}";

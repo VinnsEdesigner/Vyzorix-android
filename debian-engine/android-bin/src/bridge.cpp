@@ -11,7 +11,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "json.h"
+#include "vyzorix/json.h"
 
 namespace android_bin {
 namespace {
@@ -183,7 +183,7 @@ void BridgeClient::Authenticate() {
     const char *token = std::getenv("VYZORIX_BRIDGE_TOKEN");
     const std::string auth_request =
         std::string("{\"id\":\"auth\",\"api\":\"auth\",\"args\":{\"token\":\"") +
-        abjson::Escape(token != nullptr ? token : "") + "\"}}";
+        vjson::Escape(token != nullptr ? token : "") + "\"}}";
 
     WriteFrame(FrameType::Request, auth_request);
 
@@ -195,13 +195,13 @@ void BridgeClient::Authenticate() {
         throw BridgeError(std::string("expected a response to auth, got ") + TypeName(type));
     }
 
-    const abjson::Value response = abjson::Parse(payload);
-    const abjson::Value *ok = response.Find("ok");
-    if (ok == nullptr || ok->type != abjson::Value::Type::Bool || !ok->boolean) {
-        const abjson::Value *error = response.Find("error");
+    const vjson::Value response = vjson::Parse(payload);
+    const vjson::Value *ok = response.Find("ok");
+    if (ok == nullptr || ok->type != vjson::Value::Type::Bool || !ok->boolean) {
+        const vjson::Value *error = response.Find("error");
         std::string detail = "authentication refused";
         if (error != nullptr) {
-            const abjson::Value *d = error->Find("detail");
+            const vjson::Value *d = error->Find("detail");
             if (d != nullptr && d->IsString()) {
                 detail = d->string;
             }
@@ -211,10 +211,10 @@ void BridgeClient::Authenticate() {
 
     // The result is itself a JSON document: {"session":"..."}. Read it, but do not
     // require it — a future bridge could omit it and the client would still work.
-    const abjson::Value *result = response.Find("result");
+    const vjson::Value *result = response.Find("result");
     if (result != nullptr && result->IsString()) {
-        const abjson::Value inner = abjson::Parse(result->string);
-        const abjson::Value *session = inner.Find("session");
+        const vjson::Value inner = vjson::Parse(result->string);
+        const vjson::Value *session = inner.Find("session");
         if (session != nullptr && session->IsString()) {
             session_ = session->string;
         }
@@ -224,7 +224,7 @@ void BridgeClient::Authenticate() {
 std::string BridgeClient::Call(const std::string &api, const std::string &args_json) {
     const std::string id = std::to_string(next_id_++);
     const std::string request = std::string("{\"id\":\"") + id + "\",\"api\":\"" +
-                                abjson::Escape(api) + "\",\"args\":" + args_json + "}";
+                                vjson::Escape(api) + "\",\"args\":" + args_json + "}";
 
     WriteFrame(FrameType::Request, request);
 
@@ -240,23 +240,23 @@ std::string BridgeClient::Call(const std::string &api, const std::string &args_j
             continue;
         }
 
-        const abjson::Value response = abjson::Parse(payload);
-        const abjson::Value *response_id = response.Find("id");
+        const vjson::Value response = vjson::Parse(payload);
+        const vjson::Value *response_id = response.Find("id");
         if (response_id != nullptr && response_id->IsString() && response_id->string != id) {
             continue;
         }
 
-        const abjson::Value *ok = response.Find("ok");
-        if (ok != nullptr && ok->type == abjson::Value::Type::Bool && ok->boolean) {
-            const abjson::Value *result = response.Find("result");
+        const vjson::Value *ok = response.Find("ok");
+        if (ok != nullptr && ok->type == vjson::Value::Type::Bool && ok->boolean) {
+            const vjson::Value *result = response.Find("result");
 
             return result != nullptr && result->IsString() ? result->string : std::string();
         }
 
-        const abjson::Value *error = response.Find("error");
+        const vjson::Value *error = response.Find("error");
         if (error != nullptr) {
-            const abjson::Value *kind = error->Find("kind");
-            const abjson::Value *detail = error->Find("detail");
+            const vjson::Value *kind = error->Find("kind");
+            const vjson::Value *detail = error->Find("detail");
             throw BridgeError(
                 (kind != nullptr && kind->IsString() ? kind->string : std::string("error")) + ": " +
                 (detail != nullptr && detail->IsString() ? detail->string : std::string()));

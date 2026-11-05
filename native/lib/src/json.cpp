@@ -1,13 +1,13 @@
 // JSON reader/writer — see json.h for why this is hand-rolled.
 
-#include "json.h"
+#include "vyzorix/json.h"
 
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
-namespace abjson {
+namespace vjson {
 namespace {
 
 class Parser {
@@ -355,4 +355,4 @@ std::string Escape(const std::string &raw) {
     return out;
 }
 
-} // namespace abjson
+} // namespace vjson

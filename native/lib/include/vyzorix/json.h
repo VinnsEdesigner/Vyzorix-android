@@ -11,8 +11,8 @@
 // for every architecture. A few hundred lines that build anywhere is cheaper than
 // that, and the surface is small enough to keep correct.
 
-#ifndef VYZORIX_ANDROID_BIN_JSON_H
-#define VYZORIX_ANDROID_BIN_JSON_H
+#ifndef VYZORIX_JSON_H
+#define VYZORIX_JSON_H
 
 #include <cstdint>
 #include <map>
@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-namespace abjson {
+namespace vjson {
 
 /** Thrown when a document is not valid JSON this reader understands. */
 class Error : public std::runtime_error {
@@ -62,6 +62,6 @@ Value Parse(const std::string &text);
 /** Escapes `raw` as a JSON string body (without the surrounding quotes). */
 std::string Escape(const std::string &raw);
 
-} // namespace abjson
+} // namespace vjson
 
-#endif // VYZORIX_ANDROID_BIN_JSON_H
+#endif // VYZORIX_JSON_H
