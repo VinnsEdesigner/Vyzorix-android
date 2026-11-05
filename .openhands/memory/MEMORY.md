@@ -99,3 +99,31 @@ embedded loader also used `open(2)`. The guest died with `terminated with signal
   kill` then relaunch (`-wipe-data` if needed). Gradle's device discovery also
   races the adb server — `./gradlew --stop` + restart helps.
 - Tests run one class at a time reliably; run the whole suite in one go sparingly.
+
+## Layer 2 is complete (2026-11-05)
+
+The container terminal works and Layer 2's missing pieces are built.
+
+- **`android-bin` is C++, not Go** (design change; the repo has two languages:
+  Kotlin/Gradle and C++). `debian-engine/android-bin/` — its own Makefile, built for
+  **glibc** with the GNU cross-compilers (`aarch64-linux-gnu-g++`,
+  `arm-linux-gnueabihf-g++`), never the NDK. `apis.txt` is the single source: one
+  generator pass emits both `api_catalog.cpp` and the symlinks. `ApiCatalogTest`
+  (android-core unit) fails the gate if `apis.txt` drifts from the router's
+  registrations. `make check` runs the JSON tests. The installable unit is
+  `build/bin/` (binary + symlinks together).
+- **Extended tier**: `RootfsInstaller.ensureExtended()`, checksum from
+  `ROOTFS_EXTENDED_SHA256` (read from the build's SHA256SUMS), marker
+  `files/extended.installed`. Empty checksum = tier disabled, never unverified.
+- **tmux reattach**: `loginShellArgs(tmuxSession=...)` wraps the shell in
+  `tmux new-session -A -s vyzorix-<sessionId>`, gated on `hasTmux`. The
+  `ServicePtySessionPort.shellRequest` seam now takes `(sessionId, token)`.
+- **Native gate split**: clang-format covers every source we wrote; clang-tidy runs
+  only on NDK-built sources (android-bin is not in AGP's compile DB — tidy there
+  fails on include paths, not real problems).
+- **Toolchain scripts**: `scripts/install-toolchain.sh` (one command, persistent
+  prefix, re-runnable), `scripts/run-emulator.sh` (one-command boot + wait), both
+  documented in the root `README.md` and `AGENTS.md`. `install-toolchain.sh` also
+  installs `g++-*` cross-compilers and retries apt on a 503 (the mirror rate-limits).
+- **Not done / next**: Layer 3 (`app-runtime/` — supervisor, `app-*`, inotify). The
+  rootfs `debian-extended` tarball is published; a device fetches it on demand.
