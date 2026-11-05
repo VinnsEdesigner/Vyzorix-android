@@ -24,9 +24,7 @@ import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult
-import com.vyzorix.engine.EngineConfig
 import com.vyzorix.engine.ProotLauncher
-import com.vyzorix.engine.RootfsInstaller
 import com.vyzorix.permissions.PermissionRequester
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -66,26 +64,6 @@ class VyzorixForegroundService : Service() {
 
     /** Live PTY readers, keyed by channel. The reader owns the fd and closes it. */
     private val readers = ConcurrentHashMap<Int, PtyReader>()
-
-    /**
-     * Extracts the bundled rootfs on first boot.
-     *
-     * Built here rather than injected because it needs only the context, and because
-     * the service is created by the system from an `Intent` — there is nowhere to
-     * inject into. The asset name and checksum come from the build config.
-     */
-    private val rootfsInstaller =
-        RootfsInstaller(
-            context = this,
-            // BuildConfig belongs to :app, so the values are parked in EngineConfig by
-            // Application.onCreate and read here — the same shape as CloudLinkProvider.
-            // Null means no engine config was installed: the installer then finds no
-            // bundled asset and no fallback, and the device runs bridge-only.
-            expectedSha256 = EngineConfig.get()?.sha256.orEmpty(),
-            download = EngineConfig.get()?.open,
-            baseUrl = EngineConfig.get()?.baseUrl.orEmpty(),
-            abi = EngineConfig.get()?.bundledAbi.orEmpty(),
-        )
 
     /** The one-shot install thread, kept so `onDestroy` can join it. */
     private var installThread: Thread? = null
@@ -133,7 +111,10 @@ class VyzorixForegroundService : Service() {
         // the next boot retries.
         installThread =
             Thread({
-                val ready = rootfsInstaller.ensureInstalled()
+                // RootfsBootstrap pairs the installer with the build's EngineConfig,
+                // so the wiring lives in one place rather than here. Idempotent: on a
+                // device that already has the rootfs this is three filesystem checks.
+                val ready = RootfsBootstrap.ensureInstalled(this)
                 Log.i(TAG, "rootfs install finished; engine ready=$ready")
             }, "vyzorix-rootfs-install").apply {
                 isDaemon = true

@@ -69,8 +69,20 @@ object ProotLauncher {
 
     fun socketPath(context: Context): File = File(context.filesDir, "android.sock")
 
-    /** proot's scratch dir. Created on demand, because proot will not create it. */
-    fun tmpDir(context: Context): File = File(context.filesDir, TMP_DIR).apply { mkdirs() }
+    /**
+     * proot's scratch dir, created.
+     *
+     * A getter that *makes* the directory. That is deliberate for the callers that
+     * need it to exist (building the environment), but it is why [isReady] must not
+     * use it: a readiness check that repairs the thing it is checking can never
+     * report it missing, so it would claim the engine is ready and proot would then
+     * fail with "can't create temporary file". [tmpDirPath] is the side-effect-free
+     * form, and [isReady] uses that.
+     */
+    fun tmpDir(context: Context): File = tmpDirPath(context).apply { mkdirs() }
+
+    /** proot's scratch dir, without creating it. For checks, not for setup. */
+    fun tmpDirPath(context: Context): File = File(context.filesDir, TMP_DIR)
 
     /**
      * True when the engine can be started at all.
@@ -83,7 +95,7 @@ object ProotLauncher {
     fun isReady(context: Context): Boolean =
         prootBinary(context).canExecute() &&
             File(rootfs(context), "bin/bash").exists() &&
-            tmpDir(context).isDirectory
+            tmpDirPath(context).isDirectory
 
     /**
      * True when [hostPath] is inside the app's engine zone.

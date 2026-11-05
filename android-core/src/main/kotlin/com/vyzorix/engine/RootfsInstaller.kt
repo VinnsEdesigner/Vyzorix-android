@@ -109,6 +109,16 @@ class RootfsInstaller(
 
         seedOverlay()
 
+        // proot's scratch dir. It is part of what isReady() checks, so setup has to
+        // create it — and it is created HERE rather than by the readiness check,
+        // because a check that repairs what it inspects can never report the problem.
+        // (It used to, via tmpDir()'s mkdirs side effect, which hid this: the install
+        // never made the directory and isReady() silently made it on every call.)
+        val tmp = ProotLauncher.tmpDir(context)
+        if (!tmp.isDirectory) {
+            throw IOException("could not create proot's scratch dir ${tmp.absolutePath}")
+        }
+
         // The one thing the engine cannot start without.
         if (!ProotLauncher.isReady(context)) {
             throw IOException(

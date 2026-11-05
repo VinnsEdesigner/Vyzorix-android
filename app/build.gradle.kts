@@ -185,6 +185,11 @@ android {
         // SERVER_PUBLIC_KEY is the pinned server signing key. It is the device's only
         // trust anchor for what the server sends, so it is compiled in rather than
         // fetched — a fetched trust anchor is no anchor at all.
+        // Instrumented tests need a runner declared or none are discovered: the task
+        // reports "Starting 0 tests" and passes, which looks green while proving
+        // nothing.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         buildConfigField("String", "CLOUD_BASE_URL", "\"${cloudBaseUrl()}\"")
         buildConfigField("String", "SERVER_PUBLIC_KEY", "\"${serverPublicKey()}\"")
 
@@ -242,6 +247,23 @@ android {
         jvmTarget = "17"
     }
 
+    // Tests live in the repo-root tests/ tree, matching the other modules.
+    //
+    // The instrumented source set matters here and nowhere else: `:app` is the only
+    // module that has the rootfs asset, so it is the only place the container's
+    // terminal can be driven end to end. An `:android-core` instrumented test runs in
+    // a different APK with no assets, so `ProotLauncher.isReady()` is false there and
+    // the shell falls back to the uncontained one — which is why the engine path had
+    // no test until now.
+    sourceSets {
+        getByName("test") {
+            java.setSrcDirs(listOf("../tests/app/unit/kotlin"))
+        }
+        getByName("androidTest") {
+            java.setSrcDirs(listOf("../tests/app/instrumented/kotlin"))
+        }
+    }
+
     // See android-core: compileSdk is well above minSdk, so an unguarded newer-API
     // call must fail the gate rather than the device.
     lint {
@@ -260,6 +282,21 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+
+    // The engine's end-to-end test lives here because the rootfs asset does. It
+    // drives the real service, the real bridge and the real container, so it needs
+    // the instrumented runner and nothing to fake with.
+    // Robolectric for the shell-selection unit test: `isReady()` is three filesystem
+    // checks against an Android context, so the test stages real files rather than
+    // mocking. That needs an Android runtime on the JVM.
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.junit4)
 }
 
 /**
