@@ -68,6 +68,9 @@ class VyzorixForegroundService : Service() {
     /** The one-shot install thread, kept so `onDestroy` can join it. */
     private var installThread: Thread? = null
 
+    /** The Layer 3 supervisor process, when it is running. */
+    private var supervisor: Process? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -124,6 +127,16 @@ class VyzorixForegroundService : Service() {
                 // that is not there. A failure here is logged and ignored — the
                 // engine works without it — and the next boot retries.
                 if (ready) {
+                    // The Layer 3 binaries go in before the extended tier: the
+                    // supervisor is what runs apps, and it is small and bundled, so
+                    // it must not wait on a 108 MB download.
+                    val layer3 = RootfsBootstrap.ensureLayer3(this)
+                    Log.i(TAG, "layer 3 install finished; supervisor=$layer3")
+
+                    if (layer3) {
+                        startSupervisor()
+                    }
+
                     val extended = RootfsBootstrap.ensureExtended(this)
                     Log.i(TAG, "extended tier install finished; installed=$extended")
                 }
@@ -224,6 +237,61 @@ class VyzorixForegroundService : Service() {
         } else {
             ProotLauncher.uncontainedShellRequest(this, token)
         }
+
+    /**
+     * Starts the Layer 3 supervisor inside the container, and relays its log.
+     *
+     * Run as a **plain child process**, not a PTY session: the supervisor is a
+     * daemon, and giving it a terminal would only add a reader whose output goes
+     * nowhere. Its stderr is captured on a daemon thread and written to logcat, so
+     * `logcat` shows supervisor output alongside the service's own.
+     *
+     * A failure is logged, not fatal: a device whose supervisor did not start still
+     * has the engine, the bridge and the terminal. The next boot retries.
+     */
+    private fun startSupervisor() {
+        if (!ProotLauncher.hasSupervisor(this)) {
+            Log.w(TAG, "supervisor binary is not installed; not starting it")
+
+            return
+        }
+
+        try {
+            val builder =
+                ProcessBuilder(ProotLauncher.supervisorArgs(this))
+                    .redirectErrorStream(true)
+                    // The proot launcher reads PROOT_TMP_DIR from its own
+                    // environment, before it execs anything.
+                    .apply {
+                        environment()[ProotLauncher.TMP_DIR_ENV] =
+                            ProotLauncher.tmpDir(this@VyzorixForegroundService).absolutePath
+                    }
+
+            val process = builder.start()
+            supervisor = process
+
+            Thread({ relaySupervisorLog(process) }, "vyzorix-supervisor-log").apply {
+                isDaemon = true
+                start()
+            }
+
+            // java.lang.Process.pid() is Java 9+; on Android the field is the portable form.
+            Log.i(TAG, "supervisor started")
+        } catch (t: Throwable) {
+            Log.e(TAG, "could not start the supervisor", t)
+        }
+    }
+
+    /** Copies the supervisor's output to logcat until it ends. */
+    private fun relaySupervisorLog(process: Process) {
+        try {
+            process.inputStream.bufferedReader().forEachLine { line ->
+                Log.i("VyzorixSupervisor", line)
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "supervisor log relay ended: ${t.message}")
+        }
+    }
 
     /**
      * Registers every API. Adding one is a line here plus a file in `apis/`.

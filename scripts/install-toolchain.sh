@@ -88,7 +88,13 @@ if ! skipped jdk; then
     sudo apt-get install -y openjdk-21-jdk-headless unzip curl
     # Copy rather than symlink: /usr/lib/jvm is wiped on restart, the prefix is not.
     sudo mkdir -p "$PREFIX/jdk"
-    sudo cp -a /usr/lib/jvm/java-21-openjdk-amd64/. "$PREFIX/jdk/"
+    sudo cp -aL /usr/lib/jvm/java-21-openjdk-amd64/. "$PREFIX/jdk/"
+    # -L dereferences, and that matters: the JDK ships `conf/security/java.security`
+    # as a symlink to /etc/java-21-openjdk/security/java.security, which is in the
+    # ephemeral root. Copying the link verbatim leaves a dangling one, and the JVM
+    # then dies with "Error loading java.security file" — a failure that appears
+    # after a restart, in a tool that worked before it. Dereferencing copies the
+    # target's contents, so the prefix is self-contained.
     sudo chown -R "$(id -un):$(id -gn)" "$PREFIX/jdk"
   fi
   export JAVA_HOME="$PREFIX/jdk"

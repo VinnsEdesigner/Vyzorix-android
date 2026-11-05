@@ -144,6 +144,20 @@ fun sha256FromSums(name: String): String {
 }
 
 /**
+ * The bundled Layer 3 archive for this build's ABI, or null when it has not been
+ * built.
+ *
+ * Unlike the rootfs, this is always bundled: it is our own code, it is ~360 KB, and
+ * a device with no network must still be able to run apps. A missing archive is not
+ * an error — the app builds and runs without the supervisor, which is the state a
+ * source checkout is in until `scripts/build-layer3.sh` has run.
+ */
+fun bundledLayer3File(): File? =
+    rootProject
+        .file("app-runtime/dist/layer3-${bundledRootfsAbi()}.tar.gz")
+        .takeIf { it.isFile }
+
+/**
  * Where a non-arm64 device fetches its rootfs.
  *
  * The GitHub release that carries the tarballs. Kept as a build config so the URL is
@@ -370,7 +384,38 @@ val stageRootfs by tasks.registering {
 android.sourceSets.getByName("main").assets.srcDir(
     layout.buildDirectory.dir("generated/rootfsAssets"),
 )
+android.sourceSets.getByName("main").assets.srcDir(
+    layout.buildDirectory.dir("generated/layer3Assets"),
+)
+
+/**
+ * Stages the Layer 3 archive as an APK asset.
+ *
+ * The same copy-not-srcDir rule as the rootfs, and the same `.l3` extension
+ * trick: AGP's mergeAssets unpacks an asset it recognises as an archive, so a
+ * `.tar.gz` would arrive decompressed. The bytes are still gzip; only the name
+ * avoids AGP's handling.
+ */
+val stageLayer3 by tasks.registering {
+    val source = bundledLayer3File()
+    val destDir = layout.buildDirectory.dir("generated/layer3Assets/layer3")
+    val destName = "layer3.l3"
+
+    description = "Stages the ${bundledRootfsAbi()} Layer 3 binaries into assets/."
+
+    onlyIf { source != null }
+    if (source != null) {
+        inputs.file(source)
+        outputs.file(destDir.map { it.file(destName) })
+
+        doLast {
+            val out = destDir.get().file(destName).asFile
+            out.parentFile.mkdirs()
+            source.inputStream().use { input -> out.outputStream().use { input.copyTo(it) } }
+        }
+    }
+}
 
 tasks
     .matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(stageRootfs) }
+    .configureEach { dependsOn(stageRootfs, stageLayer3) }

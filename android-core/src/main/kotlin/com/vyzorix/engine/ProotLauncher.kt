@@ -17,6 +17,20 @@ object ProotLauncher {
     /** Where the rootfs and the writable overlay live, both app-private. */
     const val ROOTFS_DIR = "rootfs"
     const val OVERLAY_DIR = "overlay"
+
+    /**
+     * App storage: the registry, the logs, and the apps' own files.
+     *
+     * Bound to `/home/apps` inside the container. It is **app storage, not package
+     * storage**, and it is separate from the overlay for one reason that decides it:
+     * §2 says Layer 2 is disposable and Layer 3's storage is not. The overlay holds
+     * installed packages and is conceptually part of the engine; this holds the
+     * operator's apps and must survive anything the engine does.
+     */
+    const val APPS_DIR = "apps"
+
+    /** Where app storage appears inside the container. */
+    const val APPS_IN_CONTAINER = "/home/apps"
     const val PROOT_LIBRARY = "libproot.so"
 
     /**
@@ -66,6 +80,8 @@ object ProotLauncher {
     fun rootfs(context: Context): File = File(context.filesDir, ROOTFS_DIR)
 
     fun overlay(context: Context): File = File(context.filesDir, OVERLAY_DIR)
+
+    fun appsDir(context: Context): File = File(context.filesDir, APPS_DIR)
 
     fun socketPath(context: Context): File = File(context.filesDir, "android.sock")
 
@@ -144,6 +160,10 @@ object ProotLauncher {
                 // the overlay is the only thing there — which is the point: an
                 // update swaps files/rootfs and leaves on-device config alone.
                 "$overlay/etc:/etc/vyzorix",
+                // App storage (§2: Layer 2 is disposable, Layer 3's storage is not).
+                // The supervisor's registry, its logs and the apps' files live here,
+                // so a rootfs replacement leaves every app and its data alone.
+                "${appsDir(context).absolutePath}:$APPS_IN_CONTAINER",
                 // The bridge socket, so the container can reach the API bridge. The
                 // socket file only, not the directory that holds the secret store.
                 "${socketPath(context).absolutePath}:$BRIDGE_SOCKET_IN_CONTAINER",
@@ -292,6 +312,69 @@ object ProotLauncher {
         )
 
     /**
+     * The request that starts the Layer 3 supervisor inside the container.
+     *
+     * Not a PTY session: the supervisor is a daemon, not a terminal. It is run with
+     * the same proot argv shape as the login shell, minus the shell — `env -i` to
+     * clear the environment, then the supervisor binary, which is installed into the
+     * rootfs by [Layer3Installer].
+     *
+     * Its stdout and stderr are the caller's to capture: the supervisor logs to
+     * stderr, and Layer 1 relays that to logcat so `logcat` shows supervisor output
+     * without a second log path.
+     *
+     * `--apps`, `--logs` and `--socket` are passed explicitly rather than left to the
+     * binary's defaults, so the paths are stated in one place (here) and the
+     * defaults are only a fallback for a hand-run supervisor.
+     */
+    fun supervisorArgs(context: Context): List<String> {
+        val args =
+            mutableListOf(
+                prootBinary(context).absolutePath,
+                "--kill-on-exit",
+                "--link2symlink",
+                "-0",
+                "-r",
+                rootfs(context).absolutePath,
+            )
+
+        for (bind in binds(context)) {
+            args += "-b"
+            args += bind
+        }
+
+        args +=
+            listOf(
+                "-w",
+                APPS_IN_CONTAINER,
+                "/usr/bin/env",
+                "-i",
+                "HOME=/root",
+                "TERM=dumb",
+                "LANG=C.UTF-8",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                SUPERVISOR_BINARY,
+                "--apps",
+                "$APPS_IN_CONTAINER/apps.json",
+                "--logs",
+                "$APPS_IN_CONTAINER/logs",
+                "--socket",
+                "$APPS_IN_CONTAINER/supervisor.sock",
+            )
+
+        return args
+    }
+
+    /**
+     * True when the supervisor binary is installed in the rootfs.
+     *
+     * Like [hasTmux], this is checked rather than assumed: the binary is installed by
+     * [Layer3Installer], which may not have run yet on a device upgrading in place.
+     */
+    fun hasSupervisor(context: Context): Boolean =
+        File(rootfs(context), SUPERVISOR_IN_ROOTFS.trimStart('/')).canExecute()
+
+    /**
      * A plain device shell, for when the container engine is not installed.
      *
      * This is **not** the architecture's terminal: it runs as the app's own uid, so
@@ -328,4 +411,15 @@ object ProotLauncher {
      * It ships in the extended tier, so it may be absent; [hasTmux] is the check.
      */
     const val TMUX_BINARY = "/usr/bin/tmux"
+
+    /**
+     * The supervisor binary inside the container, absolute.
+     *
+     * Installed into the overlay's `/usr/local/bin` by the Layer 3 installer, so it
+     * survives a rootfs replacement the same way the app storage does.
+     */
+    const val SUPERVISOR_BINARY = "/usr/local/bin/supervisor"
+
+    /** The same path, relative to the rootfs, for the installed check. */
+    const val SUPERVISOR_IN_ROOTFS = "usr/local/bin/supervisor"
 }

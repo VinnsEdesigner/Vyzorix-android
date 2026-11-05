@@ -2,6 +2,7 @@ package com.vyzorix.service
 
 import android.content.Context
 import com.vyzorix.engine.EngineConfig
+import com.vyzorix.engine.Layer3Installer
 import com.vyzorix.engine.RootfsInstaller
 
 /**
@@ -77,4 +78,13 @@ object RootfsBootstrap {
 
         return installer.ensureExtended()
     }
+
+    /**
+     * Ensures the Layer 3 container binaries are installed. Returns whether the
+     * supervisor is present afterwards.
+     *
+     * Idempotent and cheap when already installed: the first thing it does is a
+     * marker check. Blocking I/O on a first install, so not the main thread.
+     */
+    fun ensureLayer3(context: Context): Boolean = Layer3Installer(context).ensureInstalled()
 }
