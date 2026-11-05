@@ -389,14 +389,6 @@ android.sourceSets.getByName("main").assets.srcDir(
 )
 
 /**
- * Stages the Layer 3 archive as an APK asset.
- *
- * The same copy-not-srcDir rule as the rootfs, and the same `.l3` extension
- * trick: AGP's mergeAssets unpacks an asset it recognises as an archive, so a
- * `.tar.gz` would arrive decompressed. The bytes are still gzip; only the name
- * avoids AGP's handling.
- */
-/**
  * Builds the Layer 3 container binaries with their own Makefile.
  *
  * **This exists because its absence cost a day.** The tarball is produced by
@@ -435,6 +427,10 @@ val stageLayer3 by tasks.registering {
     val destDir = layout.buildDirectory.dir("generated/layer3Assets/layer3")
     val destName = "layer3.l3"
 
+    // The same copy-not-srcDir rule as the rootfs, and the same `.l3` extension
+    // trick: AGP's mergeAssets unpacks an asset it recognises as an archive, so a
+    // `.tar.gz` would arrive decompressed. The bytes are still gzip; only the name
+    // avoids AGP's handling.
     description = "Stages the ${bundledRootfsAbi()} Layer 3 binaries into assets/."
 
     // Building the binaries is a prerequisite of staging them, so the asset can
