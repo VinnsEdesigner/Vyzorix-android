@@ -127,3 +127,59 @@ The container terminal works and Layer 2's missing pieces are built.
   installs `g++-*` cross-compilers and retries apt on a 503 (the mirror rate-limits).
 - **Not done / next**: Layer 3 (`app-runtime/` — supervisor, `app-*`, inotify). The
   rootfs `debian-extended` tarball is published; a device fetches it on demand.
+
+## Layer 3 — built, one device-only defect open (2026-11-05)
+
+Layer 3 is written and its host tests all pass, but it is **not yet working on a
+device**: the supervisor starts and binds its socket, then SIGSEGVs ~200ms later.
+
+**What exists** (`app-runtime/`, `native/lib/`):
+- `native/lib` — shared C++: `json`, `frame` (the repo's `[4B len][1B type][payload]`
+  framing over unix sockets), `apps` (the `apps.json` registry, atomic save, PID
+  start-time tokens from `/proc/<pid>/stat` field 22, parsed from the last `)`).
+- `supervisor/` — `Manager` (policy: autostart, backoff, give-up, recycled-pid
+  check) over an injected `Host` (the only file with fork/exec), plus a control
+  socket whose `HandleRequest` is pure JSON-in/JSON-out. 14 + 15 host tests.
+- `cli-wrappers/` — one `app-tool` binary, nine `app-*` symlinks (same pattern as
+  android-bin). `app-list` prints the registry JSON; `app-expose` refuses a
+  non-loopback bind without a token.
+- `scripts/build-layer3.sh` — cross-compiles all three tools per ABI into
+  `app-runtime/dist/layer3-<abi>.tar.gz`, **statically linked** (the rootfs is
+  Debian 12 / glibc 2.36; the host toolchain is 2.41 — a dynamic binary fails to
+  load on device with "GLIBC_2.38 not found").
+- Layer 1: `ProotLauncher` binds `files/apps:/home/apps`, `supervisorArgs()`;
+  `Layer3Installer` unpacks the asset into `overlay/usr-local` (so a rootfs
+  replacement leaves it); the service spawns the supervisor and restarts it on exit.
+
+**The open defect.** `proot info: vpid 1: terminated with signal 11` ~200ms after
+`supervisor: ready on /home/apps/supervisor.sock`. Started by hand (`run-as ...
+proot ... supervisor`) it runs forever, so it is specific to the **ART process**,
+where Android's seccomp filter is active and proot's SIGSYS handler runs.
+Ruled out: the phantom-process killer (Android 9 has none), `PROOT_NO_SECCOMP=1`,
+the extended-tier install racing, and the select/poll choice (a nanosleep-only loop
+crashes the same way). The last SIGSYS before the crash is a blocked `mkdir`, so
+**suspect the SIGSYS handler's rewind/restart path** (`third_party/proot/syscall/
+sigsys.c`). Note the handler is required: without it nothing execs at all (open,
+access, poll, mkdir, set_robust_list are all trapped by the filter).
+
+**Device-only bugs fixed this session** (each found by running it, not reading):
+- `TarGz` symlink branch used `deleteRecursively` when a directory was in the way,
+  which destroyed `usr/lib64` and left `usr/lib64 -> usr/lib64` (an infinite
+  self-loop) — every dynamic binary then failed with "ld-linux.so not found".
+- `TarGz.extract` treated an empty checksum as a mismatch, rejecting every bundled
+  asset.
+- The child opened its log after `chdir`, so a missing app dir exited 127 with an
+  empty log.
+- Container binaries must be **static** (glibc mismatch), and `build-layer3.sh`
+  now fails if any is dynamic.
+
+**Toolchain traps hit this session** (now handled in `install-toolchain.sh`):
+- `cp -a` of the JDK preserves symlinks into `/etc/java-21-openjdk` and
+  `/etc/ssl/certs/java/cacerts`, which the sandbox wipes. Use `cp -aL`, and run
+  ca-certificates-java's postinst with the prefix's `java` on PATH to generate
+  `cacerts` — without it every TLS call (Robolectric's jar fetch) fails with PKIX.
+- `apt-get update` is needed after a restart before `apt-get install` finds
+  packages; the mirror rate-limits (503) so retry.
+- `scripts/native-gate.sh` now derives its clang-tidy set from AGP's compile
+  database instead of a hand-list, so a module is tidy'd only when the DB describes
+  how to build it (the container tools are glibc-built and are not in it).
