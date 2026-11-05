@@ -143,7 +143,7 @@ fun rootfsBaseUrl(): String =
         // to authenticated callers — so a device in a member of the public's hands
         // gets a 404. The tarballs are Debian packages, public upstream, so they live
         // in their own public repo and the code stays private.
-        ?: "https://github.com/VinnsEdesigner/vyzorix-engine-assets/releases/latest/download"
+        ?: "https://github.com/VinnsEdesigner/gz-_ASSETS/releases/latest/download"
 
 /**
  * Whether the terminal may run a plain device shell when the container engine is

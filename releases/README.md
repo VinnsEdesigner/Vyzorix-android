@@ -1,7 +1,7 @@
 # `releases/` — published engine assets
 
 The rootfs tarballs are built here and published to a GitHub release **in a different,
-public repository**: [`VinnsEdesigner/vyzorix-engine-assets`](https://github.com/VinnsEdesigner/vyzorix-engine-assets).
+public repository**: [`VinnsEdesigner/gz-_ASSETS`](https://github.com/VinnsEdesigner/gz-_ASSETS).
 
 **This repository is private, and that decides where the release lives.** GitHub
 serves a private repository's release assets only to authenticated callers, so a
@@ -38,7 +38,7 @@ That produces, per ABI:
 ```bash
 VERSION=v1.0.0
 gh release create "$VERSION" \
-  --repo VinnsEdesigner/vyzorix-engine-assets \
+  --repo VinnsEdesigner/gz-_ASSETS \
   --title "Engine assets $VERSION" \
   --notes "Rootfs tarballs for arm64, armeabi-v7a and x86_64." \
   debian-engine/rootfs/dist/*.tar.gz \
@@ -49,7 +49,7 @@ gh release create "$VERSION" \
 Note the `--repo`: the **public assets repository**, not this one.
 
 The app fetches from
-`https://github.com/VinnsEdesigner/vyzorix-engine-assets/releases/latest/download/`, so
+`https://github.com/VinnsEdesigner/gz-_ASSETS/releases/latest/download/`, so
 a release marked **latest** is what devices pick up. `ROOTFS_BASE_URL` in the build
 config points there; a fork overrides it with `-ProotfsBaseUrl=...`.
 
