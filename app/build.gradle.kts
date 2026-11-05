@@ -396,6 +396,40 @@ android.sourceSets.getByName("main").assets.srcDir(
  * `.tar.gz` would arrive decompressed. The bytes are still gzip; only the name
  * avoids AGP's handling.
  */
+/**
+ * Builds the Layer 3 container binaries with their own Makefile.
+ *
+ * **This exists because its absence cost a day.** The tarball is produced by
+ * `scripts/build-layer3.sh`, and staging only copies whatever is already at
+ * `app-runtime/dist/` — so a source change to the supervisor was invisible on the
+ * device while the host build and its tests passed. Every device test installed the
+ * same stale binary, which made a series of isolation experiments look like they
+ * proved things they did not.
+ *
+ * The task is skipped when the cross-compiler is missing, so a build on a machine
+ * without the toolchain still produces an APK (bridge-only, no supervisor) rather
+ * than failing. `./gradlew gate` and the container tools' own `make check` are what
+ * verify the tools themselves.
+ */
+val buildLayer3 by tasks.registering(Exec::class) {
+    description = "Cross-compiles the Layer 3 container binaries for ${bundledRootfsAbi()}."
+
+    val script = rootProject.file("scripts/build-layer3.sh")
+    onlyIf { script.isFile }
+    if (script.isFile) {
+        commandLine("bash", script.absolutePath, "--arch", bundledRootfsAbi())
+        // The tools' own sources are the inputs. Declaring the whole tree is
+        // deliberate: a missed file here reintroduces the stale-binary bug.
+        inputs.dir(rootProject.file("app-runtime/supervisor/src"))
+        inputs.dir(rootProject.file("app-runtime/cli-wrappers"))
+        inputs.dir(rootProject.file("native/lib"))
+        inputs.file(rootProject.file("app-runtime/supervisor/Makefile"))
+        inputs.file(rootProject.file("app-runtime/cli-wrappers/Makefile"))
+        inputs.file(script)
+        outputs.file(rootProject.file("app-runtime/dist/layer3-${bundledRootfsAbi()}.tar.gz"))
+    }
+}
+
 val stageLayer3 by tasks.registering {
     val source = bundledLayer3File()
     val destDir = layout.buildDirectory.dir("generated/layer3Assets/layer3")
@@ -403,16 +437,24 @@ val stageLayer3 by tasks.registering {
 
     description = "Stages the ${bundledRootfsAbi()} Layer 3 binaries into assets/."
 
-    onlyIf { source != null }
-    if (source != null) {
-        inputs.file(source)
-        outputs.file(destDir.map { it.file(destName) })
+    // Building the binaries is a prerequisite of staging them, so the asset can
+    // never be older than the sources that produce it.
+    dependsOn(buildLayer3)
 
-        doLast {
-            val out = destDir.get().file(destName).asFile
-            out.parentFile.mkdirs()
-            source.inputStream().use { input -> out.outputStream().use { input.copyTo(it) } }
-        }
+    // Resolved at execution time, not configuration time: the tarball does not exist
+    // until `buildLayer3` has run, and reading it here would always see the previous
+    // build's file (or none).
+    val sourceProvider = providers.provider { bundledLayer3File() }
+
+    onlyIf { sourceProvider.get() != null }
+    inputs.file(sourceProvider)
+    outputs.file(destDir.map { it.file(destName) })
+
+    doLast {
+        val input = sourceProvider.get() ?: return@doLast
+        val out = destDir.get().file(destName).asFile
+        out.parentFile.mkdirs()
+        input.inputStream().use { from -> out.outputStream().use { from.copyTo(it) } }
     }
 }
 
