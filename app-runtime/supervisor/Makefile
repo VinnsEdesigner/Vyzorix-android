@@ -14,6 +14,8 @@
 
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Werror
+# Link flags, so a caller can request a static link (see scripts/build-layer3.sh).
+LDFLAGS ?=
 BUILD := build
 
 LIB := ../../native/lib
@@ -28,15 +30,15 @@ all: $(BUILD)/bin/supervisor
 
 $(BUILD)/bin/supervisor: $(SRC) $(LIB_SRC) | $(BUILD)
 	@mkdir -p $(BUILD)/bin
-	$(CXX) $(CXXFLAGS) $(INC) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(INC) $(LDFLAGS) -o $@ $^
 
 # The manager tests use a fake host, so they need manager.cpp but not host_system.cpp.
 # control_test drives the request handler directly, with no socket.
 check: | $(BUILD)
-	$(CXX) $(CXXFLAGS) $(INC) -o $(BUILD)/manager_test \
+	$(CXX) $(CXXFLAGS) $(INC) $(LDFLAGS) -o $(BUILD)/manager_test \
 		src/manager.cpp $(LIB_SRC) test/manager_test.cpp
 	$(BUILD)/manager_test
-	$(CXX) $(CXXFLAGS) $(INC) -o $(BUILD)/control_test \
+	$(CXX) $(CXXFLAGS) $(INC) $(LDFLAGS) -o $(BUILD)/control_test \
 		src/control.cpp src/manager.cpp $(LIB_SRC) test/control_test.cpp
 	$(BUILD)/control_test
 

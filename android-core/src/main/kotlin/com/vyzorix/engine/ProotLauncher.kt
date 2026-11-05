@@ -366,13 +366,18 @@ object ProotLauncher {
     }
 
     /**
-     * True when the supervisor binary is installed in the rootfs.
+     * True when the supervisor binary is installed.
      *
-     * Like [hasTmux], this is checked rather than assumed: the binary is installed by
-     * [Layer3Installer], which may not have run yet on a device upgrading in place.
+     * It lives in the **overlay**, not the rootfs: `/usr/local` is a bind target of
+     * the overlay (§6.1), so `overlay/usr-local/bin/supervisor` is what the container
+     * sees at `/usr/local/bin/supervisor`. Checking under the rootfs would look
+     * plausible and always be false.
+     *
+     * Like [hasTmux], this is checked rather than assumed: [Layer3Installer] may not
+     * have run yet on a device upgrading in place.
      */
     fun hasSupervisor(context: Context): Boolean =
-        File(rootfs(context), SUPERVISOR_IN_ROOTFS.trimStart('/')).canExecute()
+        File(File(overlay(context), OVERLAY_USR_LOCAL), SUPERVISOR_IN_OVERLAY).canExecute()
 
     /**
      * A plain device shell, for when the container engine is not installed.
@@ -420,6 +425,9 @@ object ProotLauncher {
      */
     const val SUPERVISOR_BINARY = "/usr/local/bin/supervisor"
 
-    /** The same path, relative to the rootfs, for the installed check. */
-    const val SUPERVISOR_IN_ROOTFS = "usr/local/bin/supervisor"
+    /** The overlay subdirectory bound over the container's `/usr/local`. */
+    const val OVERLAY_USR_LOCAL = "usr-local"
+
+    /** The supervisor's path within that directory. */
+    const val SUPERVISOR_IN_OVERLAY = "bin/supervisor"
 }

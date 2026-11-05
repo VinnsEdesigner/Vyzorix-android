@@ -1,10 +1,10 @@
 package com.vyzorix.engine
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 
 /**
  * Installs the Layer 3 container binaries: the supervisor, the `app-*` CLI, and the
@@ -92,7 +92,7 @@ class Layer3Installer(
 
         if (!ProotLauncher.hasSupervisor(context)) {
             throw IOException(
-                "the archive extracted but ${ProotLauncher.SUPERVISOR_IN_ROOTFS} is missing " +
+                "the archive extracted but ${ProotLauncher.SUPERVISOR_IN_OVERLAY} is missing " +
                     "or not executable",
             )
         }
@@ -104,7 +104,7 @@ class Layer3Installer(
 
     /** This device's ABI, which is the archive's name. */
     private val abi: String
-        get() = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+        get() = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
 
     private fun marker(context: Context): File = File(context.filesDir, MARKER)
 

@@ -67,8 +67,7 @@ void TestBridgeShapes() {
     Check(inner.Find("session") != nullptr && inner.Find("session")->string == "s-1",
           "auth result carries the session");
 
-    const vjson::Value ok =
-        vjson::Parse("{\"id\":\"1\",\"ok\":true,\"result\":\"{\\\"v\\\":1}\"}");
+    const vjson::Value ok = vjson::Parse("{\"id\":\"1\",\"ok\":true,\"result\":\"{\\\"v\\\":1}\"}");
     Check(ok.Find("result") != nullptr, "success carries a result");
 
     const vjson::Value err = vjson::Parse(

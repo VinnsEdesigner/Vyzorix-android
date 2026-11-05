@@ -50,6 +50,24 @@ case "${ARCH}" in
   *) echo "unsupported arch: ${ARCH} (use arm64, armeabi-v7a or x86_64)" >&2; exit 2 ;;
 esac
 
+# **Static linking is required, not a preference.**
+#
+# These binaries run inside the Debian rootfs, which is Debian 12 (glibc 2.36), while
+# the toolchain that builds them is the host's (Debian 13, glibc 2.41). A dynamically
+# linked binary therefore fails on the device with
+#
+#   /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
+#
+# and the supervisor never starts — a failure that only appears on a device, because
+# on the host the same binary runs perfectly. Static linking removes the dependency
+# entirely, which also means these tools keep working if the rootfs is ever rebuilt
+# on a different Debian release.
+#
+# The tools are safe to link statically: no dlopen, no NSS, no locale beyond C, no
+# getaddrinfo. They use files, sockets, fork/exec and the C++ standard library.
+LDFLAGS_STATIC="-static -static-libgcc -static-libstdc++"
+export LDFLAGS_STATIC
+
 if ! command -v "${CXX}" >/dev/null 2>&1; then
   echo "build-layer3: ${CXX} not found; run scripts/install-toolchain.sh" >&2
   exit 1
@@ -68,9 +86,9 @@ log "building for ${ARCH} with ${CXX}"
 
 # Each tool builds into its own build/bin; they are copied together here so the
 # tarball has the container layout rather than the source layout.
-( cd "${ROOT}/app-runtime/supervisor" && make clean >/dev/null && make CXX="${CXX}" >/dev/null )
-( cd "${ROOT}/app-runtime/cli-wrappers" && make clean >/dev/null && make CXX="${CXX}" >/dev/null )
-( cd "${ROOT}/debian-engine/android-bin" && make clean >/dev/null && make CXX="${CXX}" >/dev/null )
+( cd "${ROOT}/app-runtime/supervisor" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
+( cd "${ROOT}/app-runtime/cli-wrappers" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
+( cd "${ROOT}/debian-engine/android-bin" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
 
 cp "${ROOT}/app-runtime/supervisor/build/bin/supervisor" "${STAGE}/bin/"
 cp "${ROOT}"/app-runtime/cli-wrappers/build/bin/app-* "${STAGE}/bin/"
@@ -84,7 +102,7 @@ for link in "${ROOT}"/debian-engine/android-bin/build/bin/*; do
   ln -sf android-bin "${STAGE}/bin/${name}"
 done
 
-log "verifying the binaries are the right architecture"
+log "verifying the binaries are static"
 # A wrong-arch binary is the failure that reads as "corrupt rootfs", so it is
 # checked here rather than discovered on a device.
 expected_machine="$(
@@ -96,13 +114,22 @@ expected_machine="$(
 )"
 for binary in "${STAGE}"/bin/*; do
   [[ -f "${binary}" && ! -L "${binary}" ]] || continue
+
   machine="$(readelf -h "${binary}" | awk -F: '/Machine:/ {print $2}' | xargs)"
   if [[ "${machine}" != "${expected_machine}" ]]; then
     echo "build-layer3: $(basename "${binary}") is ${machine}, expected ${expected_machine}" >&2
     exit 1
   fi
+
+  # A dynamic binary here is the bug that only shows on a device, so it is a build
+  # failure rather than a warning.
+  if readelf -d "${binary}" 2>/dev/null | grep -q "NEEDED"; then
+    echo "build-layer3: $(basename "${binary}") is dynamically linked; it will not" >&2
+    echo "  load against the rootfs glibc. The static flags are not reaching the link." >&2
+    exit 1
+  fi
 done
-echo "all binaries are ${expected_machine}"
+echo "all binaries are ${expected_machine} and statically linked"
 
 log "packing"
 mkdir -p "${OUT}"

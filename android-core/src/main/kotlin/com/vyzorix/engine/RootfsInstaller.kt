@@ -208,6 +208,15 @@ class RootfsInstaller(
             throw IOException("could not create proot's scratch dir ${tmp.absolutePath}")
         }
 
+        // App storage, which proot binds to /home/apps. The source must exist before
+        // the bind, or proot warns and skips it and /home/apps is then absent inside
+        // the container — which the supervisor's `-w /home/apps` turns into a chdir
+        // failure and an empty registry directory.
+        val apps = ProotLauncher.appsDir(context)
+        if (!apps.isDirectory && !apps.mkdirs()) {
+            throw IOException("could not create app storage ${apps.absolutePath}")
+        }
+
         // The one thing the engine cannot start without.
         if (!ProotLauncher.isReady(context)) {
             throw IOException(

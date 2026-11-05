@@ -83,7 +83,9 @@ public:
     /** Asks the loop to stop and closes the listening socket. */
     void Stop();
 
-    const std::string &socketPath() const { return socketPath_; }
+    const std::string &socketPath() const {
+        return socketPath_;
+    }
 
 private:
     void ServeOne(int fd);

@@ -99,9 +99,15 @@ internal object TarGz {
 
         readEntries(gz, canonicalDest)
 
-        val actual = digest.digest().joinToString("") { "%02x".format(it) }
-        if (!actual.equals(expectedSha256, ignoreCase = true)) {
-            throw IOException("rootfs checksum mismatch: expected $expectedSha256, got $actual")
+        // An empty expectation means "nothing to verify against", not "verify and
+        // fail". A bundled asset is covered by the APK signature, so the caller has
+        // nothing to check it against; treating "" as a mismatch would reject every
+        // bundled archive.
+        if (expectedSha256.isNotEmpty()) {
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            if (!actual.equals(expectedSha256, ignoreCase = true)) {
+                throw IOException("rootfs checksum mismatch: expected $expectedSha256, got $actual")
+            }
         }
     }
 
@@ -174,7 +180,36 @@ internal object TarGz {
                     // A symlink inside the rootfs: /bin -> usr/bin is the common one,
                     // from Debian's merged-usr layout.
                     target.parentFile?.mkdirs()
+
+                    // Removing whatever is at `target` first, because the extended
+                    // tarball is `core + EXTENDED_PACKAGES` and therefore re-ships
+                    // every core symlink — so by the time it is extracted the core
+                    // has already created them, and `createSymbolicLink` would fail
+                    // with FileAlreadyExistsException, aborting the whole install.
+                    //
+                    // **Never delete a real directory here.** The obvious fix —
+                    // `deleteRecursively()` when the target is a directory — is
+                    // catastrophic: `usr/lib64` is a real directory that the
+                    // `lib64 -> usr/lib64` symlink resolves to, so removing it and
+                    // then writing the symlink leaves `usr/lib64 -> usr/lib64`, an
+                    // infinite self-loop. Every dynamically linked binary in the
+                    // image then fails to exec ("ld-linux.so not found"), which
+                    // reads as a corrupt rootfs.
+                    //
+                    // A directory in the way means the archive and the tree
+                    // disagree, and the safe answer is to leave the directory
+                    // alone: the merged-usr layout already satisfies the symlink,
+                    // and a missing symlink is recoverable where a deleted lib
+                    // directory is not.
+                    if (target.isDirectory && !Files.isSymbolicLink(target.toPath())) {
+                        Log.w(TAG, "symlink $name skipped: a real directory is in the way")
+                        skip(gz, size)
+
+                        continue
+                    }
+
                     target.delete()
+
                     try {
                         Files.createSymbolicLink(target.toPath(), Paths.get(linkName))
                     } catch (e: IOException) {

@@ -34,8 +34,7 @@ void ApplyEnv(const std::map<std::string, std::string> &env) {
 } // namespace
 
 int SystemHost::Spawn(const std::string &cmd, const std::string &dir,
-                      const std::map<std::string, std::string> &env,
-                      const std::string &logPath) {
+                      const std::map<std::string, std::string> &env, const std::string &logPath) {
     const pid_t pid = ::fork();
     if (pid < 0) {
         return -1;

@@ -11,8 +11,7 @@ namespace vsup {
 class SystemHost : public Host {
 public:
     int Spawn(const std::string &cmd, const std::string &dir,
-              const std::map<std::string, std::string> &env,
-              const std::string &logPath) override;
+              const std::map<std::string, std::string> &env, const std::string &logPath) override;
 
     bool Exited(int pid, ExitKind *kind, int *code) override;
     void Terminate(int pid) override;

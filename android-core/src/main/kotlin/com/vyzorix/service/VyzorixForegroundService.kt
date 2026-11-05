@@ -71,6 +71,10 @@ class VyzorixForegroundService : Service() {
     /** The Layer 3 supervisor process, when it is running. */
     private var supervisor: Process? = null
 
+    /** How many times the supervisor has been restarted, for the backoff. */
+    @Volatile
+    private var supervisorRestarts = 0
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -270,26 +274,80 @@ class VyzorixForegroundService : Service() {
             val process = builder.start()
             supervisor = process
 
-            Thread({ relaySupervisorLog(process) }, "vyzorix-supervisor-log").apply {
+            // One thread does both jobs — relay the log, and watch for the exit — so
+            // there is no window where the process has died but nothing noticed.
+            //
+            // A restart loop is required, not defensive: the supervisor is a child of
+            // the app process, and Android's phantom-process killer reaps children
+            // (Android 12+, ~32 concurrent) without the app's involvement. The
+            // supervisor prints "ready" and is gone seconds later, with no tombstone
+            // and no exit log, which is what that looks like from inside. The app
+            // cannot prevent the kill, so it notices and starts it again.
+            Thread({ watchSupervisor(process) }, "vyzorix-supervisor").apply {
                 isDaemon = true
                 start()
             }
 
-            // java.lang.Process.pid() is Java 9+; on Android the field is the portable form.
             Log.i(TAG, "supervisor started")
         } catch (t: Throwable) {
             Log.e(TAG, "could not start the supervisor", t)
         }
     }
 
-    /** Copies the supervisor's output to logcat until it ends. */
-    private fun relaySupervisorLog(process: Process) {
+    /**
+     * Relays the supervisor's output to logcat, then restarts it when it exits.
+     *
+     * The restart is bounded by a backoff so a supervisor that cannot start — a
+     * corrupt binary, a missing bind — does not become a tight fork loop. It stops
+     * once the service itself is stopping, because a shutdown must not spawn one.
+     */
+    private fun watchSupervisor(process: Process) {
         try {
             process.inputStream.bufferedReader().forEachLine { line ->
                 Log.i("VyzorixSupervisor", line)
             }
         } catch (t: Throwable) {
             Log.d(TAG, "supervisor log relay ended: ${t.message}")
+        }
+
+        val code =
+            try {
+                process.waitFor()
+            } catch (t: InterruptedException) {
+                Thread.currentThread().interrupt()
+
+                return
+            }
+
+        Log.w(TAG, "supervisor exited (code $code)")
+
+        if (!running.get()) {
+            // The service is going down; do not start another one.
+            return
+        }
+
+        supervisorRestarts++
+        if (supervisorRestarts > MAX_SUPERVISOR_RESTARTS) {
+            // Give up loudly rather than spin. The engine, the bridge and the
+            // terminal all still work; only apps are unavailable.
+            Log.e(TAG, "supervisor exited $supervisorRestarts times; not restarting it")
+
+            return
+        }
+
+        // Back off, so a supervisor that dies immediately does not fork in a loop.
+        val delayMs =
+            minOf(SUPERVISOR_BACKOFF_STEP_MS * supervisorRestarts, SUPERVISOR_BACKOFF_MAX_MS)
+        try {
+            Thread.sleep(delayMs)
+        } catch (t: InterruptedException) {
+            Thread.currentThread().interrupt()
+
+            return
+        }
+
+        if (running.get()) {
+            startSupervisor()
         }
     }
 
@@ -528,6 +586,18 @@ class VyzorixForegroundService : Service() {
          * cannot collide with a name an operator picks by hand.
          */
         private const val TMUX_SESSION_PREFIX = "vyzorix-"
+
+        /**
+         * How many times the supervisor is restarted before giving up.
+         *
+         * The phantom-process killer can reap it repeatedly, so a few restarts are
+         * normal; an unbounded loop would be a fork bomb.
+         */
+        private const val MAX_SUPERVISOR_RESTARTS = 50
+
+        /** The supervisor restart backoff: linear, from one step up to a ceiling. */
+        private const val SUPERVISOR_BACKOFF_STEP_MS = 1000L
+        private const val SUPERVISOR_BACKOFF_MAX_MS = 30_000L
         private const val CHANNEL_ID = "vyzorix-engine"
         private const val NOTIFICATION_ID = 1
         private const val SHUTDOWN_TIMEOUT_MS = 3000L

@@ -53,7 +53,7 @@ struct Value {
      * from "present but null", which the response shape relies on: `result` and
      * `error` are each optional.
      */
-    const Value *Find(const std::string &key) const;
+    [[nodiscard]] const Value *Find(const std::string &key) const;
 };
 
 /** Parses `text`. Throws [Error] on anything malformed. */

@@ -12,6 +12,8 @@
 
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Werror
+# Link flags, so a caller can request a static link (see scripts/build-layer3.sh).
+LDFLAGS ?=
 BUILD := build
 
 LIB := ../../native/lib
@@ -30,7 +32,7 @@ all: symlinks
 
 $(BUILD)/bin/app-tool: app_tool.cpp $(LIB_SRC) | $(BUILD)
 	@mkdir -p $(BUILD)/bin
-	$(CXX) $(CXXFLAGS) $(INC) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(INC) $(LDFLAGS) -o $@ $^
 
 symlinks: $(BUILD)/bin/app-tool
 	@for cmd in $(COMMANDS); do \

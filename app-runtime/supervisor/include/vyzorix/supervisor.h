@@ -91,8 +91,7 @@ public:
  */
 class Manager {
 public:
-    Manager(vapps::Registry registry, std::string registryPath, std::string logDir,
-            Host *host);
+    Manager(vapps::Registry registry, std::string registryPath, std::string logDir, Host *host);
 
     /** Starts every app marked `autostart`, skipping ones already running. */
     void StartAutostart();
@@ -126,22 +125,30 @@ public:
     /** The names of the running apps, sorted. */
     std::vector<std::string> RunningNames();
 
-    const vapps::Registry &registry() const { return registry_; }
+    const vapps::Registry &registry() const {
+        return registry_;
+    }
 
     /**
      * Mutable access, for the control ops that edit the registry (`create`,
      * `remove`). The caller must call [Persist] afterwards: this does not, because a
      * batch of edits should be one write.
      */
-    vapps::Registry &mutableRegistry() { return registry_; }
+    vapps::Registry &mutableRegistry() {
+        return registry_;
+    }
 
-    const std::string &registryPath() const { return registryPath_; }
+    const std::string &registryPath() const {
+        return registryPath_;
+    }
 
     /** The log file for `name`. */
     std::string LogPathFor(const std::string &name) const;
 
     /** The registry as JSON, for `app-list --json`. */
-    std::string RegistryJson() const { return registry_.ToJson(); }
+    std::string RegistryJson() const {
+        return registry_.ToJson();
+    }
 
     /** Writes the registry. Called after any change to a pid record. */
     void Persist() const;

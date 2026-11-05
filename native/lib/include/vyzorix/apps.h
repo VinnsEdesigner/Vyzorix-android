@@ -54,7 +54,9 @@ struct App {
     std::uint64_t pidStartTicks = 0;
 
     /** True when the registry claims this app has a running process. */
-    bool HasPidRecord() const { return pid > 0 && pidStartTicks != 0; }
+    bool HasPidRecord() const {
+        return pid > 0 && pidStartTicks != 0;
+    }
 };
 
 /**
@@ -89,12 +91,16 @@ public:
      */
     void Save(const std::string &path) const;
 
-    std::vector<App> &apps() { return apps_; }
-    const std::vector<App> &apps() const { return apps_; }
+    std::vector<App> &apps() {
+        return apps_;
+    }
+    const std::vector<App> &apps() const {
+        return apps_;
+    }
 
     /** The app named `name`, or nullptr. */
-    App *Find(const std::string &name);
-    const App *Find(const std::string &name) const;
+    [[nodiscard]] App *Find(const std::string &name);
+    [[nodiscard]] const App *Find(const std::string &name) const;
 
     /**
      * Adds or replaces an app by name.
@@ -108,7 +114,7 @@ public:
     bool Remove(const std::string &name);
 
     /** Serialises to JSON. Exposed for tests and for `app-list --json`. */
-    std::string ToJson() const;
+    [[nodiscard]] std::string ToJson() const;
 
 private:
     std::vector<App> apps_;

@@ -35,12 +35,9 @@ std::int64_t BackoffMsFor(int failures) {
     return std::min(delay, kBackoffMaxMs);
 }
 
-Manager::Manager(vapps::Registry registry, std::string registryPath, std::string logDir,
-                 Host *host)
-    : registry_(std::move(registry)),
-      registryPath_(std::move(registryPath)),
-      logDir_(std::move(logDir)),
-      host_(host) {}
+Manager::Manager(vapps::Registry registry, std::string registryPath, std::string logDir, Host *host)
+    : registry_(std::move(registry)), registryPath_(std::move(registryPath)),
+      logDir_(std::move(logDir)), host_(host) {}
 
 std::string Manager::LogPathFor(const std::string &name) const {
     return logDir_ + "/" + name + ".log";

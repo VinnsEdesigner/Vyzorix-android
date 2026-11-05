@@ -24,7 +24,7 @@
 namespace vframe {
 
 /** Largest payload a single frame may carry, matching BridgeProtocol.MAX_PAYLOAD. */
-constexpr std::uint32_t kMaxPayload = 1u << 20;
+constexpr std::uint32_t kMaxPayload = 1U << 20;
 
 /** Thrown for any connect, framing or I/O failure. */
 class Error : public std::runtime_error {
@@ -61,7 +61,9 @@ public:
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
 
-    Connection(Connection &&other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
+    Connection(Connection &&other) noexcept : fd_(other.fd_) {
+        other.fd_ = -1;
+    }
     Connection &operator=(Connection &&other) noexcept;
 
     /** Writes one frame. Throws [Error] on failure or an oversized payload. */
@@ -77,7 +79,9 @@ public:
     std::uint8_t Read(std::string *payload);
 
     /** The raw descriptor. For `poll(2)` and `accept(2)`; do not close it. */
-    int fd() const { return fd_; }
+    int fd() const {
+        return fd_;
+    }
 
 private:
     int fd_ = -1;

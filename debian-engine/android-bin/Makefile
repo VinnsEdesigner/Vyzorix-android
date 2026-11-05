@@ -20,6 +20,8 @@
 
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Werror
+# Link flags, so a caller can request a static link (see scripts/build-layer3.sh).
+LDFLAGS ?=
 HOST_CXX ?= g++
 BUILD := build
 
@@ -61,7 +63,7 @@ $(LIB_OBJ): $(LIB_SRC) | $(BUILD)
 
 $(BUILD)/bin/android-bin: $(OBJ) $(LIB_OBJ) $(BUILD)/api_catalog.o
 	@mkdir -p $(BUILD)/bin
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 symlinks: $(BUILD)/.apis-generated $(BUILD)/bin/android-bin
 	$(BUILD)/generator --apis apis.txt --symlink-dir $(BUILD)/bin --target android-bin

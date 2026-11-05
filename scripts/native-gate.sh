@@ -57,31 +57,38 @@ echo "native-gate: clang-format"
 
 # clang-tidy runs only on the sources the NDK actually compiles.
 #
-# Its compile database is AGP's (`android-core/.cxx/*/compile_commands.json`), which
-# holds the NDK-built sources and their flags. `debian-engine/android-bin` is not in
-# it: that binary is built by its own Makefile with a GNU cross toolchain, because it
-# runs in the Debian userspace (glibc) rather than on Android (bionic). Tidy needs a
-# compile command to know the include paths and the standard, so without a database
-# entry it fails with "'json.h' file not found" rather than finding real problems.
+# Its compile database is AGP's (`android-core/.cxx/*/compile_commands.json`), and
+# tidy needs a compile command for every file it is given: without one it cannot
+# resolve the include paths or the language standard, so it reports
+# "'vyzorix/json.h' file not found" — a diagnostic error that hides the real ones.
 #
-# So: clang-format covers every source we wrote (style is toolchain-independent), and
-# clang-tidy covers the ones it can actually analyse. android-bin's correctness is
-# covered by `make check` and the on-device suite.
-mapfile -t TIDY_SOURCES < <(printf '%s\n' "${SOURCES[@]}" | grep -v "/debian-engine/")
+# The container tools (`debian-engine/android-bin`, `app-runtime/*`, `native/lib`)
+# are not in that database: they are built by their own Makefiles with a GNU cross
+# toolchain, because they run in the Debian userspace (glibc) rather than on Android
+# (bionic). Their correctness is covered by their own `make check` suites and the
+# on-device tests.
+#
+# So the tidy set is derived from the database rather than from a hand-kept list of
+# exclusions: a file is tidy'd exactly when the database can describe how to build
+# it. Adding a module to the NDK build therefore brings it under tidy with no change
+# here, which is the property a hand-list loses.
+mapfile -t DB_FILES < <(python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    for entry in json.load(f):
+        print(entry['file'])
+" "${DB}" 2>/dev/null | sort -u)
+
+TIDY_SOURCES=()
+for source in "${SOURCES[@]}"; do
+    if printf '%s\n' "${DB_FILES[@]}" | grep -qxF "${source}"; then
+        TIDY_SOURCES+=("${source}")
+    fi
+done
 
 if [[ ${#TIDY_SOURCES[@]} -eq 0 ]]; then
-  echo "native-gate: nothing for clang-tidy to analyse"
+  echo "native-gate: no source is in the compile database; skipping clang-tidy"
   exit 0
-fi
-
-# clang-tidy needs a compile database. AGP writes one per ABI under
-# android-core/.cxx after configureCMakeDebug; arm64 is used because the native
-# code is ABI-independent.
-DB="$(find "${ROOT}" -path "*/.cxx/*/arm64-v8a/compile_commands.json" -print -quit 2>/dev/null || true)"
-if [[ -z "${DB}" ]]; then
-  echo "native-gate: no compile database. Run:" >&2
-  echo "  ./gradlew -PexportCompileCommands=true :android-core:configureCMakeDebug" >&2
-  exit 1
 fi
 
 echo "native-gate: clang-tidy (db: ${DB#"${ROOT}/"}, ${#TIDY_SOURCES[@]} file(s))"

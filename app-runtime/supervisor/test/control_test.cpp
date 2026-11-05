@@ -7,10 +7,10 @@
 // it is a refusal, not a warning, so it is tested as one.
 
 #include <fstream>
-#include <set>
-#include <sys/stat.h>
 #include <iostream>
+#include <set>
 #include <string>
+#include <sys/stat.h>
 
 #include <unistd.h>
 
@@ -35,8 +35,8 @@ void Check(bool condition, const std::string &what) {
 /** A manager over a temp registry, with a host that spawns nothing. */
 class NullHost : public Host {
 public:
-    int Spawn(const std::string &, const std::string &,
-              const std::map<std::string, std::string> &, const std::string &) override {
+    int Spawn(const std::string &, const std::string &, const std::map<std::string, std::string> &,
+              const std::string &) override {
         const int pid = next_++;
         alive_.insert(pid);
 
@@ -59,16 +59,24 @@ public:
     // A well-behaved app dies on SIGTERM, so Stop() does not have to wait out its
     // grace period. Without this the stop path polls until the deadline, which in a
     // test with a frozen clock is forever.
-    void Terminate(int pid) override { alive_.erase(pid); }
-    void Kill(int pid) override { alive_.erase(pid); }
+    void Terminate(int pid) override {
+        alive_.erase(pid);
+    }
+    void Kill(int pid) override {
+        alive_.erase(pid);
+    }
 
     std::uint64_t StartTicks(int pid) override {
         return alive_.count(pid) != 0 ? static_cast<std::uint64_t>(pid) : 0;
     }
 
     // Advances on every read, so any deadline in the code under test is reachable.
-    std::int64_t NowMs() override { return now_++; }
-    void SleepMs(std::int64_t ms) override { now_ += ms; }
+    std::int64_t NowMs() override {
+        return now_++;
+    }
+    void SleepMs(std::int64_t ms) override {
+        now_ += ms;
+    }
 
 private:
     int next_ = 100;
@@ -102,7 +110,9 @@ struct Fixture {
         ::rmdir(base.c_str());
     }
 
-    std::string Request(const std::string &json) { return HandleRequest(&manager, json); }
+    std::string Request(const std::string &json) {
+        return HandleRequest(&manager, json);
+    }
 
     /** True when the reply says ok. */
     static bool IsOk(const std::string &reply) {
@@ -191,7 +201,8 @@ void TestCreateAndRemove() {
 
     const std::string created =
         f.Request("{\"op\":\"create\",\"name\":\"newapp\",\"cmd\":\"sleep 5\",\"port\":8080,"
-                  "\"autostart\":true,\"dir\":\"" + f.dir + "/newapp\"}");
+                  "\"autostart\":true,\"dir\":\"" +
+                  f.dir + "/newapp\"}");
     Check(Fixture::IsOk(created), "create is ok");
     Check(f.manager.registry().Find("newapp") != nullptr, "create added the app");
 
@@ -215,8 +226,8 @@ void TestCreateAndRemove() {
 void TestCreatePersists() {
     Fixture f;
 
-    f.Request("{\"op\":\"create\",\"name\":\"persisted\",\"cmd\":\"sleep 5\",\"dir\":\"" +
-              f.dir + "/persisted\"}");
+    f.Request("{\"op\":\"create\",\"name\":\"persisted\",\"cmd\":\"sleep 5\",\"dir\":\"" + f.dir +
+              "/persisted\"}");
 
     // Re-read from disk: a create that only changed memory would be lost on the
     // next restart, which is the whole point of the registry being a file.

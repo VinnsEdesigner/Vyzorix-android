@@ -11,6 +11,7 @@
  */
 
 #include <errno.h>              /* E*, */
+#include <time.h>               /* struct timespec, */
 #include <signal.h>             /* SIGSYS, */
 #include <sys/ptrace.h>         /* ptrace(2), PTRACE_GETSIGINFO, */
 #include <stdbool.h>            /* bool, */
@@ -19,6 +20,7 @@
 #include "syscall/sysnum.h"
 #include "tracee/tracee.h"
 #include "tracee/reg.h"
+#include "tracee/mem.h"
 #include "arch.h"
 #include "cli/note.h"
 
@@ -202,6 +204,62 @@ static void fake_result(Tracee *tracee, word_t result)
     (void) push_regs(tracee);
 }
 
+/**
+ * poll(fds, nfds, timeout_ms) -> ppoll(fds, nfds, timespec, NULL, 0).
+ *
+ * Android's filter blocks `poll` outright, so the call never reaches the kernel and
+ * the timeout is lost with it. `ppoll` is allowed and takes the same fd array; only
+ * the timeout changes shape, from milliseconds to a timespec, which has to be built
+ * in the tracee's own memory because the kernel reads it.
+ *
+ * A negative timeout means "wait forever", which ppoll expresses as a NULL timespec
+ * — not a timespec with a negative value, which is EINVAL.
+ */
+void rewrite_poll(Tracee *tracee)
+{
+    const int timeout_ms = (int) peek_reg(tracee, CURRENT, SYSARG_3);
+    word_t timespec_address = 0;
+
+    if (timeout_ms >= 0) {
+        struct timespec timeout;
+        timeout.tv_sec = timeout_ms / 1000;
+        timeout.tv_nsec = (long) (timeout_ms % 1000) * 1000000L;
+
+        timespec_address = alloc_mem(tracee, sizeof(timeout));
+        if (timespec_address == 0 ||
+            write_data(tracee, timespec_address, &timeout, sizeof(timeout)) < 0) {
+            /* No memory to build the timeout: report EFAULT rather than spin on a
+             * syscall that cannot be converted. */
+            poke_reg(tracee, SYSARG_RESULT, (word_t) -EFAULT);
+            tracee->status = 0;
+            tracee->restore_original_regs = false;
+            tracee->restart_how = PTRACE_SYSCALL;
+            (void)push_regs(tracee);
+
+            return;
+        }
+    }
+
+    poke_reg(tracee, SYSARG_3, timespec_address);
+    poke_reg(tracee, SYSARG_4, 0); // sigmask
+    poke_reg(tracee, SYSARG_5, 0); // sigsetsize
+    set_sysnum(tracee, PR_ppoll);
+}
+
+/**
+ * select(n, rfds, wfds, efds, timeout) -> pselect6(n, rfds, wfds, efds, timeout, NULL).
+ *
+ * `pselect6` takes the sigmask and its size packed into one pointer (the `sigset_t`
+ * struct is passed as a `{ptr, size}` pair), so NULL for that argument means "no
+ * mask" and nothing else needs setting — there is no seventh register to write, and
+ * reaching for one would not compile.
+ */
+void rewrite_select(Tracee *tracee)
+{
+    poke_reg(tracee, SYSARG_6, 0); // {sigmask, sigsetsize} pair, or NULL
+    set_sysnum(tracee, PR_pselect6);
+}
+
 int handle_sigsys_event(Tracee *tracee, long blocked_sysnum)
 {
     Sysnum sysnum;
@@ -231,6 +289,8 @@ int handle_sigsys_event(Tracee *tracee, long blocked_sysnum)
     case PR_dup2:      rewrite_dup2(tracee); break;
     case PR_waitpid:   rewrite_waitpid(tracee); break;
     case PR_epoll_wait: rewrite_epoll_wait(tracee); break;
+    case PR_poll:      rewrite_poll(tracee); break;
+    case PR_select:    rewrite_select(tracee); break;
 
     default:
         /* No *at equivalent: report ENOSYS. The policy would have killed the

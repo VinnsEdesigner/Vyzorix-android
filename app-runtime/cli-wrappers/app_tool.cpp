@@ -69,8 +69,8 @@ void PrintUsage(const std::string &name) {
               << "  app-remove NAME       forget an app\n"
               << "  app-expose NAME       show how to reach an app\n"
               << "\n"
-              << "The supervisor socket is VYZORIX_APPS_SOCKET (default "
-              << kDefaultSocket << ").\n";
+              << "The supervisor socket is VYZORIX_APPS_SOCKET (default " << kDefaultSocket
+              << ").\n";
 }
 
 /** Escapes a string as a JSON string body. */

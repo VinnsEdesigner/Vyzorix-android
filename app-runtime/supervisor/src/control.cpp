@@ -7,9 +7,10 @@
 #include <fstream>
 #include <sstream>
 
-#include <poll.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "vyzorix/frame.h"
@@ -98,9 +99,9 @@ std::string TailOf(const std::string &path, std::size_t maxBytes) {
         return std::string();
     }
 
-    const std::streamoff start =
-        size > static_cast<std::streamoff>(maxBytes) ? size - static_cast<std::streamoff>(maxBytes)
-                                                     : 0;
+    const std::streamoff start = size > static_cast<std::streamoff>(maxBytes)
+                                     ? size - static_cast<std::streamoff>(maxBytes)
+                                     : 0;
     in.seekg(start);
 
     std::stringstream buffer;
@@ -243,7 +244,8 @@ std::string HandleRequest(Manager *manager, const std::string &request_json) {
             const vjson::Value *token = request.Find("token");
             const std::string bindAddress =
                 bind != nullptr && bind->IsString() ? bind->string : "127.0.0.1";
-            const std::string tokenValue = token != nullptr && token->IsString() ? token->string : "";
+            const std::string tokenValue =
+                token != nullptr && token->IsString() ? token->string : "";
 
             // The refusal that matters (§7.2): 0.0.0.0 is every interface, so a
             // flasher on a hotspot would be reachable by anyone on it. Without a
@@ -298,13 +300,27 @@ void ControlServer::Stop() {
 
 void ControlServer::Run() {
     while (!stopping_) {
-        // Poll before accept so the loop can observe `stopping_` without a client:
-        // a blocking accept would make shutdown wait for one.
-        struct pollfd pfd {};
-        pfd.fd = listenFd_;
-        pfd.events = POLLIN;
+        // **select(2), not poll(2)**, and that is not a style choice.
+        //
+        // Android's app seccomp filter blocks `poll` outright, and the conversion
+        // proot must perform to rescue it (poll -> ppoll) has to build a `timespec`
+        // inside the tracee's address space. That allocation, from the SIGSYS
+        // context, crashed the tracee with SIGSEGV — the supervisor started, served
+        // nothing, and died in under a second. `select` needs no such allocation:
+        // its conversion (select -> pselect6) only NULLs the signal-mask argument.
+        //
+        // The timeout is kept because this loop is also the manager's only tick —
+        // it is where a crashed app's restart is scheduled — so it must run even
+        // when no client connects.
+        fd_set readable;
+        FD_ZERO(&readable);
+        FD_SET(listenFd_, &readable);
 
-        const int ready = ::poll(&pfd, 1, kAcceptPollMs);
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = kAcceptPollMs * 1000;
+
+        const int ready = ::select(listenFd_ + 1, &readable, nullptr, nullptr, &timeout);
         if (stopping_) {
             break;
         }

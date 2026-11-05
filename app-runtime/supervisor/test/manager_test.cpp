@@ -48,8 +48,7 @@ public:
     };
 
     int Spawn(const std::string &cmd, const std::string &dir,
-              const std::map<std::string, std::string> &env,
-              const std::string &logPath) override {
+              const std::map<std::string, std::string> &env, const std::string &logPath) override {
         const int pid = nextPid_++;
         procs_[pid] = Proc{cmd, dir, env, /*startTicks=*/static_cast<std::uint64_t>(pid * 1000)};
         spawned_.push_back(pid);
@@ -106,8 +105,12 @@ public:
         return it->second.startTicks;
     }
 
-    std::int64_t NowMs() override { return now_; }
-    void SleepMs(std::int64_t ms) override { now_ += ms; }
+    std::int64_t NowMs() override {
+        return now_;
+    }
+    void SleepMs(std::int64_t ms) override {
+        now_ += ms;
+    }
 
     // ---- test controls ----
 
@@ -118,17 +121,33 @@ public:
     }
 
     /** Makes the pid's start token change, as a recycled pid would. */
-    void Recycle(int pid) { procs_[pid].startTicks += 1; }
+    void Recycle(int pid) {
+        procs_[pid].startTicks += 1;
+    }
 
-    void Advance(std::int64_t ms) { now_ += ms; }
-    int lastPid() const { return spawned_.empty() ? 0 : spawned_.back(); }
-    std::size_t spawnCount() const { return spawned_.size(); }
+    void Advance(std::int64_t ms) {
+        now_ += ms;
+    }
+    int lastPid() const {
+        return spawned_.empty() ? 0 : spawned_.back();
+    }
+    std::size_t spawnCount() const {
+        return spawned_.size();
+    }
 
-    void SetSpawnFails(bool fail) { spawnFails_ = fail; }
+    void SetSpawnFails(bool fail) {
+        spawnFails_ = fail;
+    }
 
-    const std::string &lastLogPath() const { return lastLogPath_; }
-    const std::vector<int> &terminated() const { return terminated_; }
-    const std::vector<int> &killed() const { return killed_; }
+    const std::string &lastLogPath() const {
+        return lastLogPath_;
+    }
+    const std::vector<int> &terminated() const {
+        return terminated_;
+    }
+    const std::vector<int> &killed() const {
+        return killed_;
+    }
 
 private:
     std::map<int, Proc> procs_;
@@ -167,7 +186,9 @@ struct Fixture {
         ::unlink(path.c_str());
     }
 
-    ~Fixture() { ::unlink(path.c_str()); }
+    ~Fixture() {
+        ::unlink(path.c_str());
+    }
 
     static vapps::Registry MakeRegistry(const std::vector<vapps::App> &apps) {
         vapps::Registry registry;
