@@ -155,8 +155,10 @@ class CloudConnection(
         // service, so it is reaped with the rest rather than left ticking.
         configPoller?.stop()
         configPoller = null
-        // A terminal cannot outlive the socket it runs over: close every session so
-        // no shell is left running with no way to reach it.
+        // Unlike a socket drop — which *detaches* sessions so their shells survive a
+        // reconnect — an explicit stop reaps them. The service is going away, so the
+        // port and its shells go with it; leaving a detached shell behind would leak
+        // it past the lifetime of the thing that owns it.
         terminalRelay?.let { relay ->
             Log.i(TAG, "stopping: reaping ${relay.openCount()} terminal session(s)")
             relay.closeAll("connection_stopped")
@@ -354,6 +356,18 @@ class CloudConnection(
                 }
 
                 override fun onConnected() {
+                    // Reap any detached session that outlived its TTL while we were
+                    // offline. A reconnect does not necessarily re-open every session
+                    // (the operator may have closed the tab), so this is where the
+                    // device's own bound is enforced rather than waiting for a re-OPEN
+                    // that may never come.
+                    terminalRelay?.let { relay ->
+                        val reaped = relay.reapDetached()
+                        if (reaped > 0) {
+                            Log.i(TAG, "reaped $reaped detached terminal session(s) on connect")
+                        }
+                    }
+
                     // The socket is the trigger to reconcile the config: a device that
                     // was offline at claim time has none, and one whose config changed
                     // holds a stale version.
@@ -370,16 +384,18 @@ class CloudConnection(
                     reason: String,
                     willRetry: Boolean,
                 ) {
-                    // A terminal cannot outlive the socket: close every session so no
-                    // shell is left running with no way to reach it. The relay re-opens
-                    // sessions only when the operator asks again, which is correct —
-                    // the operator's own terminal shows the disconnect.
+                    // A terminal outlives the socket now. Rather than reaping every
+                    // session, detach them: the shells keep running, their output is
+                    // buffered up to a bound, and a reconnect re-opens the same session
+                    // ids, which the relay re-binds to the surviving shells (see
+                    // TerminalRelay.detachAll). A shell is only lost if the reconnect
+                    // does not come before the detached TTL, or the service stops.
                     terminalRelay?.let { relay ->
                         Log.i(
                             TAG,
-                            "socket dropped: reaping ${relay.openCount()} terminal session(s)",
+                            "socket dropped: detaching ${relay.openCount()} terminal session(s)",
                         )
-                        relay.closeAll("socket_disconnected")
+                        relay.detachAll()
                     }
                 }
             }

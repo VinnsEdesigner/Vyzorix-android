@@ -93,12 +93,18 @@ class TerminalRelayTest {
         port: FakePort = FakePort(),
         socket: FakeSocket = FakeSocket(),
         closed: MutableList<Pair<String, String>> = mutableListOf(),
+        now: () -> Long = System::currentTimeMillis,
+        detachedTtlMs: Long = TerminalRelay.DETACHED_TTL_MS,
+        bufferBytes: Int = TerminalRelay.DETACHED_BUFFER_BYTES,
     ): Triple<TerminalRelay, FakePort, FakeSocket> {
         val r =
             TerminalRelay(
                 port = port,
                 sendFrame = socket::send,
                 onSessionClosed = { id, reason -> closed += id to reason },
+                detachedTtlMs = detachedTtlMs,
+                now = now,
+                detachedBufferBytes = bufferBytes,
             )
 
         return Triple(r, port, socket)
@@ -192,7 +198,7 @@ class TerminalRelayTest {
     }
 
     @Test
-    fun `a duplicate open does not start a second shell`() {
+    fun `a duplicate open re-binds the existing shell, it does not start a second`() {
         val (r, port, _) = relay()
 
         r.onFrame(openFrame("s1"))
@@ -265,17 +271,164 @@ class TerminalRelayTest {
     }
 
     @Test
-    fun `a failed socket write closes the session rather than buffering`() {
+    fun `a failed socket write detaches the session rather than closing it`() {
+        // The socket is gone but the shell is not: the session is detached so its
+        // output is kept for a reconnect, and it stays open.
         val closed = mutableListOf<Pair<String, String>>()
         val socket = FakeSocket().apply { accepts = false }
         val (r, port, _) = relay(socket = socket, closed = closed)
         r.onFrame(openFrame("s1"))
 
-        port.onOutput?.invoke("s1", "output nobody will read".toByteArray())
+        port.onOutput?.invoke("s1", "output nobody is reading yet".toByteArray())
 
+        assertTrue("the shell must survive the socket drop", r.isOpen("s1"))
+        assertEquals(emptyList<String>(), port.closed)
+        assertEquals(emptyList<Pair<String, String>>(), closed)
+    }
+
+    @Test
+    fun `output while detached is buffered, and reattach flushes it`() {
+        val socket = FakeSocket()
+        val (r, port, _) = relay(socket = socket)
+        r.onFrame(openFrame("s1"))
+
+        // The socket drops, so the connection detaches the session. Output produced
+        // after that is buffered rather than sent.
+        r.detachAll()
+        port.onOutput?.invoke("s1", "first".toByteArray())
+        port.onOutput?.invoke("s1", "second".toByteArray())
+        assertEquals(emptyList<ByteArray>(), socket.sent)
+
+        // The socket is back and the browser re-opens the same id.
+        r.onFrame(openFrame("s1"))
+
+        // One shell, and the buffered output arrives in order.
+        assertEquals(listOf("s1"), port.opened)
+        val payloads = socket.decoded().map { String(it.payload) }
+        assertEquals(listOf("first", "second"), payloads)
+    }
+
+    @Test
+    fun `the write that discovers a dropped socket detaches, losing only that frame`() {
+        // A failed write is how the device finds out the socket is gone. The bytes in
+        // that frame are already handed to a dead socket and cannot be buffered — but
+        // the session is detached rather than closed, so everything after survives.
+        val socket = FakeSocket().apply { accepts = false }
+        val (r, port, _) = relay(socket = socket)
+        r.onFrame(openFrame("s1"))
+
+        port.onOutput?.invoke("s1", "lost".toByteArray()) // detaches
+        port.onOutput?.invoke("s1", "kept".toByteArray()) // buffered
+
+        socket.accepts = true
+        r.onFrame(openFrame("s1"))
+
+        val payloads = socket.decoded().map { String(it.payload) }
+        assertEquals(listOf("kept"), payloads)
+    }
+
+    @Test
+    fun `the detached buffer drops the oldest bytes past its bound`() {
+        val socket = FakeSocket()
+        val (r, port, _) =
+            relay(
+                socket = socket,
+                bufferBytes = 10,
+            )
+        r.onFrame(openFrame("s1"))
+        r.detachAll()
+
+        // Push more than the bound. The newest bytes are what a reconnecting operator
+        // needs, so the oldest are the ones dropped.
+        port.onOutput?.invoke("s1", "AAAA".toByteArray())
+        port.onOutput?.invoke("s1", "BBBB".toByteArray())
+        port.onOutput?.invoke("s1", "CCCC".toByteArray())
+
+        r.onFrame(openFrame("s1"))
+
+        val payloads = socket.decoded().map { String(it.payload) }
+        assertEquals(listOf("BBBB", "CCCC"), payloads)
+    }
+
+    @Test
+    fun `input while detached is dropped, not written to the shell`() {
+        val (r, port, _) = relay()
+        r.onFrame(openFrame("s1"))
+        r.detachAll()
+
+        r.onFrame(PtyFrame.encodeData("s1", "rm -rf /\n".toByteArray()))
+
+        assertEquals(emptyList<Pair<String, ByteArray>>(), port.written)
+    }
+
+    @Test
+    fun `detachAll keeps every session running`() {
+        val (r, port, _) = relay()
+        r.onFrame(openFrame("s1"))
+        r.onFrame(openFrame("s2"))
+
+        r.detachAll()
+
+        assertTrue(r.isOpen("s1"))
+        assertTrue(r.isOpen("s2"))
+        assertEquals(2, r.openCount())
+        assertEquals(emptyList<String>(), port.closed)
+    }
+
+    @Test
+    fun `a detached session past its TTL is reaped`() {
+        var clock = 1_000L
+        val (r, port, _) = relay(now = { clock }, detachedTtlMs = 100L)
+        r.onFrame(openFrame("s1"))
+        r.detachAll()
+
+        // Inside the TTL: kept.
+        clock = 1_050L
+        assertEquals(0, r.reapDetached())
+        assertTrue(r.isOpen("s1"))
+
+        // Past the TTL: reaped.
+        clock = 1_200L
+        assertEquals(1, r.reapDetached())
         assertFalse(r.isOpen("s1"))
         assertEquals(listOf("s1"), port.closed)
-        assertEquals("s1" to "socket_write_failed", closed.first())
+    }
+
+    @Test
+    fun `an attached session is never reaped by the detached TTL`() {
+        var clock = 1_000L
+        val (r, _, _) = relay(now = { clock }, detachedTtlMs = 100L)
+        r.onFrame(openFrame("s1"))
+
+        clock = 10_000L
+        assertEquals(0, r.reapDetached())
+        assertTrue(r.isOpen("s1"))
+    }
+
+    @Test
+    fun `a size-less reattach keeps the shell's size`() {
+        // A server-initiated reattach sends an OPEN with no window size, so the shell
+        // must keep the size it had rather than shrink to the default.
+        val socket = FakeSocket()
+        val (r, port, _) = relay(socket = socket)
+        r.onFrame(openFrame("s1", rows = 50, cols = 200))
+        r.detachAll()
+
+        // Reattach with no size in the payload.
+        r.onFrame(PtyFrame.encode(PtyFrame.TYPE_OPEN, ByteArray(0), "s1"))
+
+        assertEquals(Triple("s1", 50, 200), port.resized.last())
+    }
+
+    @Test
+    fun `a reattach carrying a size applies it`() {
+        val (r, port, _) = relay()
+        r.onFrame(openFrame("s1", rows = 24, cols = 80))
+        r.detachAll()
+
+        r.onFrame(openFrame("s1", rows = 60, cols = 240))
+
+        assertEquals(Triple("s1", 60, 240), port.resized.last())
     }
 
     @Test
@@ -284,7 +437,7 @@ class TerminalRelayTest {
         r.onFrame(openFrame("s1"))
         r.onFrame(openFrame("s2"))
 
-        r.closeAll("socket_disconnected")
+        r.closeAll("connection_stopped")
 
         assertEquals(setOf("s1", "s2"), port.closed.toSet())
         assertEquals(0, r.openCount())

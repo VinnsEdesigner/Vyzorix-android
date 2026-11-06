@@ -661,8 +661,28 @@ frames (the browser distinguishes text from binary by the opcode):
    them to the operator, applying the credit window.
 4. `RESIZE` is forwarded when the browser reports a size change; the device
    applies `TIOCSWINSZ`.
-5. Either side may close. The server also closes on: operator disconnect, device
-   disconnect, or idle TTL.
+5. Either side may close. A session **outlives a dropped socket** — see
+   "Reattach" below — and the server closes on: an explicit `pty_close`, the
+   idle TTL, or an operator close. It no longer closes on operator disconnect or
+   device disconnect; those are the transient drops reattach exists to ride out.
+
+**Reattach (a session outlives the socket).** Neither a dropped device socket
+nor a dropped operator socket ends a session. The device **detaches** every live
+session on disconnect — the shell keeps running, its output is buffered up to a
+bound (oldest dropped), and the session is reaped after a device-side TTL
+(`TerminalRelay.DETACHED_TTL_MS`, 10 min) if no reconnect comes. When the device
+socket comes back the server re-sends an `OPEN` for each live session
+(`PTYRelay.ReattachDeviceSessions`), and the device treats an `OPEN` for a
+session it already holds as a **re-bind**, flushing the buffered output rather
+than spawning a second shell. A reconnecting browser reuses the session id it
+used before; the server's `PTYRegistry.Open` re-binds that id for the **same
+operator and device** (a different operator is still refused, or a guessed id
+would be a session hijack), refreshing the idle clock and the credit window.
+
+The trade: a transient network drop no longer kills the shell, so a session is
+ended only by an explicit close or by time. The server's 2 h idle TTL and the
+device's shorter detached TTL are what bound a session whose operator never
+returns.
 
 **Flow control (credit window).** The operator starts with **64 credits**
 (`DefaultPTYCreditWindow`). Each `DATA` frame delivered consumes one. When the

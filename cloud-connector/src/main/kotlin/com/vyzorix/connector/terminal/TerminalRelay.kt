@@ -24,6 +24,22 @@ import java.util.concurrent.ConcurrentHashMap
  * ACK that never comes: the reader's window is replenished locally as output is
  * handed to the socket, and a session whose socket write fails is closed rather
  * than left blocked.
+ *
+ * ## Detach and reattach (a shell outlives the socket)
+ *
+ * A session survives the WebSocket. When the socket drops the relay **detaches**
+ * every live session instead of closing it: the shell keeps running, its output is
+ * buffered up to a bound, and a reconnect re-attaches by the same session id — the
+ * browser sends `pty_open` with the id it used before, the server re-opens it, and
+ * the device re-binds the surviving shell rather than spawning a second one.
+ *
+ * This is the device-side persistence model (no multiplexer): the app already owns
+ * the PTY master fd, so the shell's lifetime is the *session's*, not the socket's.
+ * The buffer is bounded because an unbounded one would grow with whatever the shell
+ * prints while nobody is watching; when it overflows, the **oldest** bytes are
+ * dropped — a terminal is a tail, and the most recent output is what an operator
+ * needs. A detached session is reaped after [detachedTtlMs] so a closed tab cannot
+ * hold a shell forever.
  */
 class TerminalRelay(
     private val port: PtySessionPort,
@@ -31,6 +47,19 @@ class TerminalRelay(
     private val onSessionClosed: (sessionId: String, reason: String) -> Unit = { _, _ -> },
     private val defaultRows: Int = DEFAULT_ROWS,
     private val defaultCols: Int = DEFAULT_COLS,
+    /**
+     * How long a detached session is kept before it is reaped.
+     *
+     * The server's idle TTL is the backstop for a session the operator forgets; this
+     * is the device's own bound for a session whose socket has gone and may never
+     * return. It is deliberately shorter: a device is a phone, and a shell holding
+     * memory for a client that is not coming back is worth reclaiming sooner.
+     */
+    private val detachedTtlMs: Long = DETACHED_TTL_MS,
+    /** Milliseconds since epoch; injectable so the TTL is testable without sleeping. */
+    private val now: () -> Long = System::currentTimeMillis,
+    /** Buffered output kept per detached session; the oldest bytes are dropped first. */
+    private val detachedBufferBytes: Int = DETACHED_BUFFER_BYTES,
 ) {
     /** Live sessions, keyed by the server's session id. */
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -40,12 +69,22 @@ class TerminalRelay(
         @Volatile var rows: Int,
         @Volatile var cols: Int,
         @Volatile var closing: Boolean = false,
+        /**
+         * True while no socket is attached. The shell is running and its output is
+         * being buffered rather than sent.
+         */
+        @Volatile var detached: Boolean = false,
+        /** When the session was detached, for the reap TTL. Zero while attached. */
+        @Volatile var detachedAt: Long = 0,
+        /** Output produced while detached, oldest first. Guarded by its own lock. */
+        val pending: ArrayDeque<ByteArray> = ArrayDeque(),
+        @Volatile var pendingBytes: Int = 0,
     )
 
-    /** True when [sessionId] is live. */
+    /** True when [sessionId] is live, attached or detached. */
     fun isOpen(sessionId: String): Boolean = sessions.containsKey(sessionId)
 
-    /** How many sessions are live. Used by the service's diagnostics. */
+    /** How many sessions are live, attached or detached. Used by the service's diagnostics. */
     fun openCount(): Int = sessions.size
 
     /**
@@ -80,15 +119,31 @@ class TerminalRelay(
     private fun handleOpen(frame: PtyFrame.Frame): Boolean {
         if (frame.sessionId.isEmpty()) return false
 
-        // A duplicate OPEN for a live session is a retry, not a second shell: opening
-        // another would leak a pty and leave the first unreachable.
-        if (sessions.containsKey(frame.sessionId)) return true
+        // The open payload may carry the window size (rows, cols). A payload without
+        // it is not an error: a browser open falls back to a sane default, and a
+        // *server-initiated* reattach carries none precisely so the shell keeps the
+        // size it already had (see the reattach branch below).
+        val size = readResize(frame.payload)
 
-        // The open payload carries the initial window size (rows, cols). A payload
-        // without it falls back to a sane default rather than failing the open: a
-        // terminal that is the wrong size is usable, one that never opens is not.
-        val (rows, cols) = readResize(frame.payload) ?: (defaultRows to defaultCols)
+        // An OPEN for a session we already hold is a **reattach**, not a second shell.
+        //
+        // The browser reuses the session id it used before, so a reconnect re-opens
+        // the same id; the server re-opens it (its registry was rebuilt when the
+        // socket dropped) and sends OPEN again. The shell for that id is still running
+        // here — detach kept it — so the correct answer is to re-bind it: flush what
+        // it produced while detached and mark it attached. Spawning a second shell
+        // would leak the first, which is exactly the bug the old code avoided by
+        // treating a duplicate OPEN as a no-op; now it does something useful instead.
+        val existing = sessions[frame.sessionId]
+        if (existing != null) {
+            if (!existing.closing) {
+                reattach(existing, size)
+            }
 
+            return true
+        }
+
+        val (rows, cols) = size ?: (defaultRows to defaultCols)
         val session = Session(frame.sessionId, rows, cols)
         // Register before opening so output that arrives immediately has a home; the
         // port's onOutput can fire from the reader thread as soon as it starts.
@@ -99,7 +154,7 @@ class TerminalRelay(
                 sessionId = frame.sessionId,
                 rows = rows,
                 cols = cols,
-                onOutput = { id, data -> sendOutput(id, data) },
+                onOutput = { id, data -> onSessionOutput(id, data) },
                 onExit = { id, code -> onShellExit(id, code) },
             )
 
@@ -113,9 +168,50 @@ class TerminalRelay(
         return true
     }
 
+    /**
+     * Re-binds an OPEN to a shell we already hold, after a reconnect.
+     *
+     * Applies [size] only when the reattach carried one — a server-initiated
+     * reattach sends none, and the shell should keep the size it already had rather
+     * than shrink to the default — then marks the session attached and flushes the
+     * output buffered while it was detached. The flush is in order and before any new
+     * output, because the reader appends to the buffer under the same lock this
+     * drains it under.
+     */
+    private fun reattach(
+        session: Session,
+        size: Pair<Int, Int>?,
+    ) {
+        if (size != null) {
+            session.rows = size.first
+            session.cols = size.second
+            port.resize(session.id, size.first, size.second)
+        }
+
+        val buffered =
+            synchronized(session.pending) {
+                session.detached = false
+                session.detachedAt = 0
+                val flushed = session.pending.toList()
+                session.pending.clear()
+                session.pendingBytes = 0
+
+                flushed
+            }
+
+        buffered.forEach { data ->
+            sendFrame(PtyFrame.encodeData(session.id, data))
+        }
+    }
+
     private fun handleData(frame: PtyFrame.Frame): Boolean {
         val session = sessions[frame.sessionId] ?: return false
         if (session.closing) return true
+
+        // Input while detached is dropped. It cannot have come from the operator (the
+        // socket is down), and writing it to the shell would inject keystrokes nobody
+        // sent. A reattach is a fresh view of the same shell, not a replay of input.
+        if (session.detached) return true
 
         if (frame.payload.isNotEmpty()) {
             port.write(frame.sessionId, frame.payload)
@@ -184,22 +280,103 @@ class TerminalRelay(
     }
 
     /**
-     * Sends terminal output to the server.
+     * Terminal output from the reader: send it, or buffer it while detached.
      *
-     * A failed send means the socket is gone; the session is closed so the reader
-     * stops rather than filling a buffer nobody will drain.
+     * Attached, a failed send means the socket is gone. That no longer closes the
+     * session — it **detaches** it, so the shell survives the drop and a reconnect
+     * re-binds it (see [detachAll]). Detached, output is appended to the bounded
+     * buffer and the oldest bytes are dropped on overflow: a terminal is a tail, and
+     * a detached shell printing without limit must not grow the device's memory.
      */
-    private fun sendOutput(
+    private fun onSessionOutput(
         sessionId: String,
         data: ByteArray,
     ) {
         if (data.isEmpty()) return
-        if (!sessions.containsKey(sessionId)) return
 
-        val sent = sendFrame(PtyFrame.encodeData(sessionId, data))
-        if (!sent) {
-            closeSession(sessionId, "socket_write_failed")
+        val session = sessions[sessionId] ?: return
+
+        if (session.detached) {
+            buffer(session, data)
+
+            return
         }
+
+        if (!sendFrame(PtyFrame.encodeData(sessionId, data))) {
+            // The write failed: the socket is gone but the shell is not. Detach this
+            // session so its output is kept for the reconnect rather than lost or
+            // treated as a dead shell.
+            detach(session)
+        }
+    }
+
+    /** Appends output to a detached session's buffer, dropping the oldest on overflow. */
+    private fun buffer(
+        session: Session,
+        data: ByteArray,
+    ) {
+        synchronized(session.pending) {
+            // Re-check under the lock: a reattach between the caller's check and here
+            // would have drained the buffer and marked the session attached, and
+            // buffering then would strand the bytes until the next detach.
+            if (!session.detached) {
+                sendFrame(PtyFrame.encodeData(session.id, data))
+
+                return
+            }
+
+            session.pending.addLast(data)
+            session.pendingBytes += data.size
+
+            while (session.pendingBytes > detachedBufferBytes && session.pending.isNotEmpty()) {
+                val dropped = session.pending.removeFirst()
+                session.pendingBytes -= dropped.size
+            }
+        }
+    }
+
+    /** Marks a session detached so its shell keeps running with no socket attached. */
+    private fun detach(session: Session) {
+        if (session.detached) return
+
+        session.detached = true
+        session.detachedAt = now()
+    }
+
+    /**
+     * Detaches every live session, keeping each shell running.
+     *
+     * This replaces the old behaviour of closing every session on a dropped socket.
+     * A session whose socket write already failed has detached itself; this covers
+     * the ones that had not written since the drop. Called by the connection on
+     * disconnect, and before [closeAll] on an explicit stop, so a service shutdown
+     * still reaps every shell.
+     */
+    fun detachAll() {
+        for (session in sessions.values) {
+            if (!session.closing) detach(session)
+        }
+    }
+
+    /**
+     * Reaps detached sessions older than the TTL, and returns how many were closed.
+     *
+     * Called on connect and by the connection's periodic tick. The server's idle TTL
+     * is the backstop for a forgotten tab that is still *connected*; this is the
+     * device's bound for a shell whose socket has gone and may never return.
+     */
+    fun reapDetached(): Int {
+        val cutoff = now() - detachedTtlMs
+        var reaped = 0
+
+        for (session in sessions.values.toList()) {
+            if (session.detached && session.detachedAt in 1..cutoff) {
+                closeSession(session.id, "detached_timeout")
+                reaped++
+            }
+        }
+
+        return reaped
     }
 
     private fun sendClose(
@@ -242,5 +419,24 @@ class TerminalRelay(
         /** A conventional terminal size, used when the open frame carries none. */
         const val DEFAULT_ROWS = 24
         const val DEFAULT_COLS = 80
+
+        /**
+         * How long a detached session is kept before it is reaped.
+         *
+         * Ten minutes: long enough to survive a reconnect after a brief network blip,
+         * short enough that a shell left by a closed tab is reclaimed without waiting
+         * for the server's 2 h idle TTL. The server TTL still governs a session whose
+         * socket is up but idle.
+         */
+        const val DETACHED_TTL_MS = 10 * 60 * 1000L
+
+        /**
+         * Output buffered per detached session, in bytes.
+         *
+         * 256 KiB holds a screenfuls of scrollback — the tail an operator reconnecting
+         * wants to see — without letting a detached `yes` grow the device's memory.
+         * The oldest bytes are dropped past this bound.
+         */
+        const val DETACHED_BUFFER_BYTES = 256 * 1024
     }
 }
