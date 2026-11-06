@@ -274,3 +274,36 @@ SIGSYS race), so `runInContainer` retries a command on up to **3 fresh shells**
 before failing — one unlucky shell must not fail a 57-shell sweep. `/proc/loadavg`
 is denied even to `adb shell` on the emulator, so `load_average` correctly answers a
 structured `internal` error; the test treats that as an answer, not a failure.
+
+## Terminal reattach — device-side persistence (2026-11-06)
+
+A session now **outlives the socket** on both sides. Neither a dropped device
+socket nor a dropped operator socket ends it; only an explicit `pty_close` or the
+idle TTL does. This is the device-side persistence model, chosen over tmux because
+tmux cannot work here (SELinux denies its client the devpts read) and because the
+app already owns the PTY master fd.
+
+**Device** (`0898a46`): `TerminalRelay.detachAll` replaces `closeAll` on
+disconnect; output is buffered up to 256 KiB (oldest dropped) and flushed on
+reattach; a detached session is reaped after 10 min; a failed socket write
+detaches instead of closing; input while detached is dropped. `CloudConnection`
+detaches on disconnect, reaps on connect, and still `closeAll`s on `stop()`.
+
+**Server** (`cd429036`): `PTYRegistry.Open` re-binds an existing id for the
+**same operator+device** (refreshes TTL + credit window); a *different* operator
+is still refused, or a guessed id would be a session hijack. A new
+`Hub.SetDeviceConnectHook` re-sends an OPEN for each live session
+(`PTYRelay.ReattachDeviceSessions`), so a reconnected device re-binds the shells
+it kept. The device-disconnect hook and the operator-disconnect path no longer
+close sessions.
+
+**The browser is the missing third piece.** It must send `pty_open` with the
+*same* session id it used before; no browser terminal exists in the server repo
+yet (`apps/Vyzorix_web` has no pty client), so that is a contract, not code.
+Without it, a reconnect starts a fresh shell and the buffered output is dropped.
+
+**Server build env**: Go 1.27.2 lives at `/workspace/toolchain/go` (persistent);
+`apps/api` is its own module. `go build/vet/test ./...` all pass, and the four
+drift checks (GraphQL/CUE/swagger/selectors) are clean. `apps/api/go.mod` gets
+re-sorted by `go run`; revert it if it shows up in `git status` unrelated to the
+change.
