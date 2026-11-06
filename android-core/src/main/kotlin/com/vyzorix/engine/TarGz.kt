@@ -234,25 +234,55 @@ internal object TarGz {
     }
 
     /**
-     * Resolves an entry name against the destination, refusing anything that escapes.
+     * The target path for an archive entry, refusing anything that escapes `dest`.
      *
-     * The check is on the *canonical* path, so a name like `a/../../b` is caught even
-     * though it does not start with `..`.
+     * ## The escape check must not follow the symlinks it is about to create
+     *
+     * This used `canonicalFile`, which resolves symlinks — and a Debian rootfs is
+     * full of them: `./dev/fd` is a symlink to `/proc/self/fd`. Canonicalising that
+     * produces `/proc/self/fd`, which is outside the destination, so the check threw
+     * and **aborted the whole extraction mid-way through the archive**.
+     *
+     * The damage was not a clean failure. Files are extracted in archive order, so
+     * the tree was left with some entries written and the rest not — including
+     * `libc.so.6` replaced while processes were running. That surfaced as
+     * `cannot stat shared object: Operation not permitted` and, when it happened
+     * during a core install, as a rootfs that looked corrupt. It took a live run to
+     * see, because the first 300 entries extract perfectly.
+     *
+     * The check is now lexical: the entry's *name* is normalised against the
+     * destination without touching the filesystem, so `./dev/fd` is simply
+     * `dest/dev/fd`. A `..` that climbs out is still refused, which is what the check
+     * is actually for — a hostile archive, not a legitimate symlink.
      */
     private fun resolve(
         canonicalDest: File,
         name: String,
     ): File {
         val cleaned = name.removePrefix("./")
-        val candidate = File(canonicalDest, cleaned).canonicalFile
+        if (cleaned.isEmpty()) return canonicalDest
 
-        val destPath = canonicalDest.path
-        val candidatePath = candidate.path
-        if (candidatePath != destPath && !candidatePath.startsWith("$destPath${File.separator}")) {
-            throw IOException("tar entry escapes the destination: $name")
+        // Refuse an absolute entry, and refuse one that climbs out. Both are the
+        // shapes a hostile archive uses; a normal Debian entry is neither.
+        if (cleaned.startsWith(File.separator)) {
+            throw IOException("tar entry is absolute: $name")
         }
 
-        return candidate
+        val parts = mutableListOf<String>()
+        for (segment in cleaned.split(File.separator)) {
+            when (segment) {
+                "", "." -> Unit
+                ".." ->
+                    if (parts.isEmpty()) {
+                        throw IOException("tar entry escapes the destination: $name")
+                    } else {
+                        parts.removeAt(parts.size - 1)
+                    }
+                else -> parts.add(segment)
+            }
+        }
+
+        return parts.fold(canonicalDest) { dir, segment -> File(dir, segment) }
     }
 
     private fun writeFile(
@@ -263,7 +293,24 @@ internal object TarGz {
     ) {
         target.parentFile?.mkdirs()
 
-        FileOutputStream(target).use { out ->
+        // Write to a temporary and rename over the target, rather than truncating the
+        // target in place. This is not an optimisation — it is what makes extraction
+        // safe while the container is **running**.
+        //
+        // A truncating write opens the existing inode and empties it, so a process
+        // that already has the file mapped (libc, ld-linux, any binary the shell is
+        // executing) sees its contents vanish underneath it. The kernel then refuses
+        // to fault the page back in and the process dies with
+        // `cannot stat shared object: Operation not permitted` or `Permission denied`
+        // — which reads as a corrupt rootfs rather than as a file being rewritten.
+        //
+        // `rename` replaces the *directory entry*. A process holding the old inode
+        // keeps it, complete and untouched, for as long as it lives; a process that
+        // opens the path next gets the new file. That is the property the extended
+        // tier needs: it re-ships every core file, and it installs after the engine
+        // has started.
+        val temp = File(target.parentFile, "${target.name}.vyzorix-tmp")
+        FileOutputStream(temp).use { out ->
             var remaining = size
             val buffer = ByteArray(COPY_BUFFER)
             while (remaining > 0) {
@@ -273,9 +320,22 @@ internal object TarGz {
                 out.write(buffer, 0, read)
                 remaining -= read
             }
+            // Flush before the rename: a rename that lands before the data does leaves
+            // an empty file where a binary used to be.
+            out.fd.sync()
         }
 
-        applyMode(target, mode)
+        applyMode(temp, mode)
+
+        if (!temp.renameTo(target)) {
+            // A rename can fail if the target is a directory, which means the archive
+            // disagrees with the tree. Fall back to removing the target and retrying
+            // once, then report rather than leaving the temp behind.
+            if (!target.delete() || !temp.renameTo(target)) {
+                temp.delete()
+                throw IOException("could not replace ${target.absolutePath}")
+            }
+        }
     }
 
     /**

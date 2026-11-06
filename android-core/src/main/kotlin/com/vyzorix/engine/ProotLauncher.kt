@@ -250,6 +250,22 @@ object ProotLauncher {
             )
 
         if (tmuxSession != null) {
+            // tmux must be told its socket directory explicitly, or it refuses to
+            // start with "no suitable socket path" and the terminal is dead.
+            //
+            // tmux's compiled default is the list `"$TMUX_TMPDIR:" _PATH_TMP`, i.e.
+            // `/tmp/` with a *trailing slash*, and `expand_paths` drops any entry
+            // whose `realpath(3)` fails. Under proot that call fails: `realpath` on a
+            // path with a trailing slash returns ENOENT (proot's path translation
+            // mishandles the empty final component), even though the directory
+            // plainly exists — `stat`, `lstat` and `access` all succeed on it. With
+            // the only entry dropped, tmux finds no socket path and exits 1.
+            //
+            // Setting `TMUX_TMPDIR=/tmp` (no slash) makes the first entry resolve, so
+            // tmux uses `/tmp/tmux-0/<name>`. This is an environment fix, not a
+            // `/tmp` workaround: `/tmp` is already the intended location.
+            args += "TMUX_TMPDIR=$TMUX_TMPDIR_IN_CONTAINER"
+
             // `new-session -A -s NAME` is the reattach: create NAME, or attach if it
             // exists. The shell is given explicitly rather than left to tmux's default
             // (`$SHELL`, which `env -i` has just cleared), so the container always
@@ -416,6 +432,15 @@ object ProotLauncher {
      * It ships in the extended tier, so it may be absent; [hasTmux] is the check.
      */
     const val TMUX_BINARY = "/usr/bin/tmux"
+
+    /**
+     * The socket directory handed to `tmux` as `TMUX_TMPDIR`.
+     *
+     * Deliberately `/tmp` and **not** `/tmp/`: tmux canonicalises its socket path
+     * list with `realpath(3)`, which under proot fails on a trailing slash, and its
+     * compiled default is `/tmp/`. A path without the slash resolves, so tmux starts.
+     */
+    const val TMUX_TMPDIR_IN_CONTAINER = "/tmp"
 
     /**
      * The supervisor binary inside the container, absolute.

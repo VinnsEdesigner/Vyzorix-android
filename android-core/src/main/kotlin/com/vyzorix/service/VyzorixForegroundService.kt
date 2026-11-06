@@ -61,6 +61,20 @@ class VyzorixForegroundService : Service() {
     /** Live PTY readers, keyed by channel. The reader owns the fd and closes it. */
     private val readers = ConcurrentHashMap<Int, PtyReader>()
 
+    /**
+     * The port an operator's terminal is opened through.
+     *
+     * Exposed so a caller that is **in this process** — an instrumented test, or a
+     * future local client — can drive the production terminal path instead of
+     * building its own. That matters because the token is minted here, from this
+     * service's registry: a caller that mints its own gets a token the bridge has
+     * never seen and every request is refused. Keeping the port private made the
+     * container terminal untestable from the outside without duplicating the wiring.
+     */
+    @Volatile
+    var terminalPort: PtySessionPort? = null
+        private set
+
     /** The one-shot install thread, kept so `onDestroy` can join it. */
     private var installThread: Thread? = null
 
@@ -93,6 +107,7 @@ class VyzorixForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
 
         if (running.compareAndSet(false, true)) {
+            instance = this
             start()
         }
 
@@ -120,25 +135,37 @@ class VyzorixForegroundService : Service() {
                 val ready = RootfsBootstrap.ensureInstalled(this)
                 Log.i(TAG, "rootfs install finished; engine ready=$ready")
 
-                // The extended tier (`git`, `python3`, `tmux`) is fetched on the same
-                // thread but after the core tier, and only once the engine is ready:
-                // it is ~108 MB over the network, so it must not delay the core
-                // install, and there is no point fetching tooling into a userspace
-                // that is not there. A failure here is logged and ignored — the
-                // engine works without it — and the next boot retries.
+                // **Order matters: extended, then layer 3, then the supervisor.**
+                //
+                // The extended tier (`git`, `python3`, `tmux`) re-ships every core
+                // file — `libc.so.6`, `ld-linux`, every binary — so writing it into
+                // the tree while anything is running out of that tree rewrites files
+                // out from under live processes. The extraction is atomic now (see
+                // `TarGz.writeFile`), which makes it *safe*; installing it before
+                // anything is spawned is what makes it *unnecessary to be lucky*.
+                //
+                // The supervisor is started **last** deliberately, because
+                // `ProotLauncher.hasSupervisor()` is the signal everything else uses
+                // to mean "the tree is ready" — the service's own watchdog, and any
+                // caller waiting on the engine. Starting it before the extended
+                // extract would make that signal true while the tree was still being
+                // rewritten.
+                //
+                // The cost is that the supervisor waits on a 108 MB download on a
+                // device that wants the optional tooling, and a failed download is
+                // still only logged. That is the right way round: a slow start is a
+                // delay, and a rewritten `libc` under a live process is a broken
+                // container.
                 if (ready) {
-                    // The Layer 3 binaries go in before the extended tier: the
-                    // supervisor is what runs apps, and it is small and bundled, so
-                    // it must not wait on a 108 MB download.
+                    val extended = RootfsBootstrap.ensureExtended(this)
+                    Log.i(TAG, "extended tier install finished; installed=$extended")
+
                     val layer3 = RootfsBootstrap.ensureLayer3(this)
                     Log.i(TAG, "layer 3 install finished; supervisor=$layer3")
 
                     if (layer3) {
                         startSupervisor()
                     }
-
-                    val extended = RootfsBootstrap.ensureExtended(this)
-                    Log.i(TAG, "extended tier install finished; installed=$extended")
                 }
             }, "vyzorix-rootfs-install").apply {
                 isDaemon = true
@@ -173,9 +200,18 @@ class VyzorixForegroundService : Service() {
         // The cloud connection, if the app installed one. Started after the bridge so
         // the APIs it registers are ready before a frame can arrive, and after the
         // broker exists so the terminal port can be handed over.
+        //
+        // The port is built and published **unconditionally**, before the null check:
+        // `cloudLink?.attachPtyPort(buildTerminalPort())` never built it when there was
+        // no cloud link, because a safe call short-circuits its arguments. In
+        // bridge-only mode — which is how a device runs until it is enrolled, and how
+        // the instrumented tests run — the terminal path was therefore unavailable to
+        // any in-process caller, even though the engine, the broker and the bridge were
+        // all up.
         cloudLink = CloudLinkProvider.get()
         cloudLink?.registerApis(router)
-        cloudLink?.attachPtyPort(buildTerminalPort())
+        val port = buildTerminalPort()
+        cloudLink?.attachPtyPort(port)
         cloudLink?.start()
 
         Log.i(TAG, "service started")
@@ -203,7 +239,7 @@ class VyzorixForegroundService : Service() {
             canOpen = {
                 ProotLauncher.isReady(this) || TerminalShellPolicy.isUncontainedShellAllowed()
             },
-        )
+        ).also { terminalPort = it }
 
     /**
      * The shell a terminal session runs.
@@ -223,11 +259,13 @@ class VyzorixForegroundService : Service() {
             // Wrap in tmux when it is available so a dropped WebSocket reattaches to
             // the same shell instead of losing it (§6.3). The session name is the
             // terminal's own id, so a reconnect with the same id attaches and a second
-            // terminal gets its own. `hasTmux` gates it because tmux lives in the
-            // extended tier, which is fetched on demand — a terminal opened before it
-            // lands gets a plain shell, which is the correct degradation.
+            // terminal gets its own.
+            //
+            // **Disabled on device — see [TMUX_REATTACH_ENABLED].** The code is kept,
+            // and gated rather than deleted, so the fix has somewhere to land and the
+            // reason lives beside it.
             val tmux =
-                if (ProotLauncher.hasTmux(this)) {
+                if (TMUX_REATTACH_ENABLED && ProotLauncher.hasTmux(this)) {
                     TMUX_SESSION_PREFIX + sessionId
                 } else {
                     null
@@ -520,6 +558,11 @@ class VyzorixForegroundService : Service() {
         }
         installThread = null
 
+        // The port holds the broker and the token registry, both of which this
+        // service owns; clearing it keeps a stale reference from outliving them.
+        terminalPort = null
+        instance = null
+
         releaseWakeLock()
         super.onDestroy()
     }
@@ -576,12 +619,57 @@ class VyzorixForegroundService : Service() {
         private const val TAG = "VyzorixService"
 
         /**
+         * The running service, or null.
+         *
+         * A static reference to a service is normally a leak, and this one is
+         * deliberately narrow: it is written in `onStartCommand`, cleared in
+         * `onDestroy`, and read only by an instrumented test that is in the same
+         * process. Its purpose is to let a test open a terminal through
+         * [terminalPort] — the production path, with the production token — instead
+         * of minting a token the bridge has never seen.
+         */
+        @Volatile
+        private var instance: VyzorixForegroundService? = null
+
+        /** The terminal port of the running service, or null when it is not up. */
+        fun terminalPortOrNull(): PtySessionPort? = instance?.terminalPort
+
+        /**
          * Prefix for a terminal's tmux session name.
          *
          * Prefixed so a container session is recognisable in `tmux ls` and
          * cannot collide with a name an operator picks by hand.
          */
         private const val TMUX_SESSION_PREFIX = "vyzorix-"
+
+        /**
+         * Whether a terminal's shell is wrapped in tmux for reattach. **Off.**
+         *
+         * §6.3 wants a dropped WebSocket to reattach to the same shell, and
+         * `tmux new-session -A` is how. It does not work on a device, and it fails in
+         * a way that takes the whole terminal with it, so it is disabled here rather
+         * than deleted — the fix has a place to land.
+         *
+         * The cause is SELinux, not tmux. tmux's *client* resolves its own tty name,
+         * which reads the `devpts` directory, and Android's `untrusted_app` domain is
+         * denied that read:
+         *
+         *     avc: denied { read } for comm="tmux: client" name="/" dev="devpts"
+         *     scontext=u:r:untrusted_app:… tcontext=u:object_r:devpts:s0 tclass=dir
+         *
+         * The client then exits without attaching, and the operator gets a terminal
+         * that echoes keystrokes and answers nothing. A bare `bash --login` never
+         * resolves its tty name, which is why the identical PTY works without tmux.
+         * Verified on the emulator: with tmux every API call returns nothing; without
+         * it, every API answers. Nothing an app can do grants that read, so restoring
+         * reattach needs a sepolicy change (not available to us) or a mechanism that
+         * does not resolve a tty name.
+         *
+         * `loginShellArgs(tmuxSession=…)` remains unit-tested and correct — including
+         * the `TMUX_TMPDIR` fix for proot's trailing-slash `realpath` — so flipping
+         * this back on is the only change reattach needs once the tty read is solved.
+         */
+        private const val TMUX_REATTACH_ENABLED = false
 
         /**
          * How many times the supervisor is restarted before giving up.

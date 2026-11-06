@@ -115,7 +115,24 @@ class ServicePtySessionPort(
                     holder[0]?.grantCredit(bytes.size)
                 },
                 onExit = { code ->
+                    // Release the broker's channel and its registry slot, not just the
+                    // port's own map.
+                    //
+                    // A shell can end on its own — the operator types `exit`, or proot
+                    // dies during startup — and that path runs here, not through
+                    // [close]. Dropping only `live` left the broker's channel and the
+                    // session registry holding the session, and the registry counts
+                    // sessions per device against a cap of four. So four shells that
+                    // ended by themselves silently used up the whole cap and every
+                    // later terminal was refused with "already holds 4 sessions" —
+                    // which is what made a long API sweep fail partway through with
+                    // "the terminal port must open a shell". [close] already does this
+                    // for the operator-initiated path; this is the same cleanup for the
+                    // shell-initiated one. Both tolerate the other having run first:
+                    // [close] returns early when `live` has no entry, and the broker's
+                    // close is a no-op for a channel already gone.
                     live.remove(sessionId)
+                    broker.close(channel)
                     tokens.revokeSession(sessionId)
                     onExit(sessionId, code)
                 },

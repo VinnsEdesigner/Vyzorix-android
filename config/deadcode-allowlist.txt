@@ -64,3 +64,10 @@ kotlin-unused-const:TIER_ADVANCED       # tier vocabulary
 # PTY credit frame; the relay's flow control returns credit with it.
 kotlin-unused-decl:encodeAck            # PTY credit frame; the relay's flow control sends it
 
+
+# The service's terminal port, read by the instrumented test that drives the
+# container terminal (ApiLiveE2ETest). A caller inside the service process must use
+# the production port, because it mints the session token from the service's own
+# registry — a token minted elsewhere is one the bridge has never seen. No
+# production caller exists yet; the cloud relay attaches the port directly.
+kotlin-test-only-decl:terminalPortOrNull  # test seam to the service's own terminal port

@@ -233,3 +233,44 @@ The bridge served 6 APIs; it serves **58**, all called by `ApiSmokeTest`.
 - **Robolectric is on `:android-core`'s test classpath but not `:cloud-connector`'s**
   — a unit test needing an Android runtime must live in `:android-core`, or the
   module needs the dependency added.
+
+## The 58 APIs are now tested on the device (2026-11-06)
+
+`ApiSmokeTest` (Robolectric) is not enough — it never touches proot, the socket
+bind, or the C++ client. `:app`'s **`ApiLiveE2ETest`** runs every API the way an
+operator does: `proot -> android-bin <api> -> /tmp/android.sock -> the bridge`,
+and it is green. Getting it green found four real defects, three in production
+code:
+
+- **`android-bin` prints the result directly, with no `{"ok","result"}` envelope.**
+  `BridgeClient::Call` unwraps it and `main` prints the inner string. A *failure*
+  is `"<api>: <kind>: <detail>"` on stderr (PTY merges streams). The test asserts
+  transport: JSON on stdout, or a structured `forbidden`/`internal` refusal, both
+  of which are answers. Only `unknown_api` is a failure (catalogue drift).
+- **The service never published its terminal port in bridge-only mode.**
+  `cloudLink?.attachPtyPort(buildTerminalPort())` — a safe call short-circuits its
+  *arguments*, so with no cloud link the port was never built. Build it first, then
+  attach.
+- **A shell that exits on its own leaked its session.** `ServicePtySessionPort`'s
+  `onExit` removed the port entry but never called `broker.close`, so the registry
+  kept the session and its per-device count. The cap is **4**; four self-exits (a
+  startup death counts) exhausted it and every later terminal was refused. Fixed in
+  `onExit`; both cleanup paths tolerate the other running first.
+- **tmux cannot wrap the terminal on-device — SELinux.** The tmux *client* resolves
+  its own tty name, which reads the `devpts` directory; `untrusted_app` is denied
+  (`avc: denied { read } … comm="tmux: client" dev="devpts"`). The client exits
+  without attaching, so the terminal echoes input and answers nothing. A bare
+  `bash --login` never resolves its tty name, which is why the same PTY works
+  without it. **Gated off** behind `TMUX_REATTACH_ENABLED = false` (the code and its
+  unit tests stay; reattach is unimplemented, a reconnect starts a fresh shell).
+- **proot's `realpath()` fails on a trailing slash** (`/tmp/` -> ENOENT, though
+  `stat`/`lstat`/`access` are fine). tmux's compiled default socket list is
+  `"$TMUX_TMPDIR:" _PATH_TMP` = `/tmp/`, which it then drops — hence "no suitable
+  socket path". `loginShellArgs` now sets `TMUX_TMPDIR=/tmp` (no slash) whenever it
+  wraps in tmux. This is a genuine proot bug, not worked around in tmux.
+
+**Test technique that matters**: a shell is occasionally flaky to start (proot's
+SIGSYS race), so `runInContainer` retries a command on up to **3 fresh shells**
+before failing — one unlucky shell must not fail a 57-shell sweep. `/proc/loadavg`
+is denied even to `adb shell` on the emulator, so `load_average` correctly answers a
+structured `internal` error; the test treats that as an answer, not a failure.

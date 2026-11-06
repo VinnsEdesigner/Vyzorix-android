@@ -135,6 +135,10 @@ log "packing"
 mkdir -p "${OUT}"
 tar -C "${STAGE}" -czf "${OUT}/layer3-${ARCH}.tar.gz" .
 ls -lh "${OUT}/layer3-${ARCH}.tar.gz"
-tar -tzf "${OUT}/layer3-${ARCH}.tar.gz" | head -20
+# The listing is a convenience, and `tar | head` is a SIGPIPE race: head exits after
+# 20 lines, tar gets EPIPE, and with `set -o pipefail` the whole build fails
+# intermittently. The archive is already verified above, so a failure to *list* it
+# must not fail the build — hence the explicit tolerance rather than a bare pipe.
+tar -tzf "${OUT}/layer3-${ARCH}.tar.gz" 2>/dev/null | head -20 || true
 
 log "done"
