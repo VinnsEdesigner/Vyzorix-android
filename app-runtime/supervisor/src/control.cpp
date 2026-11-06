@@ -247,23 +247,23 @@ std::string HandleRequest(Manager *manager, const std::string &request_json) {
             const std::string tokenValue =
                 token != nullptr && token->IsString() ? token->string : "";
 
-            // The refusal that matters (§7.2): 0.0.0.0 is every interface, so a
-            // flasher on a hotspot would be reachable by anyone on it. Without a
-            // token this is refused rather than warned about.
-            if (bindAddress != "127.0.0.1" && bindAddress != "::1" && tokenValue.empty()) {
-                return ReplyError(
-                    "refusing to bind " + bindAddress +
-                    " without a token: that would expose the app to the whole network");
+            // The refusal that matters (§7.2) lives in the manager, which is where
+            // the proxy is started: checking it here as well would be two places to
+            // keep the rule, and the one that matters is the one that binds.
+            std::string error;
+            if (!manager->Expose(name, bindAddress, tokenValue, &error)) {
+                return ReplyError(error);
             }
 
-            // The proxy itself is a separate process (app-proxy); this records the
-            // intent and reports the URL an operator would use.
-            const vapps::App *app = manager->registry().Find(name);
-            if (app == nullptr) {
+            return ReplyOk(QuoteJson(manager->ExposedAddress(name)));
+        }
+
+        if (op == op::kUnexpose) {
+            if (!manager->Unexpose(name)) {
                 return ReplyError("no app named " + name);
             }
 
-            return ReplyOk(QuoteJson(bindAddress + ":" + std::to_string(app->port)));
+            return ReplyOk(QuoteJson("unexposed"));
         }
 
         return ReplyError("unknown op '" + op + "'");

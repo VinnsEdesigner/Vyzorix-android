@@ -182,7 +182,7 @@ struct Fixture {
     Manager manager;
 
     explicit Fixture(std::vector<vapps::App> apps)
-        : manager(MakeRegistry(apps), path, "/tmp", &host) {
+        : manager(MakeRegistry(apps), path, "/tmp", "/tmp", &host) {
         ::unlink(path.c_str());
     }
 

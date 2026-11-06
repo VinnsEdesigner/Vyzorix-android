@@ -14,10 +14,12 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "vyzorix/apps.h"
+#include "vyzorix/proxy.h"
 
 namespace vsup {
 
@@ -91,7 +93,8 @@ public:
  */
 class Manager {
 public:
-    Manager(vapps::Registry registry, std::string registryPath, std::string logDir, Host *host);
+    Manager(vapps::Registry registry, std::string registryPath, std::string logDir,
+            std::string metaDir, Host *host);
 
     /** Starts every app marked `autostart`, skipping ones already running. */
     void StartAutostart();
@@ -145,6 +148,36 @@ public:
     /** The log file for `name`. */
     std::string LogPathFor(const std::string &name) const;
 
+    /** The metadata directory: `meta/`, beside `logs/`. */
+    [[nodiscard]] const std::string &metaDir() const {
+        return metaDir_;
+    }
+
+    /**
+     * Starts a proxy for `name`'s app, or stops the one it has.
+     *
+     * Returns false when the app is unknown, has no port, or the proxy was refused —
+     * a non-loopback bind with no token. The refusal reason is written to `error` so
+     * the operator sees why rather than just "failed".
+     */
+    bool Expose(const std::string &name, const std::string &bind, const std::string &token,
+                std::string *error);
+
+    /** Stops `name`'s proxy, if it has one. Returns whether one was stopped. */
+    bool Unexpose(const std::string &name);
+
+    /** The bind address `name`'s proxy is listening on, or empty when not exposed. */
+    [[nodiscard]] std::string ExposedAddress(const std::string &name) const;
+
+    /**
+     * Starts the proxies for every app the metadata says is exposed.
+     *
+     * Called at startup: an exposed app stays exposed across a supervisor restart,
+     * because the metadata is on disk. Without this, a reboot would silently drop
+     * every expose.
+     */
+    void StartExposed();
+
     /** The registry as JSON, for `app-list --json`. */
     std::string RegistryJson() const {
         return registry_.ToJson();
@@ -175,10 +208,19 @@ private:
     vapps::Registry registry_;
     std::string registryPath_;
     std::string logDir_;
+    std::string metaDir_;
     Host *host_;
 
     /** Live processes, keyed by app name. */
     std::map<std::string, Running> running_;
+
+    /**
+     * Live proxies, keyed by app name.
+     *
+     * Owned here rather than by the control server: the proxy outlives a client, and
+     * an expose is a property of the app, not of the connection that requested it.
+     */
+    std::map<std::string, std::unique_ptr<vproxy::Proxy>> proxies_;
 
     /**
      * Consecutive crash count per app, independent of whether it is running.

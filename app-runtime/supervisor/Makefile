@@ -23,7 +23,8 @@ INC := -Iinclude -I$(LIB)/include
 
 SRC := src/main.cpp src/manager.cpp src/host_system.cpp src/control.cpp
 LIB_SRC := $(LIB)/src/json.cpp $(LIB)/src/frame.cpp $(LIB)/src/apps.cpp \
-           $(LIB)/src/log.cpp $(LIB)/src/watch.cpp
+           $(LIB)/src/log.cpp $(LIB)/src/watch.cpp \
+           $(LIB)/src/proxy.cpp $(LIB)/src/meta.cpp
 
 .PHONY: all check clean
 

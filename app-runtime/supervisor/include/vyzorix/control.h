@@ -46,6 +46,7 @@ constexpr const char *kCreate = "create";
 constexpr const char *kRemove = "remove";
 constexpr const char *kPing = "ping";
 constexpr const char *kExpose = "expose";
+constexpr const char *kUnexpose = "unexpose";
 } // namespace op
 
 /**

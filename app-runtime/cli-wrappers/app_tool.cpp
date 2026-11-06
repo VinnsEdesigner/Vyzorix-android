@@ -67,7 +67,8 @@ void PrintUsage(const std::string &name) {
               << "  app-env NAME          show an app's environment\n"
               << "  app-create NAME CMD   declare an app\n"
               << "  app-remove NAME       forget an app\n"
-              << "  app-expose NAME       show how to reach an app\n"
+              << "  app-expose NAME       expose an app (bind=, token=)\n"
+              << "  app-unexpose NAME     stop exposing an app\n"
               << "\n"
               << "The supervisor socket is VYZORIX_APPS_SOCKET (default " << kDefaultSocket
               << ").\n";
@@ -129,6 +130,13 @@ int Run(const std::string &name, const std::vector<std::string> &args) {
 
     if (op == "list") {
         // no arguments
+    } else if (op == "unexpose") {
+        if (args.empty()) {
+            std::cerr << name << ": needs a NAME\n";
+
+            return 2;
+        }
+        request.emplace_back("name", Quote(args[0]));
     } else if (op == "create") {
         if (args.size() < 2) {
             std::cerr << name << ": needs a NAME and a CMD\n";

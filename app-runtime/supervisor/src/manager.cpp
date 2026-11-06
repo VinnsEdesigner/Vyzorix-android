@@ -3,6 +3,7 @@
 #include "vyzorix/supervisor.h"
 
 #include "vyzorix/log.h"
+#include "vyzorix/meta.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -37,9 +38,15 @@ std::int64_t BackoffMsFor(int failures) {
     return std::min(delay, kBackoffMaxMs);
 }
 
-Manager::Manager(vapps::Registry registry, std::string registryPath, std::string logDir, Host *host)
+Manager::Manager(vapps::Registry registry, std::string registryPath, std::string logDir,
+                 std::string metaDir, Host *host)
     : registry_(std::move(registry)), registryPath_(std::move(registryPath)),
-      logDir_(std::move(logDir)), host_(host) {}
+      logDir_(std::move(logDir)), metaDir_(std::move(metaDir)), host_(host) {
+    // The metadata directory holds the expose config, so it is created here rather
+    // than on the first expose: an operator looking at the layout should see `meta/`
+    // beside `logs/` from the start.
+    vmeta::EnsureDir(metaDir_);
+}
 
 std::string Manager::LogPathFor(const std::string &name) const {
     return logDir_ + "/" + name + ".log";
@@ -191,6 +198,133 @@ bool Manager::Restart(const std::string &name) {
     }
 
     return Start(name);
+}
+
+bool Manager::Expose(const std::string &name, const std::string &bind, const std::string &token,
+                     std::string *error) {
+    const vapps::App *app = registry_.Find(name);
+    if (app == nullptr) {
+        *error = "no app named " + name;
+
+        return false;
+    }
+
+    // An app with no port has nothing to proxy. Refusing here is better than
+    // starting a proxy that 502s every request.
+    if (app->port <= 0) {
+        *error = "app " + name + " does not declare a port to expose";
+
+        return false;
+    }
+
+    // Replace any existing proxy: an expose on an already-exposed app is a change of
+    // bind address or token, not a second listener on the same port.
+    Unexpose(name);
+
+    auto proxy = std::make_unique<vproxy::Proxy>();
+
+    vproxy::ProxyConfig config;
+    config.name = name;
+    config.bindAddress = bind;
+    config.targetHost = "127.0.0.1";
+    config.targetPort = app->port;
+    config.token = token;
+
+    // **The listener port is not the app's port**, and this was found by running it:
+    // proot shares the host's network namespace, so a proxy on `0.0.0.0:<app port>`
+    // collides with the app already listening on `127.0.0.1:<app port>` — the app
+    // cannot be reached through a proxy that cannot bind.
+    //
+    // So the app's port is what the proxy *forwards to*, and the listener takes the
+    // same number only if it is free. A taken port means the app is there (the normal
+    // case), and the kernel then picks a free one. The bound port is what
+    // [ExposedAddress] reports, so the operator is told the real URL rather than the
+    // one that was hoped for.
+    config.port = app->port;
+
+    if (!proxy->Start(config, error)) {
+        // The one refusal worth retrying: the port is the app's own. A token refusal
+        // or a bad address must not be retried.
+        if (error->find("Address already in use") == std::string::npos) {
+            return false;
+        }
+
+        config.port = 0;
+        error->clear();
+        if (!proxy->Start(config, error)) {
+            return false;
+        }
+    }
+
+    proxies_[name] = std::move(proxy);
+
+    // The metadata is what makes the expose survive a restart, so it is written only
+    // once the proxy is actually up: recording an expose that failed to bind would
+    // make the next boot try to start it again and fail the same way.
+    vmeta::AppMeta meta;
+    meta.name = name;
+    meta.exposed = true;
+    meta.expose.bind = bind;
+    // The port actually bound, not the one requested: a proxy that fell back to a
+    // kernel-assigned port must record that, or a restart would try the taken one.
+    meta.expose.port = proxies_[name]->port();
+    meta.expose.token = token;
+    vmeta::Save(metaDir_, meta);
+
+    return true;
+}
+
+bool Manager::Unexpose(const std::string &name) {
+    const auto it = proxies_.find(name);
+    if (it != proxies_.end()) {
+        it->second->Stop();
+        proxies_.erase(it);
+    }
+
+    vmeta::AppMeta meta;
+    meta.name = name;
+    meta.exposed = false;
+    vmeta::Save(metaDir_, meta);
+
+    return it != proxies_.end();
+}
+
+std::string Manager::ExposedAddress(const std::string &name) const {
+    const auto it = proxies_.find(name);
+    if (it == proxies_.end() || !it->second->running()) {
+        return std::string();
+    }
+
+    return it->second->bindAddress() + ":" + std::to_string(it->second->port());
+}
+
+void Manager::StartExposed() {
+    // Every app whose metadata says it is exposed is brought back up. This is what
+    // makes an expose outlive a supervisor restart: the state is on disk, and without
+    // this a reboot would silently drop it.
+    for (const vapps::App &app : registry_.apps()) {
+        vmeta::AppMeta meta;
+        try {
+            meta = vmeta::Load(metaDir_, app.name);
+        } catch (const std::exception &e) {
+            // A corrupt metadata file must not stop the supervisor; it costs a
+            // re-expose, which the operator can see is missing.
+            std::fprintf(stderr, "supervisor: %s metadata unreadable: %s\n", app.name.c_str(),
+                         e.what());
+
+            continue;
+        }
+
+        if (!meta.exposed) {
+            continue;
+        }
+
+        std::string error;
+        if (!Expose(app.name, meta.expose.bind, meta.expose.token, &error)) {
+            std::fprintf(stderr, "supervisor: could not re-expose %s: %s\n", app.name.c_str(),
+                         error.c_str());
+        }
+    }
 }
 
 void Manager::RotateLogs() {

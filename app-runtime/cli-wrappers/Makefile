@@ -24,7 +24,7 @@ LIB_SRC := $(LIB)/src/json.cpp $(LIB)/src/frame.cpp
 # The commands, one symlink each. Kept here rather than discovered because the set
 # is the CLI's public surface and should be visible in the build.
 COMMANDS := app-start app-stop app-restart app-list app-logs app-env app-create \
-            app-remove app-expose
+            app-remove app-expose app-unexpose
 
 .PHONY: all clean
 

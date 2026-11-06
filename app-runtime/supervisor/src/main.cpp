@@ -38,6 +38,9 @@ namespace {
 
 constexpr const char *kDefaultApps = "/home/apps/apps.json";
 constexpr const char *kDefaultLogs = "/home/apps/logs";
+
+/** Per-app metadata, beside the logs. Holds the expose config, which is a secret. */
+constexpr const char *kDefaultMeta = "/home/apps/meta";
 constexpr const char *kDefaultSocket = "/home/apps/supervisor.sock";
 
 /** The server whose loop a signal must stop. */
@@ -107,6 +110,7 @@ std::string DirName(const std::string &path) {
 int main(int argc, char **argv) {
     std::string appsPath = kDefaultApps;
     std::string logsDir = kDefaultLogs;
+    std::string metaDir = kDefaultMeta;
     std::string socketPath = kDefaultSocket;
 
     for (int i = 1; i < argc; i++) {
@@ -124,10 +128,13 @@ int main(int argc, char **argv) {
             appsPath = value("--apps");
         } else if (arg == "--logs") {
             logsDir = value("--logs");
+        } else if (arg == "--meta") {
+            metaDir = value("--meta");
         } else if (arg == "--socket") {
             socketPath = value("--socket");
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "usage: supervisor [--apps PATH] [--logs DIR] [--socket PATH]\n";
+            std::cout << "usage: supervisor [--apps PATH] [--logs DIR] [--meta DIR] "
+                         "[--socket PATH]\n";
 
             return 0;
         } else {
@@ -139,7 +146,8 @@ int main(int argc, char **argv) {
 
     // The directories must exist before anything is written into them: the registry,
     // the logs, and the socket's parent.
-    if (!EnsureDir(DirName(appsPath)) || !EnsureDir(logsDir) || !EnsureDir(DirName(socketPath))) {
+    if (!EnsureDir(DirName(appsPath)) || !EnsureDir(logsDir) || !EnsureDir(metaDir) ||
+        !EnsureDir(DirName(socketPath))) {
         std::cerr << "supervisor: cannot create the app directories\n";
 
         return 1;
@@ -158,7 +166,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    vsup::Manager manager(std::move(registry), appsPath, logsDir, &host);
+    vsup::Manager manager(std::move(registry), appsPath, logsDir, metaDir, &host);
 
     vsup::ControlServer server(&manager, socketPath);
     if (!server.Start()) {
@@ -182,6 +190,11 @@ int main(int argc, char **argv) {
     std::signal(SIGPIPE, SIG_IGN);
 
     manager.StartAutostart();
+
+    // An expose is state on disk, so it outlives a restart. Without this a reboot
+    // would silently drop every exposed app while its metadata still said otherwise.
+    manager.StartExposed();
+
     std::cerr << "supervisor: ready on " << socketPath << "\n";
 
     server.Run();

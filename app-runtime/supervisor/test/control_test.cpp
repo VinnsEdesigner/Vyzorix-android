@@ -91,7 +91,7 @@ struct Fixture {
     std::string dir = base;
     Manager manager;
 
-    Fixture() : manager(vapps::Registry(), path, base, &host) {
+    Fixture() : manager(vapps::Registry(), path, base, base, &host) {
         ::mkdir(base.c_str(), 0755);
         ::unlink(path.c_str());
 
