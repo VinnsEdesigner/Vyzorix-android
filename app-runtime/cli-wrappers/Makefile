@@ -19,7 +19,7 @@ BUILD := build
 LIB := ../../native/lib
 INC := -I$(LIB)/include
 
-LIB_SRC := $(LIB)/src/json.cpp $(LIB)/src/frame.cpp
+LIB_SRC := $(LIB)/src/vyzorix_json.cpp $(LIB)/src/frame_channel.cpp
 
 # The commands, one symlink each. Kept here rather than discovered because the set
 # is the CLI's public surface and should be visible in the build.

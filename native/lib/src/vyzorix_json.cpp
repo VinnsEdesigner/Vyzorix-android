@@ -1,6 +1,6 @@
 // JSON reader/writer — see json.h for why this is hand-rolled.
 
-#include "vyzorix/json.h"
+#include "vyzorix/vyzorix_json.h"
 
 #include <cctype>
 #include <cmath>

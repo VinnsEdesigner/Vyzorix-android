@@ -28,7 +28,7 @@
 
 #include "api_catalog.h"
 #include "bridge.h"
-#include "vyzorix/json.h"
+#include "vyzorix/vyzorix_json.h"
 
 namespace {
 

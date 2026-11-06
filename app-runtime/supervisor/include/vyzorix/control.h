@@ -23,8 +23,8 @@
 #include <cstdint>
 #include <string>
 
+#include "vyzorix/app_dir_watcher.h"
 #include "vyzorix/supervisor.h"
-#include "vyzorix/watch.h"
 
 namespace vsup {
 

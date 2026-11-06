@@ -14,10 +14,10 @@
 
 #include <unistd.h>
 
-#include "vyzorix/apps.h"
+#include "vyzorix/app_registry.h"
 #include "vyzorix/control.h"
-#include "vyzorix/json.h"
 #include "vyzorix/supervisor.h"
+#include "vyzorix/vyzorix_json.h"
 
 using namespace vsup;
 

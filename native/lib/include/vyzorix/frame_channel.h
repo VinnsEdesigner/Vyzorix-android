@@ -13,8 +13,8 @@
 // the payload contains, is the caller's business — that is what keeps one framing
 // usable by two protocols.
 
-#ifndef VYZORIX_FRAME_H
-#define VYZORIX_FRAME_H
+#ifndef VYZORIX_FRAME_CHANNEL_H
+#define VYZORIX_FRAME_CHANNEL_H
 
 #include <cstddef>
 #include <cstdint>
@@ -101,4 +101,4 @@ int Listen(const std::string &path);
 
 } // namespace vframe
 
-#endif // VYZORIX_FRAME_H
+#endif // VYZORIX_FRAME_CHANNEL_H

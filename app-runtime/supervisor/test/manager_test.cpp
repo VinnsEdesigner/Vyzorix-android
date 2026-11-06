@@ -15,7 +15,7 @@
 
 #include <unistd.h>
 
-#include "vyzorix/apps.h"
+#include "vyzorix/app_registry.h"
 #include "vyzorix/supervisor.h"
 
 using namespace vsup;

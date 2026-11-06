@@ -1,6 +1,6 @@
 // Framed messages over a unix socket — see frame.h.
 
-#include "vyzorix/frame.h"
+#include "vyzorix/frame_channel.h"
 
 #include <cerrno>
 #include <cstring>

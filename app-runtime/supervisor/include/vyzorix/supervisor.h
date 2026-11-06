@@ -18,8 +18,8 @@
 #include <string>
 #include <vector>
 
-#include "vyzorix/apps.h"
-#include "vyzorix/proxy.h"
+#include "vyzorix/app_http_proxy.h"
+#include "vyzorix/app_registry.h"
 
 namespace vsup {
 

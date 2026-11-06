@@ -20,13 +20,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "vyzorix/apps.h"
-#include "vyzorix/frame.h"
-#include "vyzorix/json.h"
-#include "vyzorix/log.h"
-#include "vyzorix/meta.h"
-#include "vyzorix/proxy.h"
-#include "vyzorix/watch.h"
+#include "vyzorix/app_dir_watcher.h"
+#include "vyzorix/app_http_proxy.h"
+#include "vyzorix/app_log_rotation.h"
+#include "vyzorix/app_meta_store.h"
+#include "vyzorix/app_registry.h"
+#include "vyzorix/frame_channel.h"
+#include "vyzorix/vyzorix_json.h"
 
 using namespace vapps; // NOLINT(google-build-using-namespace) — a test file, for brevity
 
@@ -350,7 +350,7 @@ void TestWatcherSeesARegistryWrite() {
     if (!watcher.Watch(dir)) {
         // inotify can be unavailable in a restricted container. Skip rather than
         // fail: the supervisor degrades to "no live reload" and still works.
-        std::cout << "lib_test: inotify unavailable, skipping the watcher checks\n";
+        std::cout << "native_lib_test: inotify unavailable, skipping the watcher checks\n";
         ::rmdir(dir.c_str());
 
         return;
@@ -821,12 +821,12 @@ int main() {
     TestProxyStreamsALargeBody();
 
     if (failures == 0) {
-        std::cout << "lib_test: all checks passed\n";
+        std::cout << "native_lib_test: all checks passed\n";
 
         return 0;
     }
 
-    std::cerr << "lib_test: " << failures << " failure(s)\n";
+    std::cerr << "native_lib_test: " << failures << " failure(s)\n";
 
     return 1;
 }

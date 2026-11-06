@@ -18,8 +18,8 @@
 // The layout mirrors `logs/`: `meta/<name>.json` is to metadata what
 // `logs/<name>.log` is to output.
 
-#ifndef VYZORIX_META_H
-#define VYZORIX_META_H
+#ifndef VYZORIX_APP_META_STORE_H
+#define VYZORIX_APP_META_STORE_H
 
 #include <string>
 
@@ -88,4 +88,4 @@ bool EnsureDir(const std::string &metaDir);
 
 } // namespace vmeta
 
-#endif // VYZORIX_META_H
+#endif // VYZORIX_APP_META_STORE_H

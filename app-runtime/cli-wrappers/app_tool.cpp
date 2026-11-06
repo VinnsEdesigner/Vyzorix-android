@@ -27,8 +27,8 @@
 #include <string>
 #include <vector>
 
-#include "vyzorix/frame.h"
-#include "vyzorix/json.h"
+#include "vyzorix/frame_channel.h"
+#include "vyzorix/vyzorix_json.h"
 
 namespace {
 

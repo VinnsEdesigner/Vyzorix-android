@@ -18,8 +18,8 @@
 // write lands at zero. That is the property that makes copy-then-truncate correct
 // here, and it is why the spawn opens the log with O_APPEND.
 
-#ifndef VYZORIX_LOG_H
-#define VYZORIX_LOG_H
+#ifndef VYZORIX_APP_LOG_ROTATION_H
+#define VYZORIX_APP_LOG_ROTATION_H
 
 #include <cstddef>
 #include <string>
@@ -51,4 +51,4 @@ std::size_t LogSize(const std::string &path);
 
 } // namespace vlog
 
-#endif // VYZORIX_LOG_H
+#endif // VYZORIX_APP_LOG_ROTATION_H

@@ -19,7 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "vyzorix/apps.h"
+#include "vyzorix/app_registry.h"
 
 namespace vsup {
 namespace {

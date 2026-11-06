@@ -22,9 +22,9 @@ LIB := ../../native/lib
 INC := -Iinclude -I$(LIB)/include
 
 SRC := src/main.cpp src/manager.cpp src/host_system.cpp src/control.cpp
-LIB_SRC := $(LIB)/src/json.cpp $(LIB)/src/frame.cpp $(LIB)/src/apps.cpp \
-           $(LIB)/src/log.cpp $(LIB)/src/watch.cpp \
-           $(LIB)/src/proxy.cpp $(LIB)/src/meta.cpp
+LIB_SRC := $(LIB)/src/vyzorix_json.cpp $(LIB)/src/frame_channel.cpp $(LIB)/src/app_registry.cpp \
+           $(LIB)/src/app_log_rotation.cpp $(LIB)/src/app_dir_watcher.cpp \
+           $(LIB)/src/app_http_proxy.cpp $(LIB)/src/app_meta_store.cpp
 
 .PHONY: all check clean
 

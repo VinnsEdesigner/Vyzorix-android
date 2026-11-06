@@ -1,6 +1,6 @@
 // Bounded, rotated app logs — see log.h for why the strategy is copy-then-truncate.
 
-#include "vyzorix/log.h"
+#include "vyzorix/app_log_rotation.h"
 
 #include <cstdio>
 #include <fstream>

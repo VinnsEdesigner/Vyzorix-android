@@ -2,8 +2,8 @@
 
 #include "vyzorix/supervisor.h"
 
-#include "vyzorix/log.h"
-#include "vyzorix/meta.h"
+#include "vyzorix/app_log_rotation.h"
+#include "vyzorix/app_meta_store.h"
 
 #include <algorithm>
 #include <cstdio>

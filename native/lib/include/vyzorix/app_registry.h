@@ -23,8 +23,8 @@
 // field 22 of `/proc/<pid>/stat`, which does not repeat for a recycled pid within
 // a boot.
 
-#ifndef VYZORIX_APPS_H
-#define VYZORIX_APPS_H
+#ifndef VYZORIX_APP_REGISTRY_H
+#define VYZORIX_APP_REGISTRY_H
 
 #include <cstdint>
 #include <map>
@@ -143,4 +143,4 @@ bool IsSameProcess(int pid, std::uint64_t startTicks);
 
 } // namespace vapps
 
-#endif // VYZORIX_APPS_H
+#endif // VYZORIX_APP_REGISTRY_H

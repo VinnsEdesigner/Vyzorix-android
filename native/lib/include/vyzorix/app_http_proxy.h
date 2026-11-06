@@ -25,8 +25,8 @@
 // never buffered whole, so a large download or a chunked response passes through
 // without the proxy holding it in memory.
 
-#ifndef VYZORIX_PROXY_H
-#define VYZORIX_PROXY_H
+#ifndef VYZORIX_APP_HTTP_PROXY_H
+#define VYZORIX_APP_HTTP_PROXY_H
 
 #include <atomic>
 #include <cstdint>
@@ -161,4 +161,4 @@ std::string StripToken(const std::string &target, std::string *token);
 
 } // namespace vproxy
 
-#endif // VYZORIX_PROXY_H
+#endif // VYZORIX_APP_HTTP_PROXY_H

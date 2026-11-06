@@ -1,6 +1,6 @@
 // The HTTP reverse proxy — see proxy.h for the design and its scope.
 
-#include "vyzorix/proxy.h"
+#include "vyzorix/app_http_proxy.h"
 
 #include <algorithm>
 #include <cerrno>

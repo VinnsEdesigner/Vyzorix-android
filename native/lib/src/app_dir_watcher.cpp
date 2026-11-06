@@ -1,6 +1,6 @@
 // Watching the app directory — see watch.h.
 
-#include "vyzorix/watch.h"
+#include "vyzorix/app_dir_watcher.h"
 
 #include <cerrno>
 #include <cstring>

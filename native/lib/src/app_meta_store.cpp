@@ -1,6 +1,6 @@
 // Per-app metadata — see meta.h.
 
-#include "vyzorix/meta.h"
+#include "vyzorix/app_meta_store.h"
 
 #include <cerrno>
 #include <cstring>
@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "vyzorix/json.h"
+#include "vyzorix/vyzorix_json.h"
 
 namespace vmeta {
 namespace {

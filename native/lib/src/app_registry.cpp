@@ -1,6 +1,6 @@
 // The app registry — see apps.h.
 
-#include "vyzorix/apps.h"
+#include "vyzorix/app_registry.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -12,7 +12,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "vyzorix/json.h"
+#include "vyzorix/vyzorix_json.h"
 
 namespace vapps {
 namespace {

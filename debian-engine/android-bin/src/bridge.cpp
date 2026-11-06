@@ -11,7 +11,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "vyzorix/json.h"
+#include "vyzorix/vyzorix_json.h"
 
 namespace android_bin {
 namespace {

@@ -29,7 +29,7 @@
 
 #include <sys/stat.h>
 
-#include "vyzorix/apps.h"
+#include "vyzorix/app_registry.h"
 #include "vyzorix/control.h"
 #include "vyzorix/host_system.h"
 #include "vyzorix/supervisor.h"

@@ -19,8 +19,8 @@
 // response is "re-read everything", because events have been lost. That is what
 // [Drain] returning overflow reports.
 
-#ifndef VYZORIX_WATCH_H
-#define VYZORIX_WATCH_H
+#ifndef VYZORIX_APP_DIR_WATCHER_H
+#define VYZORIX_APP_DIR_WATCHER_H
 
 #include <cstdint>
 #include <string>
@@ -92,4 +92,4 @@ private:
 
 } // namespace vwatch
 
-#endif // VYZORIX_WATCH_H
+#endif // VYZORIX_APP_DIR_WATCHER_H

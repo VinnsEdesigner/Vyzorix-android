@@ -11,7 +11,7 @@
 #include <iostream>
 #include <string>
 
-#include "vyzorix/json.h"
+#include "vyzorix/vyzorix_json.h"
 
 namespace {
 

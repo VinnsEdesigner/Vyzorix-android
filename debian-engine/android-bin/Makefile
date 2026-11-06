@@ -35,7 +35,7 @@ OBJ := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRC))
 # The shared lib's translation units, compiled here with the lib's include path.
 # Kept separate from OBJ because their sources live outside src/ and so do not
 # match the src/%.cpp pattern rule.
-LIB_SRC := $(LIB)/src/json.cpp
+LIB_SRC := $(LIB)/src/vyzorix_json.cpp
 LIB_OBJ := $(BUILD)/json.o
 
 .PHONY: all check clean
@@ -75,7 +75,7 @@ $(BUILD):
 # client needs a live socket and is covered by the on-device suite.
 check: | $(BUILD)
 	$(HOST_CXX) -std=c++17 -O2 -Wall -Wextra -Werror -I$(LIB)/include \
-		-o $(BUILD)/json_test $(LIB)/src/json.cpp test/json_test.cpp
+		-o $(BUILD)/json_test $(LIB)/src/vyzorix_json.cpp test/json_test.cpp
 	$(BUILD)/json_test
 
 clean:
