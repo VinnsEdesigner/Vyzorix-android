@@ -286,6 +286,20 @@ bool ControlServer::Start() {
         return false;
     }
 
+    // The watcher is armed on the apps directory, not on the registry file: the file
+    // is replaced on every save (write-temp-then-rename), which would kill a watch on
+    // it. A failure here is not fatal — the supervisor then does not live-reload, and
+    // everything else still works.
+    const std::size_t slash = manager_->registryPath().find_last_of('/');
+    const std::string directory =
+        slash == std::string::npos ? "." : manager_->registryPath().substr(0, slash);
+    registryName_ = manager_->registryPath().substr(slash + 1);
+
+    if (!watcher_.Watch(directory)) {
+        std::fprintf(stderr, "supervisor: cannot watch %s; registry edits need a restart\n",
+                     directory.c_str());
+    }
+
     return true;
 }
 
@@ -316,17 +330,49 @@ void ControlServer::Run() {
         FD_ZERO(&readable);
         FD_SET(listenFd_, &readable);
 
+        // The watcher is waited on in the same select, so a registry edit is noticed
+        // within the tick rather than on the next client connect.
+        int highest = listenFd_;
+        if (watcher_.IsWatching()) {
+            FD_SET(watcher_.fd(), &readable);
+            if (watcher_.fd() > highest) {
+                highest = watcher_.fd();
+            }
+        }
+
         struct timeval timeout;
         timeout.tv_sec = 0;
         timeout.tv_usec = kAcceptPollMs * 1000;
 
-        const int ready = ::select(listenFd_ + 1, &readable, nullptr, nullptr, &timeout);
+        const int ready = ::select(highest + 1, &readable, nullptr, nullptr, &timeout);
         if (stopping_) {
             break;
         }
         if (ready <= 0) {
             // Nothing to accept. Still drive the manager: this loop is the only
             // place it is touched, so it is also where restarts are scheduled.
+            manager_->Poll();
+
+            continue;
+        }
+
+        // A registry edit is a re-read, never a restart: the apps that are running
+        // stay running, and the set of apps that *should* be is brought up to date.
+        if (watcher_.IsWatching() && FD_ISSET(watcher_.fd(), &readable)) {
+            const vwatch::Change change = watcher_.Drain(registryName_);
+            if (change.registryChanged || change.overflowed || !change.createdDirs.empty()) {
+                try {
+                    manager_->Reload();
+                    manager_->StartAutostart();
+                } catch (const std::exception &e) {
+                    // A half-written or malformed registry must not stop the
+                    // supervisor; the next event retries.
+                    std::fprintf(stderr, "supervisor: reload failed: %s\n", e.what());
+                }
+            }
+        }
+
+        if (!FD_ISSET(listenFd_, &readable)) {
             manager_->Poll();
 
             continue;

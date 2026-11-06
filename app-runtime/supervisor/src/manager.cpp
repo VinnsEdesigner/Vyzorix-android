@@ -2,6 +2,8 @@
 
 #include "vyzorix/supervisor.h"
 
+#include "vyzorix/log.h"
+
 #include <algorithm>
 #include <cstdio>
 
@@ -191,8 +193,18 @@ bool Manager::Restart(const std::string &name) {
     return Start(name);
 }
 
+void Manager::RotateLogs() {
+    // Every app with a log, not just the running ones: a stopped app's log is still
+    // on disk and still counts against the storage budget.
+    for (const vapps::App &app : registry_.apps()) {
+        vlog::RotateLog(LogPathFor(app.name));
+    }
+}
+
 void Manager::Poll() {
     const std::int64_t now = host_->NowMs();
+
+    RotateLogs();
 
     // Reap anything that has exited and decide what comes back.
     for (auto it = running_.begin(); it != running_.end();) {

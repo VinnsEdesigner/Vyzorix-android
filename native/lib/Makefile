@@ -16,7 +16,7 @@ CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Werror
 BUILD := build
 
-SRC := src/json.cpp src/frame.cpp src/apps.cpp
+SRC := src/json.cpp src/frame.cpp src/apps.cpp src/log.cpp src/watch.cpp
 OBJ := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRC))
 
 .PHONY: all check clean

@@ -161,6 +161,16 @@ public:
      */
     void Reload();
 
+    /**
+     * Rotates any app log that has grown past the cap.
+     *
+     * Called from [Poll], so it costs one `stat` per running app per tick. The child
+     * holds the log descriptor and the supervisor never sees its writes, so this is
+     * the only place a runaway log can be bounded — an app that prints in a loop
+     * would otherwise fill `/data` and take the device with it.
+     */
+    void RotateLogs();
+
 private:
     vapps::Registry registry_;
     std::string registryPath_;

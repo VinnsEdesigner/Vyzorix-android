@@ -9,14 +9,19 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "vyzorix/apps.h"
 #include "vyzorix/frame.h"
 #include "vyzorix/json.h"
+#include "vyzorix/log.h"
+#include "vyzorix/watch.h"
 
 using namespace vapps; // NOLINT(google-build-using-namespace) — a test file, for brevity
 
@@ -250,6 +255,163 @@ void TestConnectToMissingSocketThrows() {
     Check(threw, "connecting to a missing socket throws");
 }
 
+// -------------------------------------------------------------- Log rotation
+
+void TestRotationKeepsTheTailAndBoundsTheFile() {
+    const std::string path = TempPath("app.log");
+    ::unlink(path.c_str());
+    ::unlink((path + ".1").c_str());
+
+    // Below the cap: nothing happens.
+    {
+        std::ofstream out(path);
+        out << "small\n";
+    }
+    Check(!vlog::RotateLog(path, 1024, 512), "a small log is not rotated");
+    Check(vlog::LogSize(path) == 6, "and is left alone");
+
+    // Over the cap: the tail is kept, the live file is truncated.
+    {
+        std::ofstream out(path, std::ios::app);
+        for (int i = 0; i < 200; i++) {
+            out << "line " << i << "\n";
+        }
+    }
+    const std::size_t before = vlog::LogSize(path);
+    Check(before > 1024, "the log is over the cap");
+
+    Check(vlog::RotateLog(path, 1024, 512), "a large log is rotated");
+    Check(vlog::LogSize(path) == 0, "the live log is truncated to zero");
+
+    std::ifstream rotated(path + ".1");
+    std::stringstream body;
+    body << rotated.rdbuf();
+    Check(!body.str().empty(), "the rotated copy has the tail");
+    Check(body.str().size() <= 512, "the rotated copy is bounded by keepBytes");
+    Check(body.str().find("line 199") != std::string::npos, "the tail is the newest lines");
+
+    ::unlink(path.c_str());
+    ::unlink((path + ".1").c_str());
+}
+
+void TestRotationIsSafeForALiveAppendWriter() {
+    // The reason rotation is copy-then-truncate rather than rename: the app holds
+    // the descriptor open, and it is opened O_APPEND. A rename would leave the app
+    // writing to the renamed inode and the new file empty; a truncate in place is
+    // only correct *because* of O_APPEND. This test holds a real descriptor open
+    // across a rotation and asserts the writes continue to land in the live file.
+    const std::string path = TempPath("live.log");
+    ::unlink(path.c_str());
+    ::unlink((path + ".1").c_str());
+
+    const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0640);
+    Check(fd >= 0, "the app's log descriptor opens");
+
+    const std::string filler(2048, 'x');
+    Check(::write(fd, filler.data(), filler.size()) > 0, "the app writes before rotation");
+
+    Check(vlog::RotateLog(path, 1024, 512), "the log rotates while the writer is live");
+    Check(vlog::LogSize(path) == 0, "the live file is empty right after rotation");
+
+    const std::string after = "after-rotation\n";
+    Check(::write(fd, after.data(), after.size()) > 0, "the app writes after rotation");
+    ::close(fd);
+
+    // The crucial assertion: the post-rotation write is in the live file, not lost
+    // to a sparse hole or to the rotated copy.
+    std::ifstream live(path);
+    std::stringstream body;
+    body << live.rdbuf();
+    Check(body.str() == after,
+          "a write after rotation lands at the start of the live file, not past a hole");
+
+    ::unlink(path.c_str());
+    ::unlink((path + ".1").c_str());
+}
+
+void TestLogSizeOfAMissingFileIsZero() {
+    Check(vlog::LogSize(TempPath("does-not-exist.log")) == 0, "a missing log is size 0");
+    Check(!vlog::RotateLog(TempPath("does-not-exist.log")), "rotating a missing log is a no-op");
+}
+
+// ------------------------------------------------------------------- inotify
+
+void TestWatcherSeesARegistryWrite() {
+    const std::string dir = TempPath("watchdir");
+    ::mkdir(dir.c_str(), 0755);
+    const std::string registry = dir + "/apps.json";
+
+    vwatch::DirWatcher watcher;
+    if (!watcher.Watch(dir)) {
+        // inotify can be unavailable in a restricted container. Skip rather than
+        // fail: the supervisor degrades to "no live reload" and still works.
+        std::cout << "lib_test: inotify unavailable, skipping the watcher checks\n";
+        ::rmdir(dir.c_str());
+
+        return;
+    }
+
+    // A write through a real descriptor, closed, which is what Save() does.
+    {
+        const int fd = ::open(registry.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0640);
+        Check(fd >= 0, "the registry opens for writing");
+        const std::string body = "{\"apps\":[]}";
+        Check(::write(fd, body.data(), body.size()) > 0, "the registry is written");
+        ::close(fd);
+    }
+
+    const vwatch::Change change = watcher.Drain("apps.json");
+    Check(change.registryChanged, "a completed registry write is reported");
+    Check(!change.overflowed, "no overflow in a quiet test");
+
+    // A second drain with nothing pending reports nothing.
+    const vwatch::Change again = watcher.Drain("apps.json");
+    Check(!again.registryChanged, "draining twice does not repeat the event");
+
+    ::unlink(registry.c_str());
+    ::rmdir(dir.c_str());
+}
+
+void TestWatcherSeesANewAppDirectory() {
+    const std::string dir = TempPath("watchdir2");
+    ::mkdir(dir.c_str(), 0755);
+
+    vwatch::DirWatcher watcher;
+    if (!watcher.Watch(dir)) {
+        ::rmdir(dir.c_str());
+
+        return;
+    }
+
+    const std::string appDir = dir + "/newapp";
+    ::mkdir(appDir.c_str(), 0755);
+
+    const vwatch::Change change = watcher.Drain("apps.json");
+    Check(!change.createdDirs.empty(), "a new app directory is reported");
+    if (!change.createdDirs.empty()) {
+        Check(change.createdDirs[0] == "newapp", "the new directory is named");
+    }
+
+    ::rmdir(appDir.c_str());
+    ::rmdir(dir.c_str());
+}
+
+void TestWatcherWithoutAWatchIsInert() {
+    vwatch::DirWatcher watcher;
+    Check(!watcher.IsWatching(), "a default watcher is not watching");
+    Check(watcher.fd() < 0, "and has no descriptor");
+
+    const vwatch::Change change = watcher.Drain("apps.json");
+    Check(!change.registryChanged && !change.overflowed && change.createdDirs.empty(),
+          "draining an unwatched watcher is a no-op");
+}
+
+void TestWatcherRefusesAMissingDirectory() {
+    vwatch::DirWatcher watcher;
+    Check(!watcher.Watch(TempPath("no-such-directory")), "watching a missing directory fails");
+    Check(!watcher.IsWatching(), "and leaves the watcher inactive");
+}
+
 } // namespace
 
 int main() {
@@ -263,6 +425,13 @@ int main() {
     TestFrameRoundTrip();
     TestListenRemovesStaleNode();
     TestConnectToMissingSocketThrows();
+    TestRotationKeepsTheTailAndBoundsTheFile();
+    TestRotationIsSafeForALiveAppendWriter();
+    TestLogSizeOfAMissingFileIsZero();
+    TestWatcherSeesARegistryWrite();
+    TestWatcherSeesANewAppDirectory();
+    TestWatcherWithoutAWatchIsInert();
+    TestWatcherRefusesAMissingDirectory();
 
     if (failures == 0) {
         std::cout << "lib_test: all checks passed\n";

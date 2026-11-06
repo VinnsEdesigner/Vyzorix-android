@@ -24,6 +24,7 @@
 #include <string>
 
 #include "vyzorix/supervisor.h"
+#include "vyzorix/watch.h"
 
 namespace vsup {
 
@@ -94,6 +95,16 @@ private:
     std::string socketPath_;
     int listenFd_ = -1;
     volatile bool stopping_ = false;
+
+    /**
+     * Watches the app directory, so an edited registry is picked up without a
+     * restart. Inactive when inotify is unavailable; the supervisor then simply
+     * does not live-reload, which is what it did before this existed.
+     */
+    vwatch::DirWatcher watcher_;
+
+    /** The registry file's name, for the watcher's filter. */
+    std::string registryName_;
 };
 
 } // namespace vsup
