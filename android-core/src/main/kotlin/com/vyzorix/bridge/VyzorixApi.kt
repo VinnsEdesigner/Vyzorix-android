@@ -31,11 +31,18 @@ object ApiTags {
     const val DATA_APP = "data:app"
     const val DATA_PRIVATE = "data:private"
 
-    // Operation.
+    // Operation. A read is repeatable; a write is not, and will need its own risk
+    // tier when the first one lands. There is deliberately no `op:write` constant
+    // yet: the dead-code gate fails on a constant no API uses, and that is the right
+    // behaviour — an unused tag is a claim nothing makes. Add it with the API that
+    // needs it, not before.
     const val OP_READ = "op:read"
 
-    // Android permission class.
+    // Android permission class, matching the boundary contract's `protection:*`
+    // vocabulary. `protection:dangerous` is a runtime-granted permission and is the
+    // tag a reviewer should stop on.
     const val PROTECTION_NORMAL = "protection:normal"
+    const val PROTECTION_DANGEROUS = "protection:dangerous"
 
     // Who may see the result.
     const val VISIBILITY_PUBLIC = "visibility:public"

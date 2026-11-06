@@ -1,11 +1,5 @@
 package com.vyzorix.bridge
 
-import com.vyzorix.bridge.apis.BatteryApi
-import com.vyzorix.bridge.apis.DeviceInfoApi
-import com.vyzorix.bridge.apis.LogcatApi
-import com.vyzorix.bridge.apis.NetworkApi
-import com.vyzorix.bridge.apis.SessionApi
-import com.vyzorix.bridge.apis.StorageApi
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,18 +28,16 @@ import org.junit.Test
 class ApiCatalogTest {
 
     /**
-     * The API names the router serves, mirroring
-     * `VyzorixForegroundService.buildRouter()`.
+     * The API names the router serves.
+     *
+     * Read from [ApiCatalogue] rather than listed here. The earlier version mirrored
+     * `buildRouter()` by hand, which with six APIs was a tolerable duplication and
+     * with fifty is a list that would be wrong within a week — and wrong silently,
+     * which is the failure this test exists to prevent. The catalogue is now the one
+     * source the service registers from and `apis.txt` is written from, so this test
+     * checks the two consumers against each other rather than against a third copy.
      */
-    private val registeredApis: Set<String> =
-        setOf(
-            BatteryApi.NAME,
-            DeviceInfoApi.NAME,
-            StorageApi.NAME,
-            NetworkApi.NAME,
-            LogcatApi.NAME,
-            SessionApi.NAME,
-        )
+    private val registeredApis: Set<String> = ApiCatalogue.names.toSet()
 
     private fun apisTxt(): List<String> {
         val file = File(repoRoot(), "debian-engine/android-bin/apis.txt")
@@ -55,6 +47,17 @@ class ApiCatalogTest {
             .readLines()
             .map { it.substringBefore('#').trim() }
             .filter { it.isNotEmpty() }
+    }
+
+    private companion object {
+        /**
+         * The floor the catalogue must stay above.
+         *
+         * Not the exact count — that would fail on every addition and be relaxed
+         * reflexively — but a number low enough to be honest and high enough that an
+         * emptied or truncated catalogue is caught rather than written to `apis.txt`.
+         */
+        const val MINIMUM_API_COUNT = 50
     }
 
     /**
@@ -109,6 +112,58 @@ class ApiCatalogTest {
             "apis.txt must not repeat a name",
             names.size,
             names.toSet().size,
+        )
+    }
+
+    @Test
+    fun `every catalogue handler declares the name it is registered under`() {
+        // `sync-apis-txt.py` reads each API's `const val NAME` from its own file and
+        // the catalogue keys on `SomeApi.NAME`, so a mismatch between the two would
+        // produce an `apis.txt` entry that the router does not serve. This asserts the
+        // link the generator relies on.
+        for ((registeredAs, handler) in ApiCatalogue.handlers) {
+            val declared =
+                handler.javaClass.getField("NAME").get(null) as? String
+                    ?: throw AssertionError(
+                        "${handler.javaClass.simpleName} has no static NAME field",
+                    )
+
+            assertEquals(
+                "${handler.javaClass.simpleName} is registered as '$registeredAs' but " +
+                    "declares NAME='$declared'",
+                registeredAs,
+                declared,
+            )
+        }
+    }
+
+    @Test
+    fun `every registered api is listed in apis txt`() {
+        // The same check as below, stated for the whole catalogue: a name the router
+        // serves but apis.txt omits is a command an operator cannot reach.
+        val listed = apisTxt().toSet()
+
+        val unreachable = registeredApis.filterNot { it in listed }
+
+        assertTrue(
+            "these APIs are registered but not in apis.txt, so no command reaches " +
+                "them: $unreachable. Run: python3 scripts/sync-apis-txt.py",
+            unreachable.isEmpty(),
+        )
+    }
+
+    @Test
+    fun `the catalogue is substantial and every entry is unique`() {
+        // A guard on the generator: if a refactor emptied the catalogue, apis.txt
+        // would be rewritten to nothing and every container command would vanish.
+        assertTrue(
+            "the catalogue should serve the full API surface, not ${registeredApis.size}",
+            registeredApis.size >= MINIMUM_API_COUNT,
+        )
+        assertEquals(
+            "the catalogue must not register two handlers under one name",
+            registeredApis.size,
+            ApiCatalogue.handlers.size + 1, // +1 for `session`, registered separately
         )
     }
 

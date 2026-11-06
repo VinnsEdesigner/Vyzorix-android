@@ -11,14 +11,10 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import com.vyzorix.bridge.AndroidSocketServer
+import com.vyzorix.bridge.ApiCatalogue
 import com.vyzorix.bridge.ApiRouter
 import com.vyzorix.bridge.SessionTokenRegistry
-import com.vyzorix.bridge.apis.BatteryApi
-import com.vyzorix.bridge.apis.DeviceInfoApi
-import com.vyzorix.bridge.apis.LogcatApi
-import com.vyzorix.bridge.apis.NetworkApi
 import com.vyzorix.bridge.apis.SessionApi
-import com.vyzorix.bridge.apis.StorageApi
 import com.vyzorix.capability.PtyBroker
 import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
@@ -366,12 +362,12 @@ class VyzorixForegroundService : Service() {
                 channelOwnedBy = broker::channelBelongsToSession,
             )
 
-        return ApiRouter(permissions = PermissionRequester(this))
-            .register(BatteryApi.NAME, BatteryApi)
-            .register(DeviceInfoApi.NAME, DeviceInfoApi)
-            .register(StorageApi.NAME, StorageApi)
-            .register(NetworkApi.NAME, NetworkApi)
-            .register(LogcatApi.NAME, LogcatApi)
+        // Every read-only API comes from the catalogue, so the registration list is a
+        // value the catalog test and `apis.txt` can both read rather than a chain of
+        // calls nothing else can see. `session` is the one exception: it needs this
+        // service's session table, so it is constructed with callbacks.
+        return ApiCatalogue
+            .registerAll(ApiRouter(permissions = PermissionRequester(this)))
             .register(SessionApi.NAME, sessionApi)
     }
 

@@ -1,27 +1,76 @@
 # The Android APIs exposed to the container as commands.
 #
-# One name per line. `#` starts a comment; blank lines are ignored.
+# **Generated — do not edit by hand.** Written by `scripts/sync-apis-txt.py` from
+# `android-core/.../bridge/ApiCatalogue.kt`, which is the single source of truth.
+# `ApiCatalogTest` fails the gate if this file and the catalogue disagree, so a
+# hand-edit here is caught rather than shipped.
 #
 # Each name becomes:
-#   * a symlink to the `android-bin` binary, so `camera ...` runs it, and
+#   * a symlink to the `android-bin` binary, so `battery` runs it, and
 #   * an entry in the generated api_catalog.h, which is what `android-bin --list`
 #     prints and what the unknown-name check reads.
 #
-# **This list must match the handlers Layer 1 registers.** The authority is
-# `VyzorixForegroundService.buildRouter()` in android-core; this file is the
-# container's view of it. A name here that the router does not serve fails at
-# call time with `unknown_api`; a name the router serves that is missing here is
-# simply not reachable as a command. `ApiCatalogTest` asserts the two agree.
+# Regenerate with:
+#   python3 scripts/sync-apis-txt.py
 #
 # `auth` is deliberately absent: it is the reserved name the bridge serves *before*
 # authentication, not a callable API, and the router refuses to register it.
-#
-# The design doc's "120 APIs" is the target surface, not the current one. The list
-# grows as `apis/` grows; it is not padded with names nothing answers.
 
+accessibility
+airplane_mode
+app_storage
+audio_state
 battery
+battery_history
+bluetooth_state
+brightness
+build_fingerprint
+call_capability
+camera_list
+clipboard_state
+cpu_info
+default_apps
+developer_options
 device_info
+device_owner
+device_owner_capabilities
+display_info
+dns_servers
+do_not_disturb
+external_storage
+file_descriptors
+font_scale
+haptic_settings
+input_devices
+input_method
+installed_apps
+kernel_info
+load_average
+locale_info
 logcat
+memory_info
+mount_points
 network
+network_interfaces
+nfc_state
+notification_policy
+package_info
+phone_state
+power_save
+process_list
+proxy_state
+rotation_state
+screen_state
+screen_timeout
+security_patch
+sensor_list
 session
+sms_capability
 storage
+storage_volumes
+system_properties
+thermal
+time_info
+usb_state
+vpn_state
+wifi_state

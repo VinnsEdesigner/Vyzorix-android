@@ -61,7 +61,22 @@ object PermissionRegistry {
             // Permission-gated APIs, registered here rather than in their own
             // handlers. Each is added with its API, never before: a registry entry
             // with no API is as inert as a tag nothing requires.
+            // The APIs that need a dangerous permission, each registered with the
+            // API that introduced it. A permission-gated API that is not here would be
+            // called with no permission and fail at the platform with a
+            // SecurityException, which reads as a broken handler rather than a
+            // missing grant.
             "camera" to PermissionDef("android.permission.CAMERA", 1, Protection.DANGEROUS),
+            "phone_state" to
+                PermissionDef("android.permission.READ_PHONE_STATE", 1, Protection.DANGEROUS),
+            // SEND_SMS is what `SmsManager.getDefault()` requires; without it the
+            // capability question cannot be answered truthfully.
+            "sms_capability" to
+                PermissionDef("android.permission.SEND_SMS", 1, Protection.DANGEROUS),
+            // RECEIVE_SMS is separate from SEND_SMS on every API level, and an app
+            // that can send cannot necessarily receive.
+            "sms_received" to
+                PermissionDef("android.permission.RECEIVE_SMS", 1, Protection.DANGEROUS),
             "location" to
                 PermissionDef("android.permission.ACCESS_FINE_LOCATION", 1, Protection.DANGEROUS),
             "notification" to
