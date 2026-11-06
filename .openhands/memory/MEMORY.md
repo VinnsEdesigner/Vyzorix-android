@@ -151,7 +151,29 @@ device**: the supervisor starts and binds its socket, then SIGSEGVs ~200ms later
   `Layer3Installer` unpacks the asset into `overlay/usr-local` (so a rootfs
   replacement leaves it); the service spawns the supervisor and restarts it on exit.
 
-**The open defect.** `proot info: vpid 1: terminated with signal 11` ~200ms after
+**FIXED 2026-11-06.** The SIGSEGV had two causes, and the first hid the second.
+1. `./gradlew :app:assembleDebug` never rebuilt `app-runtime/dist/layer3-<abi>.tar.gz`
+   — `stageLayer3` only copied the existing file. So every device test ran the same
+   stale binary while the host tests passed, which made a series of isolation
+   experiments look conclusive when they were all testing one unchanged asset.
+   `buildLayer3` is now a Gradle prerequisite of staging.
+2. **`accept` had no SIGSYS conversion** — the filter traps it, the handler's default
+   answered `-ENOSYS`, and a connected client then hung forever ("supervisor up but
+   dead"). Now `accept` -> `accept4`. Also fixed: a double-close in `ServeOne`
+   (its `Connection` already owned the fd) and SIGPIPE at its default, which let a
+   client disconnecting mid-write kill the supervisor.
+   Verified live: create/start/list/logs/expose all work, and killing an app makes
+   the supervisor restart it (pid 6879 -> 6910).
+
+**Also built 2026-11-06:** inotify live-reload (`native/lib/watch.cpp` — watch the
+*directory*, not `apps.json`, because Save renames and kills a file watch); log
+rotation (`native/lib/log.cpp` — copy-then-truncate, safe only because the log is
+opened O_APPEND); and the `APP_START`/`APP_STOP`/`APP_RESTART` executors
+(`cloud-connector/.../AppCommands.kt`, over `AppControlClient` using
+`LocalSocket` in the FILESYSTEM namespace — the NIO unix-domain API is Java 16+ and
+not on Android). `AppCommandE2ETest` verifies the whole chain on the emulator.
+
+**Historical note on the original defect.** `proot info: vpid 1: terminated with signal 11` ~200ms after
 `supervisor: ready on /home/apps/supervisor.sock`. Started by hand (`run-as ...
 proot ... supervisor`) it runs forever, so it is specific to the **ART process**,
 where Android's seccomp filter is active and proot's SIGSYS handler runs.
