@@ -205,3 +205,31 @@ access, poll, mkdir, set_robust_list are all trapped by the filter).
 - `scripts/native-gate.sh` now derives its clang-tidy set from AGP's compile
   database instead of a hand-list, so a module is tidy'd only when the DB describes
   how to build it (the container tools are glibc-built and are not in it).
+
+## 58 bridge APIs, and the catalogue (2026-11-06)
+
+The bridge served 6 APIs; it serves **58**, all called by `ApiSmokeTest`.
+
+- **`ApiCatalogue` is the source of truth** for registrations. The service registers
+  from it, `ApiCatalogTest` reads it, and `scripts/sync-apis-txt.py` writes
+  `apis.txt` from it. Before this, the registration chain, `apis.txt` and the test
+  were three lists that had to agree with nothing making them — survivable at 6,
+  silently broken at 50.
+- **`ApiSmokeTest` calls every API** and asserts an outcome rather than an internal
+  error, valid JSON, and the permission rule both ways. It immediately found three
+  real bugs: `PackageInfo.longVersionCode` is API 28 (minSdk 26) — a
+  NoSuchMethodError on a 26/27 device; `NetworkInterface.getNetworkInterfaces()`
+  returns an `Enumeration`, not an `Iterable`; `StorageVolume.getDirectory()` is
+  API 30. **Run it before claiming an API works.**
+- **Adding an API**: write `XxxApi.kt` with `const val NAME`, add one line to
+  `ApiCatalogue.handlers`, run `python3 scripts/sync-apis-txt.py`. If it needs a
+  permission, add the registry entry too or the router refuses it with no
+  explanation.
+- **Tags**: `PROTECTION_DANGEROUS` exists and is used; `op:write` does **not** exist
+  yet because no API writes — the dead-code gate fails on a constant nothing uses,
+  and that is correct. Add it with the first write API.
+- **Deliberately absent**: subscriber identifiers (IMEI/IMSI/number) and any write
+  API. Both are recorded in the files where they would otherwise be added.
+- **Robolectric is on `:android-core`'s test classpath but not `:cloud-connector`'s**
+  — a unit test needing an Android runtime must live in `:android-core`, or the
+  module needs the dependency added.
