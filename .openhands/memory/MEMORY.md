@@ -332,3 +332,25 @@ the full set: `apiLevel`, `buildId` (`Build.FINGERPRINT`), `securityPatch`
   `device_request_auth_test.go`, `device_route_split_test.go`.
 - Changing `enrollRequest` changes swagger; regenerate with
   `swag init -g cmd/api/api_main.go --parseDependency --output swag` or the drift gate fails.
+
+## Filesystem access by API level (2026-11-07) — doc/DEVICE_FILESYSTEM_ACCESS.md
+
+Measured, not assumed. **API 33 regresses vs API 28**: the app declares no storage
+permission, so on Android 13 shared storage is read-only (`Operation not permitted`)
+and `Android/{data,obb}` are denied. The fix is to declare
+`READ_EXTERNAL_STORAGE` + `WRITE_EXTERNAL_STORAGE` and grant them at runtime;
+`requestLegacyExternalStorage` is NOT needed (targetSdk 28 is already on the legacy
+path once the permission is held). `MANAGE_EXTERNAL_STORAGE` is not required.
+
+- **`adb shell run-as <pkg>` is NOT a valid probe on API 29+.** It runs in the
+  `runas_app` SELinux domain *and a different mount namespace*, so on API 33 it
+  reports `/storage/emulated/0` as ABSENT while the app can read and list it. Use
+  the instrumented `FsAccessProbeTest` (non-asserting, prints to logcat).
+- API 28 probe IS valid via `run-as` (pre-scoped-storage).
+- **API 33 AVD**: `system-images;android-33;default;x86_64`, AVD `api33`. The
+  default AVD wants a 7.3 GB userdata partition; with `/workspace` tight, delete
+  the **regenerable** `~/.android`-style scratch images
+  (`avd/x86test.avd/userdata-qemu.img*`) to free ~6 GB, and shrink
+  `disk.dataPartition.size` in the AVD's `config.ini`.
+- On API 33 the app's supplementary groups gain `ext_data_rw`/`ext_obb_rw`/
+  `all_a<uid>`, and `run-as` uses the `runas_app` domain (vs `untrusted_app`).
