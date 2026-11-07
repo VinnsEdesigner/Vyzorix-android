@@ -415,3 +415,22 @@ of empty input, no APK staged). Both are now real. See `doc/OTA_UPDATE.md`.
   client against a server on the host (`10.0.2.2:3000` — `adb reverse` does not work
   here) from the Android 9 emulator: 64 MB downloaded and checksum-verified. A device
   already on the latest code does not download.
+
+## Download progress (OTA) — 2026-11-07
+
+`POST /v1/download-progress` existed but was **log-only** — the server accepted
+progress and could not answer for it. Now both halves are wired:
+
+- Device `UpdateClient` reports as it copies, **throttled to whole-percent changes**
+  (a 64 MB download in 8 KB reads would be thousands of requests). A failed report
+  is swallowed — progress must never fail the download. Device id is a **provider**
+  (unknown until enrollment finishes).
+- Server `ProgressStore`: in-memory, keyed by device, **2-minute TTL**; a device that
+  stops reporting reads as `downloading:false`, not a frozen percent. Percent is
+  derived from the byte counts. Read via `GET /v1/download-progress/:deviceId`
+  (registered with and without `/api`).
+- **`scripts/deadcode_gate.py` scanned only the first 4000 chars of a function
+  body** — a param used past that was a false positive. Fixed to brace-match the
+  whole body; re-verified it still catches a genuinely unused param.
+- Live: device reports 0..100% for the 64 MB APK; server returns the record with the
+  right filename. `UpdateLiveE2ETest` is 3/3, 0 skipped.
