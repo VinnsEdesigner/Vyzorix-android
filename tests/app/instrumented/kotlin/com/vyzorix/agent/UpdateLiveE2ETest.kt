@@ -121,21 +121,74 @@ class UpdateLiveE2ETest {
     }
 
     @Test
+    fun theDeviceReportsDownloadProgressTheServerCanRead() {
+        // The report and the read are two halves of one feature: the device POSTs
+        // progress while downloading, and an operator GETs it back. This drives both
+        // through the production client and asserts the server returns what the
+        // device sent — which is what makes the endpoint useful rather than a log.
+        val deviceId = "e2e-${System.nanoTime()}"
+        val client = UpdateClient(baseUrl = baseUrl, http = OkHttpClient(), deviceId = { deviceId })
+
+        val check = client.check(currentVersionCode = 1)
+        assertTrue("the server must answer the update check", check != null)
+        assertTrue("an update must be available", check!!.updateAvailable)
+
+        // Download: the client reports progress as it goes (throttled per percent).
+        val staging =
+            File(context.cacheDir, "update-e2e-progress").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+        client.download(check, File(staging, check.apkFilename))
+
+        // Read the progress back from the server, keyed by the id the device sent.
+        val read =
+            OkHttpClient()
+                .newCall(
+                    okhttp3.Request
+                        .Builder()
+                        .url("$baseUrl/v1/download-progress/$deviceId")
+                        .get()
+                        .build(),
+                ).execute()
+                .use { it.body?.string().orEmpty() }
+
+        assertTrue(
+            "the server must have a live progress record for the device; got: $read",
+            read.contains("\"downloading\":true"),
+        )
+        assertTrue(
+            "the record must name the apk the device fetched; got: $read",
+            read.contains(check.apkFilename),
+        )
+    }
+
+    @Test
     fun aDeviceAlreadyOnTheLatestBuildDoesNotDownload() {
         val client = UpdateClient(baseUrl = baseUrl, http = OkHttpClient())
 
-        // The server is on code 2; a device on code 2 must see no update, so the
-        // download is not paid.
-        val check = client.check(currentVersionCode = 2)
+        // Ask the server what its current version is, then act as a device already on
+        // it. Hardcoding a code would break every time the published version changes,
+        // which is exactly what a test should not do.
+        val current = client.check(currentVersionCode = 0)
+        assertTrue("the server must answer the update check", current != null)
+        val latest = current!!.versionCode
+        assertTrue("the server must report a version code", latest > 0)
+
+        val check = client.check(currentVersionCode = latest)
         assertTrue("the server must answer the update check", check != null)
-        assertEquals(false, check!!.updateAvailable)
+        assertEquals(
+            "a device on the latest code must see no update",
+            false,
+            check!!.updateAvailable,
+        )
 
         val installer = RecordingInstaller()
         val checker =
             UpdateChecker(
                 client = client,
                 installer = installer,
-                currentVersionCode = 2,
+                currentVersionCode = latest,
                 stagingDir = File(context.cacheDir, "update-e2e-none"),
             )
 

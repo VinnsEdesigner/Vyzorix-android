@@ -363,10 +363,17 @@ def analyse_kotlin(findings: list[Finding], allow: set[str]) -> set[str]:
                 continue
 
             params_src = fn.group(2)
-            body = text[fn.end() : fn.end() + 4000]
+            # The function's *whole* body, not a fixed window. A 4000-character
+            # window was enough until a long function grew past it: `tierHint` was
+            # used 4111 characters in, fell outside the window, and was reported as
+            # unused — a false positive that would fail the gate on correct code.
+            # Braces are counted from the opening one; string literals and comments
+            # are already blanked in `text`, so a brace inside them cannot skew the
+            # count.
+            body = _balanced_body(text, fn.end())
 
             # The same slice of the original file, for interpolation checks.
-            raw_body = raw[fn.end() : fn.end() + 4000]
+            raw_body = raw[fn.end() : fn.end() + len(body)]
 
             for pm in KOTLIN_PARAM.finditer(params_src):
                 pname = pm.group(1)
@@ -447,6 +454,37 @@ def analyse_native(findings: list[Finding], allow: set[str], kotlin_names: set[s
                     calls += len(re.findall(rf"\b{re.escape(name)}\s*\(", ln))
             if calls == 0:
                 findings.append(Finding("native-unused-func", name, path, def_line))
+
+
+def _balanced_body(text: str, decl_end: int) -> str:
+    """Return the body of a function whose declaration ends at `decl_end`.
+
+    The declaration regex consumes the trailing `{` or `=`, so `decl_end - 1` is
+    that delimiter. A `{` opens a block body, and braces are counted to find its
+    matching close so a nested lambda or function does not end the slice early. A
+    `=` opens an expression body, which has no closing brace; that is scanned to a
+    generous bound, since a parameter is used near its declaration and not thousands
+    of characters away.
+
+    Scanning the whole body — rather than a fixed window from the declaration — is
+    the point: a long function's parameter used past the window was reported unused,
+    a false positive on correct code.
+    """
+    delimiter = text[decl_end - 1] if decl_end > 0 else ""
+
+    if delimiter != "{":
+        return text[decl_end : decl_end + 4000]
+
+    depth = 0
+    for i in range(decl_end - 1, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[decl_end - 1 : i + 1]
+
+    return text[decl_end - 1 :]
 
 
 def main() -> int:

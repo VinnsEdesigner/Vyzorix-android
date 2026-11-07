@@ -61,10 +61,29 @@ the install is refused.
 | `GET /v1/check-update?version_code=N` | public | `update_available` plus the manifest fields, flattened |
 | `GET /v1/version` | public | the manifest verbatim |
 | `GET`/`HEAD /v1/apk/<name>` | public | the APK, with the manifest hash checked before serving |
-| `POST /v1/download-progress` | public | analytics |
+| `POST /v1/download-progress` | public | the device's progress report; **stored**, not just logged |
+| `GET /v1/download-progress/:deviceId` | public | the latest progress for a device, or `downloading:false` |
 
 All four are registered both with and without the `/api` prefix, because the proxy
 strips `/api`.
+
+### Download progress
+
+The device reports progress as it downloads — `POST /v1/download-progress` with the
+device id, filename, and byte counts, fired when the whole-percent changes (a 64 MB
+download in 8 KB reads would otherwise be thousands of requests). An operator reads
+it back with `GET /v1/download-progress/:deviceId`.
+
+The report was previously **log-only**: the server accepted progress and could not
+answer for it, so nothing could check an update's progress. It now writes to an
+in-memory `ProgressStore` keyed by device, with a 2-minute TTL — a device that stops
+reporting (crashed, killed, offline) reads as `downloading:false` rather than as a
+frozen percentage. The store is not durable on purpose: "how far along is this
+download right now" is meaningless after a restart, and the device re-reports on its
+next tick. It is the same lifetime as the PTY session registry, for the same reason.
+
+The percent is derived from `bytesLoaded`/`totalBytes` so the two cannot disagree,
+and the `progress` field the device sends is accepted but not trusted over them.
 
 ### Publishing an APK
 

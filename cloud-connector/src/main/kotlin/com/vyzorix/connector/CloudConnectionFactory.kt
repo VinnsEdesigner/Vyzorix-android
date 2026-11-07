@@ -117,7 +117,14 @@ object CloudConnectionFactory {
                 // FileProvider exposes to the installer (see app's file_paths.xml).
                 updateChecker =
                     UpdateChecker(
-                        client = UpdateClient(baseUrl = baseUrl, http = http),
+                        client =
+                            UpdateClient(
+                                baseUrl = baseUrl,
+                                http = http,
+                                // The report is keyed by device id; the uuid is known
+                                // here (it is the enrollment identity).
+                                deviceId = { uuid },
+                            ),
                         installer = apkInstaller,
                         currentVersionCode = appVersionCode,
                         stagingDir = File(context.filesDir, "updates"),

@@ -4,8 +4,10 @@ import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
  * The device's OTA client: ask the server whether a newer build exists, download it,
@@ -24,6 +26,15 @@ import okhttp3.Request
 class UpdateClient(
     private val baseUrl: String,
     private val http: OkHttpClient,
+    /**
+     * The device's own id, for the download-progress report.
+     *
+     * A provider rather than a value because the id is not known until enrollment
+     * finishes, which is after this client is built — the same shape the enrollment
+     * client uses. An empty id means the report is skipped; progress reporting is
+     * best-effort and must never fail a download.
+     */
+    private val deviceId: () -> String = { "" },
 ) {
     private val json =
         Json {
@@ -104,8 +115,11 @@ class UpdateClient(
             }
 
             val body = response.body ?: throw IOException("apk download returned no body")
+            val total = body.contentLength().takeIf { it > 0 } ?: check.apkSizeBytes
             body.byteStream().use { input ->
-                destination.outputStream().use { output -> input.copyTo(output) }
+                destination.outputStream().use { output ->
+                    copyReportingProgress(input, output, total, check.apkFilename)
+                }
             }
         }
 
@@ -117,6 +131,72 @@ class UpdateClient(
         }
 
         return destination
+    }
+
+    /**
+     * Copies [input] to [output], reporting progress to the server as it goes.
+     *
+     * The report is throttled: a 64 MB download in 8 KB reads would be thousands of
+     * requests, so it fires only when the whole-percent changes. A failed report is
+     * swallowed — progress is for an operator's dashboard, and losing one must never
+     * fail the download that is actually delivering the update.
+     */
+    private fun copyReportingProgress(
+        input: java.io.InputStream,
+        output: java.io.OutputStream,
+        total: Long,
+        filename: String,
+    ) {
+        val id = deviceId()
+        val buffer = ByteArray(COPY_BUFFER)
+        var loaded = 0L
+        var lastReportedPercent = -1
+
+        while (true) {
+            val read = input.read(buffer)
+            if (read <= 0) break
+            output.write(buffer, 0, read)
+            loaded += read
+
+            if (id.isEmpty() || total <= 0) continue
+
+            val percent = ((loaded * 100) / total).toInt()
+            if (percent != lastReportedPercent) {
+                lastReportedPercent = percent
+                reportProgress(id, filename, loaded, total, percent)
+            }
+        }
+    }
+
+    /** Reports progress, best-effort. Never throws. */
+    private fun reportProgress(
+        deviceId: String,
+        filename: String,
+        loaded: Long,
+        total: Long,
+        percent: Int,
+    ) {
+        val payload =
+            buildString {
+                append("{\"deviceId\":\"").append(deviceId).append("\",")
+                append("\"filename\":\"").append(filename).append("\",")
+                append("\"bytesLoaded\":").append(loaded).append(",")
+                append("\"totalBytes\":").append(total).append(",")
+                append("\"progress\":").append(percent).append("}")
+            }
+
+        try {
+            val request =
+                Request
+                    .Builder()
+                    .url("$baseUrl/v1/download-progress")
+                    .post(payload.toByteArray().toRequestBody(JSON_MEDIA))
+                    .build()
+
+            http.newCall(request).execute().close()
+        } catch (e: Exception) {
+            android.util.Log.d(TAG, "progress report failed (ignored): ${e.message}")
+        }
     }
 
     /** The lowercase hex SHA-256 of [file]. */
@@ -138,5 +218,6 @@ class UpdateClient(
     private companion object {
         const val TAG = "UpdateClient"
         const val COPY_BUFFER = 64 * 1024
+        val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     }
 }
