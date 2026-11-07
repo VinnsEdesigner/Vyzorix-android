@@ -307,3 +307,28 @@ Without it, a reconnect starts a fresh shell and the buffered output is dropped.
 drift checks (GraphQL/CUE/swagger/selectors) are clean. `apps/api/go.mod` gets
 re-sorted by `go run`; revert it if it shows up in `git status` unrelated to the
 change.
+
+## Enriched enroll facts (2026-11-06)
+
+The device collector gathered apiLevel/ABIs/storage/RAM but the enroll request
+**dropped them**; the server only saw model/manufacturer/OS. Now both sides carry
+the full set: `apiLevel`, `buildId` (`Build.FINGERPRINT`), `securityPatch`
+(`Build.VERSION.SECURITY_PATCH`), `supportedAbis`, `ramBytes`, `storageBytes`.
+
+- **`deviceName` is NOT sent by the device.** `Build.MARKETING_NAME` is not public
+  API — it does not exist in the SDK's `android.os.Build` (compileSdk 34), so it
+  cannot be read. The server's `DeviceName` is the *operator's* name, set at claim
+  (`enrollment_service.go` Claim). Do not try to collect it again.
+- Server: migration **77** `add_device_facts` adds build_id, api_level,
+  supported_abis, ram_bytes, storage_bytes. `security_patch` and `build_id`
+  already existed from migration 27 but were never written; `build_id` now is.
+  All nullable/zero-defaulted so an older device still enrolls.
+- The claim response and `GET /v1/device/:imei` (device detail) return the facts.
+  `DeviceDetailResult` lives in `tooling/schema/devices.cue` — edit the CUE and
+  run `python3 tooling/codegen/build_schemas.py`, never hand-edit `openapi/schemas.go`.
+- **Four in-memory test schemas** declare their own `CREATE TABLE devices` and must
+  gain any new column or they fail with "no such column": `device_identity_test.go`,
+  `config_service_test.go`, `enrollment_service_test.go`,
+  `device_request_auth_test.go`, `device_route_split_test.go`.
+- Changing `enrollRequest` changes swagger; regenerate with
+  `swag init -g cmd/api/api_main.go --parseDependency --output swag` or the drift gate fails.
