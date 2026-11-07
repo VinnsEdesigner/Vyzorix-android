@@ -18,8 +18,14 @@ data class EnrollRequest(
     @SerialName("model") val model: String = "",
     @SerialName("manufacturer") val manufacturer: String = "",
     @SerialName("osVersion") val osVersion: String = "",
+    @SerialName("apiLevel") val apiLevel: Int = 0,
     @SerialName("appVersion") val appVersion: String = "",
     @SerialName("deviceClass") val deviceClass: String = "",
+    @SerialName("buildId") val buildId: String = "",
+    @SerialName("securityPatch") val securityPatch: String = "",
+    @SerialName("supportedAbis") val supportedAbis: List<String> = emptyList(),
+    @SerialName("ramBytes") val ramBytes: Long = 0,
+    @SerialName("storageBytes") val storageBytes: Long = 0,
     @SerialName("tierHint") val tierHint: Int = 0,
 )
 

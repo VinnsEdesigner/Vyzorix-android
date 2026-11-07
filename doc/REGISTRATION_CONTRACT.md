@@ -58,8 +58,11 @@ Three consequences, and they are the whole point:
 2. The device generates an **EC P-256 keypair** in the Android Keystore, once. The
    private key is non-exportable and never leaves the device.
 3. The device collects its facts: a **device-generated UUID** (the stable ID),
-   model, manufacturer, OS version, API level, ABIs, storage, RAM, and a **tier
-   hint** (unrooted / rooted / advanced).
+   model, manufacturer, the marketing device name (when the platform exposes one),
+   OS version, API level, build fingerprint, security patch level, ABIs, storage,
+   RAM, device class, and a **tier hint** (unrooted / rooted / advanced). All of it
+   is sent on enroll and stored, so the operator sees the whole picture at claim
+   time rather than a name and a model.
 4. The device POSTs `{deviceUuid, publicKey, deviceInfo}` to `POST /v1/device/enroll`
    — public, because there is nothing to authenticate *with* yet. Unlike the current
    `/v1/device/inbox`, which is public and **unmetered**, this endpoint must be

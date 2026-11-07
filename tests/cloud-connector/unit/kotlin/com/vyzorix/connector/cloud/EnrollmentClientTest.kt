@@ -64,11 +64,17 @@ class EnrollmentClientTest {
                 EnrollRequest(
                     deviceUuid = "dev-1",
                     publicKey = signer.publicKeyPem(),
-                    model = "Pixel 7a",
+                    model = "P7A",
                     manufacturer = "Google",
                     osVersion = "13",
+                    apiLevel = 33,
                     appVersion = "0.1.0",
                     deviceClass = "phone",
+                    buildId = "google/panther/panther:13/TQ3A/123:user/release-keys",
+                    securityPatch = "2024-03-01",
+                    supportedAbis = listOf("arm64-v8a", "armeabi-v7a"),
+                    ramBytes = 8_000_000_000,
+                    storageBytes = 64_000_000_000,
                     tierHint = 1,
                 ),
             )
@@ -81,9 +87,21 @@ class EnrollmentClientTest {
         assertEquals("POST", recorded.method)
         assertEquals("/v1/device/enroll", recorded.path)
         val body = recorded.body.readUtf8()
-        // The server binds these exact field names.
+        // The server binds these exact field names; a rename on either side is a
+        // silently-dropped fact, so the whole set is asserted, not a sample.
         assertTrue(body.contains(""""deviceUuid":"dev-1""""))
         assertTrue(body.contains(""""publicKey":""""))
+        assertTrue(body.contains(""""model":"P7A""""))
+        assertTrue(body.contains(""""manufacturer":"Google""""))
+        assertTrue(body.contains(""""osVersion":"13""""))
+        assertTrue(body.contains(""""apiLevel":33"""))
+        assertTrue(body.contains(""""appVersion":"0.1.0""""))
+        assertTrue(body.contains(""""deviceClass":"phone""""))
+        assertTrue(body.contains(""""buildId":"google/panther"""))
+        assertTrue(body.contains(""""securityPatch":"2024-03-01""""))
+        assertTrue(body.contains(""""supportedAbis":["arm64-v8a","armeabi-v7a"]"""))
+        assertTrue(body.contains(""""ramBytes":8000000000"""))
+        assertTrue(body.contains(""""storageBytes":64000000000"""))
         assertTrue(body.contains(""""tierHint":1"""))
     }
 

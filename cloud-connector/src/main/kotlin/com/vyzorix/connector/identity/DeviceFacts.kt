@@ -29,6 +29,17 @@ data class DeviceFacts(
     val tierHint: Int,
     val appVersion: String,
     val deviceClass: String,
+    /**
+     * The Android build fingerprint, `Build.FINGERPRINT`. Identifies the exact
+     * build, so two devices of the same model on different builds are distinguishable.
+     */
+    val buildId: String,
+    /**
+     * The security patch level, `Build.VERSION.SECURITY_PATCH`, for example
+     * "2024-03-01". Empty on a build that does not set it. Lets an operator see how
+     * stale a device is.
+     */
+    val securityPatch: String,
 )
 
 /**
@@ -63,6 +74,8 @@ object DeviceFactsCollector {
             tierHint = tierHint,
             appVersion = appVersion,
             deviceClass = deviceClass(),
+            buildId = Build.FINGERPRINT,
+            securityPatch = Build.VERSION.SECURITY_PATCH.orEmpty(),
         )
 
     /**
