@@ -46,6 +46,23 @@ object ProotLauncher {
     /** The env var proot reads for [TMP_DIR]. It reads its *own* environment. */
     const val TMP_DIR_ENV = "PROOT_TMP_DIR"
 
+    /**
+     * Disables proot's own seccomp-based ptrace acceleration.
+     *
+     * proot can use `PTRACE_O_TRACESECCOMP` to be notified only at syscall *enter*
+     * (its "seccomp mode 2" acceleration). On Android that collides with the app's
+     * own seccomp filter and with proot's SIGSYS rewrite: the rewritten syscall is
+     * mishandled and fails with a bogus errno. Measured on the Android 13 emulator
+     * (kernel 5.15) from the app's process — `mkdir` returns `EROFS` (errno 30) with
+     * acceleration on, and succeeds with `PROOT_NO_SECCOMP=1`.
+     *
+     * Setting it costs performance, not correctness: it is proot's original
+     * `PTRACE_SYSCALL` flow, which is how proot worked before the acceleration was
+     * added. This is the workaround proot itself documents for a kernel whose
+     * seccomp handling conflicts with it.
+     */
+    const val NO_SECCOMP_ENV = "PROOT_NO_SECCOMP"
+
     /** App-private directories that hold secrets and recordings, never bound. */
     const val SECRETS_DIR = "secrets"
     const val RECORDINGS_DIR = "recordings"
@@ -324,6 +341,7 @@ object ProotLauncher {
                     "TERM=xterm-256color",
                     "LANG=C.UTF-8",
                     "$TMP_DIR_ENV=${tmpDir(context).absolutePath}",
+                    "$NO_SECCOMP_ENV=1",
                 ),
         )
 

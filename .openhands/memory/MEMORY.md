@@ -354,3 +354,35 @@ path once the permission is held). `MANAGE_EXTERNAL_STORAGE` is not required.
   `disk.dataPartition.size` in the AVD's `config.ini`.
 - On API 33 the app's supplementary groups gain `ext_data_rw`/`ext_obb_rw`/
   `all_a<uid>`, and `run-as` uses the `runas_app` domain (vs `untrusted_app`).
+
+## Android 13 (API 33) container crash loop — FIXED 2026-11-07
+
+The container never ran on Android 13: proot exited 255 with **zero output**, taking
+down the terminal, the supervisor (apps) and every bridge API. It worked on the
+Android 9 emulator, which hid it. **Two bugs, both in proot's modern-kernel path.**
+
+**Bug 1 — the SIGSYS case was missing from the ≥4.8 event handler.** proot has two
+event loops: `handle_tracee_event` (kernels < 4.8) and
+`handle_tracee_event_kernel_4_8` (kernels ≥ 4.8). The `case SIGSYS` existed only in
+the first. Android 9's emulator kernel is < 4.8, so it worked there; Android 13 runs
+**5.15**, took the 4.8 path, found no case, fell to `default:` ("deliver as-is"), and
+the guest died with signal 31. Fixed: added the case to the 4.8 handler too
+(`third_party/proot/tracee/event.c`). **Diagnosis technique that worked:** raw
+`fprintf(stderr, "MARK: ...")` markers through `main` and the event loop, run from the
+**app's own process** — the failing stop was `0x1f7f` (a plain SIGSYS stop) then
+`0x1f` (terminated by signal 31).
+
+**Bug 2 — proot's seccomp acceleration corrupts the SIGSYS rewrite.** With bug 1
+fixed, the supervisor reached its own code but `mkdir` failed `EROFS` (errno 30).
+`PROOT_NO_SECCOMP=1` fixes it. `ProotLauncher.NO_SECCOMP_ENV` is now set for both the
+login shell and the supervisor. Costs performance (falls back to `PTRACE_SYSCALL`),
+not correctness.
+
+**The methodology trap:** `adb shell run-as` runs in the `runas_app` domain with
+**Seccomp: 0** and a *different mount namespace*; the app process is
+`untrusted_app_27` with **Seccomp: 2, 1 filter**. So every `run-as` probe looked
+healthy while the real app was broken. **Only an instrumented test measures the app's
+real behaviour** — that is why this hid for so long.
+
+After both fixes: supervisor prints `ready on /home/apps/supervisor.sock` and stays
+up, and `ApiLiveE2ETest` (the full 60-API sweep) passes on API 33.

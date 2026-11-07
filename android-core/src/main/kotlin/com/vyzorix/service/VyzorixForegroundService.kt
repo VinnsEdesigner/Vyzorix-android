@@ -15,11 +15,16 @@ import com.vyzorix.bridge.ApiCatalogue
 import com.vyzorix.bridge.ApiRouter
 import com.vyzorix.bridge.SessionTokenRegistry
 import com.vyzorix.bridge.apis.SessionApi
+import com.vyzorix.bridge.apis.UsbAttachApi
+import com.vyzorix.bridge.apis.UsbDetachApi
+import com.vyzorix.bridge.apis.UsbStateApi
 import com.vyzorix.capability.PtyBroker
 import com.vyzorix.capability.PtyError
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult
+import com.vyzorix.capability.usb.AndroidUsbHost
+import com.vyzorix.capability.usb.UsbBroker
 import com.vyzorix.engine.ProotLauncher
 import com.vyzorix.permissions.PermissionRequester
 import java.util.concurrent.ConcurrentHashMap
@@ -53,6 +58,7 @@ class VyzorixForegroundService : Service() {
     private lateinit var tokens: SessionTokenRegistry
     private lateinit var router: ApiRouter
     private lateinit var broker: PtyBroker
+    private lateinit var usbBroker: UsbBroker
     private lateinit var bridge: AndroidSocketServer
     private lateinit var watchdog: ServiceWatchdog
     private var cloudLink: CloudLink? = null
@@ -117,6 +123,7 @@ class VyzorixForegroundService : Service() {
     private fun start() {
         tokens = SessionTokenRegistry()
         broker = PtyBroker()
+        usbBroker = UsbBroker(AndroidUsbHost(this))
         router = buildRouter()
 
         // Install the container's userspace if it is not already there, before
@@ -303,6 +310,11 @@ class VyzorixForegroundService : Service() {
                     .apply {
                         environment()[ProotLauncher.TMP_DIR_ENV] =
                             ProotLauncher.tmpDir(this@VyzorixForegroundService).absolutePath
+                        // proot's seccomp acceleration collides with Android's own
+                        // filter and corrupts the SIGSYS rewrite: without this, the
+                        // supervisor's mkdir fails with EROFS on Android 13. See
+                        // ProotLauncher.NO_SECCOMP_ENV.
+                        environment()[ProotLauncher.NO_SECCOMP_ENV] = "1"
                     }
 
             val process = builder.start()
@@ -404,9 +416,16 @@ class VyzorixForegroundService : Service() {
         // value the catalog test and `apis.txt` can both read rather than a chain of
         // calls nothing else can see. `session` is the one exception: it needs this
         // service's session table, so it is constructed with callbacks.
+        // The USB trio needs the broker that owns the open device descriptors, so
+        // it is constructed here like `session` rather than being a catalogue
+        // singleton. Registering them makes usb_attach/usb_detach reachable and
+        // keeps `ApiCatalogue.names` (and so `apis.txt`) honest about them.
         return ApiCatalogue
             .registerAll(ApiRouter(permissions = PermissionRequester(this)))
             .register(SessionApi.NAME, sessionApi)
+            .register(UsbStateApi.NAME, UsbStateApi(usbBroker))
+            .register(UsbAttachApi.NAME, UsbAttachApi(usbBroker))
+            .register(UsbDetachApi.NAME, UsbDetachApi(usbBroker))
     }
 
     /**

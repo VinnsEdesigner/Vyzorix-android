@@ -71,6 +71,8 @@ storage_volumes
 system_properties
 thermal
 time_info
+usb_attach
+usb_detach
 usb_state
 vpn_state
 wifi_state

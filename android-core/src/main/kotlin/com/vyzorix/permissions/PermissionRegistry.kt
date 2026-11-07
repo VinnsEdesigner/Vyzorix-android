@@ -95,6 +95,14 @@ object PermissionRegistry {
                     Protection.NORMAL,
                     settingsAction = "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
                 ),
+            // USB. The Android permission is per-device and granted through a dialog
+            // the app raises with a PendingIntent; there is no manifest permission
+            // for "use a USB device", so the entry is empty and the handler reports a
+            // failed open when the grant is absent. The capability is the fd, not a
+            // runtime permission.
+            "usb_state" to PermissionDef("", 0, Protection.NONE),
+            "usb_attach" to PermissionDef("", 0, Protection.NONE),
+            "usb_detach" to PermissionDef("", 0, Protection.NONE),
         )
 
     /** The requirement for [api], or null when the API is unknown. */

@@ -160,10 +160,13 @@ class ApiCatalogTest {
             "the catalogue should serve the full API surface, not ${registeredApis.size}",
             registeredApis.size >= MINIMUM_API_COUNT,
         )
+        // The service registers the `serviceApiNames` itself (session, the USB trio),
+        // because they need state only the service holds. The catalogue's `handlers`
+        // map holds the rest, so the two together are the full set.
         assertEquals(
             "the catalogue must not register two handlers under one name",
             registeredApis.size,
-            ApiCatalogue.handlers.size + 1, // +1 for `session`, registered separately
+            ApiCatalogue.handlers.size + ApiCatalogue.serviceApiNames.size,
         )
     }
 

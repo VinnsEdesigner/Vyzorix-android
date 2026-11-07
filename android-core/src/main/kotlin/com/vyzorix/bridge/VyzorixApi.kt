@@ -31,11 +31,9 @@ object ApiTags {
     const val DATA_APP = "data:app"
     const val DATA_PRIVATE = "data:private"
 
-    // Operation. A read is repeatable; a write is not, and will need its own risk
-    // tier when the first one lands. There is deliberately no `op:write` constant
-    // yet: the dead-code gate fails on a constant no API uses, and that is the right
-    // behaviour — an unused tag is a claim nothing makes. Add it with the API that
-    // needs it, not before.
+    // Operation. A read is repeatable; a write is not, and carries its own risk
+    // tier. `op:write` is declared by the first write APIs — the USB attach/detach
+    // pair — rather than added ahead of them.
     const val OP_READ = "op:read"
 
     // Android permission class, matching the boundary contract's `protection:*`
@@ -43,6 +41,25 @@ object ApiTags {
     // tag a reviewer should stop on.
     const val PROTECTION_NORMAL = "protection:normal"
     const val PROTECTION_DANGEROUS = "protection:dangerous"
+
+    // Signature-level trust: the capability is not grantable by a normal runtime
+    // dialog. The server's USB capability uses this class, so a USB handler
+    // declares it too — the two classifications must not drift.
+    const val PROTECTION_SIGNATURE = "protection:signature"
+
+    // Hardware touched. Only `usb` exists because only USB is in the catalogue;
+    // camera/location/mic are added with their APIs, not before.
+    const val HW_USB = "hw:usb"
+
+    // Data sensitivity for hardware identity: the attached-device list, the SoC, a
+    // device's serial. Distinct from `data:public` (battery level) because it names
+    // physical hardware an operator may not want every role to see.
+    const val DATA_HARDWARE = "data:hardware"
+
+    // A write operation: it changes device or host state and is not repeatable in
+    // the way a read is. First used by the USB attach/detach APIs, which claim a
+    // hardware device.
+    const val OP_WRITE = "op:write"
 
     // Who may see the result.
     const val VISIBILITY_PUBLIC = "visibility:public"

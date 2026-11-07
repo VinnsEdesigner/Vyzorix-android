@@ -612,6 +612,31 @@ static int handle_tracee_event_kernel_4_8(Tracee *tracee,
 	    }
 	    break;
 
+	case SIGSYS:{
+	    /* A SIGSYS from the host seccomp policy is not a guest fault: the
+	     * policy used SECCOMP_RET_TRAP, which cancels the syscall before
+	     * PRoot's PTRACE_TRACEME could see it. Rewrite the cancelled
+	     * syscall into a form the policy allows and let PRoot translate
+	     * the restarted one. A SIGSYS the guest itself raised (si_code
+	     * != SYS_SECCOMP) is delivered as-is.
+	     *
+	     * This case must exist in BOTH event handlers. The SIGSYS
+	     * conversion below `handle_tracee_event` (kernels < 4.8) is not
+	     * enough: Android 12+ runs a kernel >= 4.8, so the conversion is
+	     * reached through THIS handler. Without it, SIGSYS falls to the
+	     * `default:` above and is delivered to the guest, which dies with
+	     * signal 31 (SIGSYS) having printed nothing — the exact failure
+	     * seen on the Android 13 emulator (kernel 5.15), while the older
+	     * Android 9 emulator's kernel hid it. */
+	    siginfo_t si = {};
+
+	    if (ptrace(PTRACE_GETSIGINFO, tracee->pid, NULL, &si) == 0
+		&& si.si_code == SYS_SECCOMP) {
+		signal = handle_sigsys_event(tracee, si.si_syscall);
+	    }
+	    break;
+	}
+
 	default:
 	    /* Deliver this signal as-is.  */
 	    break;

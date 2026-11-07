@@ -54,6 +54,8 @@ import com.vyzorix.bridge.apis.StorageVolumesApi
 import com.vyzorix.bridge.apis.SystemPropertiesApi
 import com.vyzorix.bridge.apis.ThermalApi
 import com.vyzorix.bridge.apis.TimeInfoApi
+import com.vyzorix.bridge.apis.UsbAttachApi
+import com.vyzorix.bridge.apis.UsbDetachApi
 import com.vyzorix.bridge.apis.UsbStateApi
 import com.vyzorix.bridge.apis.VpnStateApi
 import com.vyzorix.bridge.apis.WifiStateApi
@@ -151,31 +153,47 @@ object ApiCatalogue {
             SystemPropertiesApi.NAME to SystemPropertiesApi,
             ThermalApi.NAME to ThermalApi,
             TimeInfoApi.NAME to TimeInfoApi,
-            UsbStateApi.NAME to UsbStateApi,
             VpnStateApi.NAME to VpnStateApi,
             WifiStateApi.NAME to WifiStateApi,
         )
 
-    /** The one API whose handler needs the service's own state. */
+    /** The one API whose handler needs the service's own session table. */
     const val SESSION_API_NAME = "session"
+
+    /**
+     * APIs the service constructs and registers itself, because they need state only
+     * the service holds.
+     *
+     * `session` needs the session table; the USB trio needs the `UsbBroker`, which
+     * owns the open device descriptors. They are listed here — not in [handlers] —
+     * so [names] still carries them for `apis.txt`, while the service is what builds
+     * them with their dependency.
+     *
+     * Declared after [SESSION_API_NAME] deliberately: a `const val` used in another
+     * property's initializer has to be initialised first, and Kotlin enforces that
+     * in declaration order.
+     */
+    val serviceApiNames: List<String> =
+        listOf(
+            SESSION_API_NAME,
+            UsbStateApi.NAME,
+            UsbAttachApi.NAME,
+            UsbDetachApi.NAME,
+        )
 
     /**
      * Every API name the bridge serves, including the ones registered separately.
      *
      * `apis.txt` is written from this, so it must be the full set rather than the
      * map's keys — a missing name here is a command the container does not get.
-     *
-     * Declared after [SESSION_API_NAME] deliberately: a `const val` used in another
-     * property's initializer has to be initialised first, and Kotlin enforces that
-     * in declaration order.
      */
-    val names: List<String> = (handlers.keys + SESSION_API_NAME).sorted()
+    val names: List<String> = (handlers.keys + serviceApiNames).sorted()
 
     /**
      * Registers every handler on `router`.
      *
-     * The service calls this, then registers `session` itself — the one API that
-     * cannot be a singleton.
+     * The service calls this, then registers the [serviceApiNames] itself — those
+     * that need state the service owns.
      */
     fun registerAll(router: ApiRouter): ApiRouter {
         for ((name, handler) in handlers) {

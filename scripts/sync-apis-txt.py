@@ -59,7 +59,12 @@ def main() -> int:
     # The wire name is each class's own `const val NAME`, in its own file — the
     # catalogue deliberately does not repeat the strings, so they are read from where
     # they are declared rather than duplicated here.
-    classes = re.findall(r"^\s*(\w+Api)\.NAME to \1,$", source, re.MULTILINE)
+    # Both sources of class names: the `handlers` map (singletons) and the
+    # `serviceApiNames` list (handlers the service builds with its own state — the
+    # session table, the USB broker). Reading only the map dropped every
+    # service-registered API from `apis.txt`, which is exactly the silent
+    # missing-command failure this script exists to prevent.
+    classes = re.findall(r"^\s*(\w+Api)\.NAME(?: to \1)?,$", source, re.MULTILINE)
 
     apis_dir = os.path.join(REPO, "android-core/src/main/kotlin/com/vyzorix/bridge/apis")
     names = []

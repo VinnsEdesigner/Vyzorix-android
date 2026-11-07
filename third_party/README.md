@@ -36,8 +36,23 @@ this tree carries a fix. A future `proot` upgrade must carry it forward:
   answered `-ENOSYS`, which glibc treats as "not implemented" and falls back
   from. Without this a guest dies with `terminated with signal 31` (SIGSYS)
   having printed nothing. Upstream proot has no equivalent; Termux's fork does.
-- **`tracee/event.c`** — a `case SIGSYS` in the event loop dispatches to that
-  handler when `siginfo.si_code == SYS_SECCOMP`.
+- **`tracee/event.c`** — a `case SIGSYS` in **both** event loops dispatches to that
+  handler when `siginfo.si_code == SYS_SECCOMP`. There are two handlers:
+  `handle_tracee_event` (kernels < 4.8) and `handle_tracee_event_kernel_4_8`
+  (kernels >= 4.8). The case was originally only in the first, which is dead on
+  any modern device — Android 9's emulator kernel is < 4.8 so it worked there,
+  while Android 13 (kernel 5.15) took the 4.8 path, found no case, fell to
+  `default:` ("deliver as-is"), and the guest died with signal 31 having printed
+  nothing. **Both handlers must carry the case.** The 4.8 handler is the one that
+  runs on every current Android.
+- **`PROOT_NO_SECCOMP=1` is required at runtime on Android** (set by
+  `ProotLauncher`; see `NO_SECCOMP_ENV`). proot's own seccomp-based ptrace
+  acceleration (`PTRACE_O_TRACESECCOMP`) collides with Android's app seccomp
+  filter and corrupts the SIGSYS rewrite: the restarted syscall is mishandled and
+  fails with a bogus errno. Measured on Android 13 from the app's process —
+  `mkdir` returns `EROFS` (errno 30) with acceleration on, and succeeds with
+  `PROOT_NO_SECCOMP=1`. This is proot's documented workaround; it costs
+  performance (falls back to `PTRACE_SYSCALL`), not correctness.
 - **`syscall/sysnum.[ch]`** — `translate_sysnum` is made non-static so the handler
   can map the number from `siginfo` (the cancelled call's number is not in the
   register a tracer would normally read).

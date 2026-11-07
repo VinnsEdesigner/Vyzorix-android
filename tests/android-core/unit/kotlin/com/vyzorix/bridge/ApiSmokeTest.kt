@@ -2,6 +2,12 @@ package com.vyzorix.bridge
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.vyzorix.bridge.apis.UsbAttachApi
+import com.vyzorix.bridge.apis.UsbDetachApi
+import com.vyzorix.bridge.apis.UsbStateApi
+import com.vyzorix.capability.usb.UsbBroker
+import com.vyzorix.capability.usb.UsbDeviceInfo
+import com.vyzorix.capability.usb.UsbHost
 import com.vyzorix.permissions.PermissionRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -55,7 +61,28 @@ class ApiSmokeTest {
      * correct, and is asserted separately below rather than being mistaken for a
      * failure here.
      */
-    private fun router(): ApiRouter = ApiCatalogue.registerAll(ApiRouter())
+    private fun router(): ApiRouter {
+        // The service registers the USB trio with a real broker; here a fake host
+        // with no devices drives them, so the smoke test exercises the handler path
+        // (argument parsing, result shaping) without hardware. The service's own
+        // registration is what `ApiCatalogTest` checks against `apis.txt`.
+        val usb = UsbBroker(NoDevicesUsbHost)
+
+        return ApiCatalogue
+            .registerAll(ApiRouter())
+            .register(UsbStateApi.NAME, UsbStateApi(usb))
+            .register(UsbAttachApi.NAME, UsbAttachApi(usb))
+            .register(UsbDetachApi.NAME, UsbDetachApi(usb))
+    }
+
+    /** A USB host with nothing attached, so the handlers answer without hardware. */
+    private object NoDevicesUsbHost : UsbHost {
+        override fun devices(): List<UsbDeviceInfo> = emptyList()
+
+        override fun open(name: String): Int = -1
+
+        override fun close(name: String) = Unit
+    }
 
     /**
      * The APIs the router refuses without a permission requester.
@@ -197,6 +224,10 @@ class ApiSmokeTest {
     private fun argsFor(api: String): Map<String, String> =
         when (api) {
             "package_info" -> mapOf("package" to context.packageName)
+            // The USB write pair needs a device name; with no devices the name is
+            // still required, and this drives the real handler rather than the
+            // missing-argument branch.
+            "usb_attach", "usb_detach" -> mapOf("name" to "1-1")
             else -> emptyMap()
         }
 }
