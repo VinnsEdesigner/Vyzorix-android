@@ -21,6 +21,7 @@ import com.vyzorix.connector.identity.DeviceFactsCollector
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.telemetry.TelemetryReporter
 import com.vyzorix.connector.terminal.TerminalRelay
+import com.vyzorix.connector.update.UpdateChecker
 import com.vyzorix.service.CloudLink
 import com.vyzorix.service.PtySessionPort
 import java.io.IOException
@@ -65,6 +66,10 @@ class CloudConnection(
         // Supplies the telemetry readings. Built by the factory because it needs the
         // platform, but the cadence and the frame live here.
         val telemetrySource: TelemetryReporter.TelemetrySource,
+        // The OTA flow, or null when the build has no updater (bridge-only, a test).
+        // Run on connect: a device that has been offline checks as soon as it can
+        // reach the server.
+        val updateChecker: UpdateChecker? = null,
         val tierHint: Int = DeviceFactsCollector.TIER_UNROOTED,
     )
 
@@ -78,6 +83,7 @@ class CloudConnection(
     private val dispatcherFactory = deps.dispatcherFactory
     private val notification = deps.notification
     private val telemetrySource = deps.telemetrySource
+    private val updateChecker = deps.updateChecker
     private val tierHint = deps.tierHint
     private val running = AtomicBoolean(false)
     private var wsClient: DeviceWsClient? = null
@@ -384,6 +390,17 @@ class CloudConnection(
                     // and reported once immediately so a device that just came online is
                     // not invisible for a whole interval.
                     startTelemetry()
+
+                    // Check for a newer build. On its own thread: the check is a quick
+                    // request, but a download is tens of megabytes and must not stall
+                    // the socket's reader. A device that is offline simply does not
+                    // check; the next connect does.
+                    updateChecker?.let { checker ->
+                        Thread({ checker.runOnce() }, "vyzorix-update-check").apply {
+                            isDaemon = true
+                            start()
+                        }
+                    }
                 }
 
                 override fun onDisconnected(

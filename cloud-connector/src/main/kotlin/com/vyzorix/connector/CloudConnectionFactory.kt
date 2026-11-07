@@ -16,6 +16,9 @@ import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
 import com.vyzorix.connector.identity.KeystoreDeviceIdentity
 import com.vyzorix.connector.telemetry.DeviceTelemetrySource
+import com.vyzorix.connector.update.ApkInstaller
+import com.vyzorix.connector.update.UpdateChecker
+import com.vyzorix.connector.update.UpdateClient
 import java.io.File
 import java.security.KeyStore
 
@@ -42,6 +45,10 @@ object CloudConnectionFactory {
         baseUrl: String,
         serverPublicKeyPem: String,
         appVersion: String,
+        /** The build's versionCode; the update check compares the server's against it. */
+        appVersionCode: Int,
+        /** The install step. Supplied by the app: it needs an Activity and a provider. */
+        apkInstaller: ApkInstaller,
         tierHint: Int = 0,
     ): CloudConnection? {
         if (baseUrl.isEmpty() || serverPublicKeyPem.isEmpty()) return null
@@ -106,6 +113,15 @@ object CloudConnectionFactory {
                 // Telemetry needs the platform (battery, uptime), so the source is built
                 // here; the cadence and the frame live in the connection.
                 telemetrySource = DeviceTelemetrySource(context),
+                // The OTA flow. Staged under files/updates, which is the one path the
+                // FileProvider exposes to the installer (see app's file_paths.xml).
+                updateChecker =
+                    UpdateChecker(
+                        client = UpdateClient(baseUrl = baseUrl, http = http),
+                        installer = apkInstaller,
+                        currentVersionCode = appVersionCode,
+                        stagingDir = File(context.filesDir, "updates"),
+                    ),
                 tierHint = tierHint,
             ),
         )

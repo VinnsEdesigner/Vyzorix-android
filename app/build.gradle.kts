@@ -19,6 +19,22 @@ fun cloudBaseUrl(): String =
         ?: ""
 
 /**
+ * The app's version, from the catalog. A Gradle property overrides it so a release
+ * build can stamp a version without editing the catalog, which is what the release
+ * tooling needs.
+ */
+fun appVersionCode(): Int =
+    (findProperty("appVersionCode") as String?)?.toInt()
+        ?: libs.versions.android.appVersionCode
+            .get()
+            .toInt()
+
+fun appVersionName(): String =
+    (findProperty("appVersionName") as String?)
+        ?: libs.versions.android.appVersionName
+            .get()
+
+/**
  * The pinned server public key material, PEM. Empty when unset.
  *
  * A PEM has newlines, which cannot sit in a Gradle property, so it is supplied
@@ -204,8 +220,14 @@ android {
             libs.versions.android.targetSdk
                 .get()
                 .toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode()
+        versionName = appVersionName()
+
+        // Exposed to code as BuildConfig fields. AGP only generates VERSION_CODE /
+        // VERSION_NAME into BuildConfig when a build type overrides them, so the
+        // update checker reads these explicit fields instead of relying on that.
+        buildConfigField("int", "VERSION_CODE", "${appVersionCode()}")
+        buildConfigField("String", "VERSION_NAME", "\"${appVersionName()}\"")
 
         // Cloud configuration. Both default to empty, which is a valid state: a build
         // with no cloud runs over the bridge alone (see VyzorixApplication). Supply
@@ -329,6 +351,11 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.junit4)
+    // The OTA live test builds the production UpdateClient, which needs OkHttp. The
+    // connector depends on it with `implementation`, so it is not on this classpath
+    // transitively; the test names it directly rather than the connector widening its
+    // API surface for a test.
+    androidTestImplementation(libs.okhttp)
 }
 
 /**

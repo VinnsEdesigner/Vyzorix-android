@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paths the FileProvider exposes to the package installer.
+
+  Only the OTA staging directory is shared, and only through the provider: the rest
+  of the app's private storage stays private. The installer runs in another process
+  and can read nothing the app does not explicitly hand it, so this list is the
+  install path's whole surface.
+
+  `updates/` is where UpdateChecker stages a verified APK (see UpdateChecker). It is
+  a subdirectory of the app's files dir, so it is covered by the `files-path` entry
+  below and is the only thing this provider needs to serve.
+-->
+<paths>
+    <files-path
+        name="updates"
+        path="updates/" />
+</paths>

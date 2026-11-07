@@ -56,6 +56,10 @@ class VyzorixApplication : Application() {
                     baseUrl = BuildConfig.CLOUD_BASE_URL,
                     serverPublicKeyPem = BuildConfig.SERVER_PUBLIC_KEY,
                     appVersion = BuildConfig.VERSION_NAME,
+                    appVersionCode = BuildConfig.VERSION_CODE,
+                    // The install step needs an Activity and a manifest provider, so it
+                    // lives in this module and is handed across the seam.
+                    apkInstaller = AndroidApkInstaller(this),
                 )
             } catch (t: Throwable) {
                 // A *malformed* anchor lands here, not the empty-anchor case (that

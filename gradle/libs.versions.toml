@@ -37,6 +37,12 @@ android-compileSdk = "34"
 android-minSdk = "26"
 android-targetSdk = "28"
 
+# The app's own version. Single source: the update checker compares the server's
+# version_code against android-appVersionCode, and the release that publishes an APK
+# must carry the same number. Bump both together.
+android-appVersionCode = "1"
+android-appVersionName = "0.1.0"
+
 # AndroidX
 androidx-annotation = "1.7.1"
 androidx-core-ktx = "1.13.1"

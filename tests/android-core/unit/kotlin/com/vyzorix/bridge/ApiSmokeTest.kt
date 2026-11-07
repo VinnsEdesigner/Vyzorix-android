@@ -230,4 +230,23 @@ class ApiSmokeTest {
             "usb_attach", "usb_detach" -> mapOf("name" to "1-1")
             else -> emptyMap()
         }
+
+    @Test
+    fun `the usb write pair refuses a missing device name`() {
+        // Both USB write APIs require a `name`. Without it they must answer a clean
+        // `invalid_args` refusal rather than reaching the broker — a missing argument
+        // is a caller mistake, not an internal failure, and the E2E sweep calls every
+        // API with no arguments, so this is the exact path it exercises.
+        val router = router()
+
+        for (api in listOf("usb_attach", "usb_detach")) {
+            val outcome = router.dispatch(context, token(), api, emptyMap())
+
+            assertEquals(
+                "$api must refuse a missing name with invalid_args",
+                BridgeErrorKind.INVALID_ARGS,
+                outcome.error?.kind,
+            )
+        }
+    }
 }

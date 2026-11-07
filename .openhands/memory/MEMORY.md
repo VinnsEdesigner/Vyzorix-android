@@ -386,3 +386,32 @@ real behaviour** — that is why this hid for so long.
 
 After both fixes: supervisor prints `ready on /home/apps/supervisor.sock` and stays
 up, and `ApiLiveE2ETest` (the full 60-API sweep) passes on API 33.
+
+## Auto-update (OTA) — built and live-verified 2026-11-07
+
+The server had `/v1/check-update`, `/v1/version`, `/v1/apk/*` routes but the device
+had **no updater at all**, and the served `version.json` was a **stub** (the SHA-256
+of empty input, no APK staged). Both are now real. See `doc/OTA_UPDATE.md`.
+
+- **Device**: `UpdateClient` (check + download + **SHA-256 verify**, refuses a
+  mismatch or missing hash), `UpdateChecker` (runs the pass on `onConnected`, own
+  thread), `ApkInstaller` seam + `AndroidApkInstaller` (in `:app` — needs an Activity
+  and a `FileProvider`; `androidx.core` is an app dep, not the connector's).
+- **Install needs the user**: a third-party app cannot install silently. The intent
+  is `ACTION_VIEW` + package-archive MIME; `REQUEST_INSTALL_PACKAGES` is declared and
+  the APK is exposed via `FileProvider` authority `${applicationId}.fileprovider`
+  serving only `files/updates/`. So the mechanism is automatic; the tap is consent.
+- **Server `generate_version.sh` had path drift** — wrote `api/v1/version.json` and
+  `bin/`, but the server reads `data/version.json` and `bin/` **relative to apps/api**.
+  It now writes the paths the server reads. Also: the APK routes registered only GET,
+  so HEAD (a client learning the size) got 400 — HEAD is registered now.
+- **The release lives in the PUBLIC `gz-_ASSETS` repo**, not `vyzorix-update-server`:
+  a private repo's release assets 404 for an unauthenticated device (verified — the
+  same trap as the rootfs). `app-v0.1.0` there downloads anonymously (HTTP 200, 64 MB).
+- **`make_latest: false` is load-bearing** on any new `gz-_ASSETS` release: the rootfs
+  is fetched via `releases/latest/download/...`, so a new "latest" would 404 the
+  engine assets. Verified `latest` still resolves to `v1.0.0` after publishing.
+- **Live test**: `UpdateLiveE2ETest` (2 tests, **0 skipped**) drives the production
+  client against a server on the host (`10.0.2.2:3000` — `adb reverse` does not work
+  here) from the Android 9 emulator: 64 MB downloaded and checksum-verified. A device
+  already on the latest code does not download.
