@@ -1,39 +1,33 @@
 # Filesystem access from the app's own uid
 
-What the OS actually lets this app touch, measured on the device rather than read
-from documentation. This is the **ceiling** the platform imposes on a third-party
-app; it is the reason the engine runs a Debian userspace under `proot` instead of
-using the host filesystem directly (see `ANDROID_SERVICE_ARCHITECTURE.md` §2).
+The host filesystem paths this app can reach, measured on the device. This is the
+ceiling the platform imposes on a third-party app, and the reason the engine runs a
+Debian userspace under `proot` instead of using the host filesystem directly (see
+`ANDROID_SERVICE_ARCHITECTURE.md` §2).
 
-## Why this document exists
+## Scope
 
-Two questions come up repeatedly and neither is answerable from memory:
+Access is a policy, not a fixed list, and it differs by API level. This records the
+measurements for API 28 and API 33, the permission the shared-storage tree requires
+on API 29+, and the host paths that remain denied.
 
-1. **"Which folders can the app access?"** The answer is a *policy*, not a list, and
-   it changes by API level — drastically between Android 9 and Android 13, as the
-   measurements below show.
-2. **"Will it still work on a modern device?"** The app pins `targetSdk 28`, which
-   *should* keep legacy storage semantics even on Android 10+. This document records
-   the measurement that proves it, and the workaround that turned out to be needed.
+## Probe method
 
-## Read this first: `adb shell run-as` is not a valid probe
-
-The obvious way to inspect an app's filesystem access is wrong on modern Android:
+`adb shell run-as <pkg>` does not measure the app's real access on API 29+:
 
 ```
-adb shell run-as com.vyzorix.agent ls /storage/emulated/0    # WRONG on API 29+
+adb shell run-as com.vyzorix.agent ls /storage/emulated/0    # invalid on API 29+
 ```
 
-`run-as` runs in the **`runas_app` SELinux domain**, not the app's own domain
-(`untrusted_app`), and — more importantly — in a **different mount namespace**. On
-API 33 the shared-storage mounts are simply absent from that namespace, so every
-path reports `ABSENT`/`Permission denied` regardless of what the app can really do.
-Measured: `run-as` said `/storage/emulated/0` was inaccessible on API 33; the app's
-own process said it was readable and listable.
+`run-as` runs in the `runas_app` SELinux domain, not the app's `untrusted_app`
+domain, and in a different mount namespace. On API 33 the shared-storage mounts are
+absent from that namespace, so every path reports `ABSENT`/`Permission denied`
+regardless of the app's real access. Measured: `run-as` reported
+`/storage/emulated/0` as inaccessible on API 33, while the app's own process could
+read and list it.
 
-**The only faithful probe is an instrumented test**, which runs in the app's real
-process with the app's real domain and mounts. `FsAccessProbeTest` is that harness
-(see "Reproducing" below).
+An instrumented test runs in the app's real process, so it sees the app's real
+domain and mounts. `FsAccessProbeTest` is that harness (see "Reproducing" below).
 
 ## The three layers that decide access
 
@@ -74,87 +68,79 @@ writable).
 (parent), `/storage/emulated` (parent), and most of `/proc` (`version`, `stat`,
 `uptime`, `loadavg`, `filesystems`).
 
-Two counter-intuitive details:
+Two per-path details:
 
-- **`/` is denied but children are reachable.** Access is per-path; there is no
-  "traverse from the root" rule.
-- **`/proc` is selectively readable.** `/proc/cpuinfo` is readable while
-  `/proc/version` is not — SELinux (`readproc` vs `readproc_extra`), not Unix mode.
+- `/` is denied but children are reachable: access is evaluated per path, not by
+  traversing from the root.
+- `/proc` is selectively readable: `/proc/cpuinfo` is readable while `/proc/version`
+  is not. This is SELinux (`readproc` vs `readproc_extra`), not Unix mode.
 
-## Measured: API 33 (Android 13) — as shipped, without a workaround
+## Measured: API 33 (Android 13)
 
 Device: emulator `system-images;android-33;default;x86_64`, probed from the app's
 own process via `FsAccessProbeTest`.
 
-**This is a regression.** As the app ships today it declares **no storage
-permission**, so the framework blocks shared storage entirely:
+Without the storage permission, shared storage is read-only:
 
 | Probe | Value |
 |:--|:--|
-| `isExternalStorageLegacy()` | **false** |
-| `READ_EXTERNAL_STORAGE` granted | **false** |
-| `WRITE_EXTERNAL_STORAGE` granted | **false** |
+| `isExternalStorageLegacy()` | `false` |
+| `READ_EXTERNAL_STORAGE` granted | `false` |
+| `WRITE_EXTERNAL_STORAGE` granted | `false` |
 
 | Path | Result |
 |:--|:--|
-| `/sdcard`, `/storage/emulated/0`, `/mnt/sdcard` | list + read OK, **write → `Operation not permitted`** |
-| `…/Download`, `…/Documents` | **writable** (the scoped-storage "public" collections) |
-| `…/DCIM`, `…/Pictures`, `…/Music`, `…/Movies` | list + read OK, **write denied** |
-| `…/Android/data`, `…/Android/obb` | **denied** (not even listable) |
+| `/sdcard`, `/storage/emulated/0`, `/mnt/sdcard` | list + read, write `Operation not permitted` |
+| `…/Download`, `…/Documents` | writable (scoped-storage public collections) |
+| `…/DCIM`, `…/Pictures`, `…/Music`, `…/Movies` | list + read, write denied |
+| `…/Android/data`, `…/Android/obb` | denied |
 | `…/Android/media` | list + read, write denied |
-| `/data/user/0/com.vyzorix.agent/*` | full read/write (unaffected) |
+| `/data/user/0/com.vyzorix.agent/*` | full read/write |
 
-So on Android 13 the app can *read* the shared tree but cannot *write* to it, and
-the failure is a scoped-storage `Operation not permitted`, not a Unix permission
-error. That would break anything the engine expects to write under `/sdcard`.
+The failure is a scoped-storage `Operation not permitted`, not a Unix permission
+error. Anything writing under `/sdcard` fails in this state.
 
-## The workaround (measured): declare the storage permission
+### Required permission
 
-Two changes were tested in isolation. **Only the first is required.**
-
-| Change | Effect on API 33 |
-|:--|:--|
-| `READ_EXTERNAL_STORAGE` + `WRITE_EXTERNAL_STORAGE` in the manifest, **granted at runtime** | **Full legacy access restored** — `isExternalStorageLegacy()` becomes `true` and the whole `/sdcard` tree is read/write again |
-| `android:requestLegacyExternalStorage="true"` | **Not needed.** With the permission alone, `legacy=true` and access matches API 28 |
-
-Why the permission alone is enough: scoped storage is gated on `targetSdk`, and this
-app pins **`targetSdk 28`**. An app targeting < 29 is granted **legacy** external
-storage by the platform — but it still has to *hold* the storage permission to use
-it. `requestLegacyExternalStorage` exists for apps that target 29+ and want to opt
-back in for one release; it is irrelevant at `targetSdk 28`.
-
-Result with the permission granted — matches the API 28 table, with one addition:
-
-| Path | API 33 with workaround |
-|:--|:--|
-| `/sdcard`, `/storage/emulated/0`, `…/Download`, `…/DCIM`, `…/Pictures`, `…/Music`, `…/Movies`, `…/Documents` | **read + write** |
-| `…/Android`, `…/Android/media` | read + write |
-| `…/Android/data/com.vyzorix.agent/**` | read + write (app-specific external dir) |
-| `…/Android/data`, `…/Android/obb` (the parents) | still denied — correct, these hold *other* apps' data |
-| `/data/user/0/com.vyzorix.agent/**` | read + write |
-
-### Required change
-
-Add to `app/src/main/AndroidManifest.xml`:
+`READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE`, declared in
+`app/src/main/AndroidManifest.xml`:
 
 ```xml
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 ```
 
-and grant them at runtime (they are dangerous permissions). `WRITE_EXTERNAL_STORAGE`
-is a no-op on API 30+ — on Android 11+ write access to the media collections comes
-from `READ_EXTERNAL_STORAGE` plus the app's own `Android/media` — but declaring both
-keeps the API 26–29 range working, which is the point of the pin.
+and granted at runtime by `LaunchActivity` (both are dangerous permissions).
 
-`MANAGE_EXTERNAL_STORAGE` is **not** required and should not be requested: it is a
-Play-restricted "All files access" permission, and the measurement shows it is not
-needed for the legacy path.
+Scoped storage is gated on `targetSdk`. This app pins `targetSdk 28`, so it is on
+the legacy path, but it still has to hold the permission to use it. With the
+permission granted, `isExternalStorageLegacy()` returns `true` and access matches
+API 28.
 
-## Folders that still need a workaround
+`WRITE_EXTERNAL_STORAGE` is a no-op from API 30 on — on Android 11+ write access to
+the media collections comes from `READ_EXTERNAL_STORAGE` plus the app's own
+`Android/media` — but declaring it keeps the API 26–29 range working, which is the
+point of the pin.
 
-After the permission fix, these remain denied by design and a `proot` bind (or an
-app-side copy) is needed if the container must see them:
+`android:requestLegacyExternalStorage="true"` was tested and is not required: it
+applies only to apps targeting API 29+, and this app targets 28.
+`MANAGE_EXTERNAL_STORAGE` is not required: it is a Play-restricted "All files
+access" permission, and the measurement shows the legacy path does not need it.
+
+With the permission granted:
+
+| Path | API 33 |
+|:--|:--|
+| `/sdcard`, `/storage/emulated/0`, `…/Download`, `…/DCIM`, `…/Pictures`, `…/Music`, `…/Movies`, `…/Documents` | read + write |
+| `…/Android`, `…/Android/media` | read + write |
+| `…/Android/data/com.vyzorix.agent/**` | read + write |
+| `…/Android/data`, `…/Android/obb` (the parents) | denied — these hold other apps' data |
+| `/data/user/0/com.vyzorix.agent/**` | read + write |
+
+## Folders that remain denied
+
+These are denied after the permission fix and need a `proot` bind (or an app-side
+copy) if the container must see them:
 
 | Path | Why it is denied | Workaround |
 |:--|:--|:--|
@@ -177,13 +163,12 @@ adb logcat -c
 adb logcat -d | grep System.out | sed 's/.*System.out: //' | grep -E 'PROBE|^[^|]+\|'
 ```
 
-Run it once as shipped and once with the permission declared, and compare.
+Run it once as shipped and once with the permission granted, and compare.
 
 ## How this relates to the container
 
-The short list of accessible host paths is precisely why the engine does not use the
-host filesystem. Instead `proot` presents a Debian rootfs as `/`, and
-`ProotLauncher.binds()` chooses the handful of **host** paths to expose inward:
+`proot` presents a Debian rootfs as `/`, and `ProotLauncher.binds()` selects the
+**host** paths to expose inward:
 
 - `/dev`, `/proc`, `/sys` — kernel interfaces the container needs
 - the rootfs's `resolv.conf` — DNS
@@ -191,8 +176,7 @@ host filesystem. Instead `proot` presents a Debian rootfs as `/`, and
 - `files/apps` → `/home/apps` — app storage (Layer 3)
 - `files/android.sock` → `/tmp/android.sock` — the bridge
 
-The bind list is the app's *own* allowlist, and it is deliberately narrower than what
-the OS would permit: §10 of the architecture doc calls it the "closed world". If the
-container needs a host folder beyond that list, it is a deliberate addition — and on
-API 29+ it must first be reachable by the app at all, which is what this document
-records.
+The bind list is the app's own allowlist, narrower than what the OS permits: §10 of
+the architecture doc calls it the "closed world". A host folder beyond that list is
+an explicit addition, and on API 29+ it must first be reachable by the app at all,
+which is what this document records.

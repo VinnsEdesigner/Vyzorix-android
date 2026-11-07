@@ -25,36 +25,49 @@ class LaunchActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestNotificationPermissionIfNeeded()
+        requestRuntimePermissions()
         VyzorixForegroundService.start(this)
 
         setContentView(TextView(this).apply { text = "Vyzorix device agent is running." })
     }
 
     /**
-     * Asks for POST_NOTIFICATIONS on API 33+, where it became a runtime permission.
+     * Asks for the runtime permissions the agent needs, in one prompt.
      *
-     * It is needed for exactly one thing: showing the pairing code. A device that
-     * refuses it still enrolls and still works — the code is simply not visible, and
-     * the operator cannot claim it, which is the user's choice to make.
+     * POST_NOTIFICATIONS (API 33+): needed to show the pairing code. A device that
+     * refuses it still enrolls and works; the code is simply not visible, which is
+     * the user's choice to make.
      *
-     * Below API 33 the permission is granted at install, so there is nothing to ask.
+     * READ/WRITE_EXTERNAL_STORAGE: needed so the container can write to shared
+     * storage. Scoped storage gates the shared tree on holding the permission even
+     * at targetSdk 28, so without it the tree is read-only on API 29+ (see
+     * doc/DEVICE_FILESYSTEM_ACCESS.md).
      */
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    private fun requestRuntimePermissions() {
+        val needed = mutableListOf<String>()
 
-        val granted =
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
-                PackageManager.PERMISSION_GRANTED
-        if (granted) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            needed += Manifest.permission.POST_NOTIFICATIONS
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            needed += Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        // WRITE_EXTERNAL_STORAGE is a runtime permission only through API 29; from
+        // API 30 it is granted implicitly and has no effect, so it is not requested.
+        if (Build.VERSION.SDK_INT in Build.VERSION_CODES.M..Build.VERSION_CODES.Q) {
+            needed += Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }
 
-        requestPermissions(
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-            NOTIFICATION_REQUEST_CODE,
-        )
+        val missing =
+            needed.filter {
+                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            }
+        if (missing.isEmpty()) return
+
+        requestPermissions(missing.toTypedArray(), RUNTIME_REQUEST_CODE)
     }
 
     private companion object {
-        const val NOTIFICATION_REQUEST_CODE = 1
+        const val RUNTIME_REQUEST_CODE = 1
     }
 }

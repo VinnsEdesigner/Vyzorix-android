@@ -11,6 +11,16 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Shared storage, for the container's view of /sdcard.
+         Scoped storage gates the shared tree on holding this permission even at
+         targetSdk 28; without it the tree is read-only on API 29+ and Android/data
+         is denied. Declared uncapped so the grant holds across every supported API
+         level. WRITE_EXTERNAL_STORAGE is a no-op from API 30 on, but declaring it
+         keeps the API 26-29 range working.
+         See doc/DEVICE_FILESYSTEM_ACCESS.md. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
     <application
         android:name="com.vyzorix.agent.VyzorixApplication"
         android:allowBackup="false"
