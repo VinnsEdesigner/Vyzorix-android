@@ -126,10 +126,68 @@ build_tarball() {
   sudo mkdir -p "${dir}/opt" "${dir}/usr/local"
   sudo find "${dir}/opt" "${dir}/usr/local" -mindepth 1 -delete 2>/dev/null || true
 
-  # resolv.conf must exist as a *bind target* for proot's -b (§6.2). Its contents are
+  # /dev: debootstrap writes `/dev/null` as a plain empty file (it cannot mknod),
+  # which grows on every write and breaks apt — apt hands /dev/null to `apt-key` as
+  # a keyring. A real device node cannot replace it: a tar entry of type '3' makes
+  # the device's extractor throw and abort the install, and mknod needs CAP_MKNOD.
+  # So neither it nor /dev/shm is shipped; the launcher binds the real /dev over
+  # this directory (ProotLauncher.binds), which supplies both. The /dev/fd and
+  # /dev/std* symlinks stay — proot rewrites those paths itself.
+  log "fixing /dev in ${name}"
+  sudo find "${dir}/dev" -mindepth 1 -maxdepth 1 \
+    \( -name null -o -name shm \) -delete 2>/dev/null || true
+
+  # Asserted, so a regression fails the build rather than an install on a device.
+  if [ -e "${dir}/dev/null" ] || [ -e "${dir}/dev/shm" ]; then
+    echo "build-rootfs: /dev/null and /dev/shm must not be shipped" >&2
+    exit 1
+  fi
+  for link in fd stdin stdout stderr ptmx; do
+    if [ ! -L "${dir}/dev/${link}" ]; then
+      echo "build-rootfs: /dev/${link} should be a symlink, is not" >&2
+      exit 1
+    fi
+  done
+
+  # /tmp must be 1777, not the 0755 debootstrap leaves: apt drops privilege and
+  # cannot write its temp files, then refuses the repository as unsigned.
+  log "fixing /tmp in ${name}"
+
+  # /etc/resolv.conf must exist as a *bind target* for proot's -b (§6.2). Its contents are
   # replaced by the bind, so an empty file is enough — but it must be present.
   sudo mkdir -p "${dir}/etc"
   sudo touch "${dir}/etc/resolv.conf"
+
+  # /etc/hosts must exist and be non-empty, or the guest's resolver **segfaults**.
+  #
+  # debootstrap does not create it (it is normally provided by the container runtime
+  # or the host), and glibc's getaddrinfo(3) dereferences the file's buffer
+  # unconditionally when nsswitch lists `files` first — a missing file yields a NULL
+  # mapping and a crash inside the resolver, not an error return. Measured on the
+  # Android 13 emulator: `python3 -c "import socket; socket.getaddrinfo(...)"` died
+  # with SIGSEGV until this file existed, and answered once it did.
+  #
+  # `localhost` is what makes the file useful beyond the crash: a program that
+  # resolves its own name must not reach the network for it.
+  sudo tee "${dir}/etc/hosts" >/dev/null <<'HOSTS'
+127.0.0.1 localhost
+::1       localhost ip6-localhost ip6-loopback
+HOSTS
+
+  # /etc/services and /etc/protocols are the same class of omission: glibc and
+  # libcurl read them, and a missing file is not always handled gracefully. They are
+  # tiny, so ship the Debian ones rather than an empty stub.
+  sudo touch "${dir}/etc/services" "${dir}/etc/protocols"
+
+  # The node compatibility prelude. `NODE_OPTIONS=--import <this>` is set for the
+  # container's shell (ProotLauncher), so every node process — npm and anything it
+  # spawns — picks it up. It works around two environmental defects that otherwise
+  # make node unable to load a module from disk and npm unusable; see the file's own
+  # header. Installed under /usr/lib so it is not on PATH and cannot be shadowed.
+  sudo mkdir -p "${dir}/usr/lib/vyzorix"
+  sudo cp "${ROOT}/debian-engine/rootfs/node-prelude.mjs" \
+          "${dir}/usr/lib/vyzorix/node-prelude.mjs"
+  sudo chmod 0644 "${dir}/usr/lib/vyzorix/node-prelude.mjs"
 
   # Nothing setuid: meaningless under proot, and a red flag in review.
   sudo find "${dir}" -perm /6000 -type f -exec chmod u-s,g-s {} + 2>/dev/null || true
@@ -144,6 +202,14 @@ build_tarball() {
   # here instead: set the bits we want, do not clear the ones that matter.
   sudo find "${dir}" -type d -exec chmod 0755 {} +
   sudo find "${dir}" -type f -exec chmod u+rw,go+r {} +
+
+  # /tmp is the one directory the pass above gets wrong: it must be 1777, not 0755
+  # (see the note above). Set after the pass, because the pass would clobber it.
+  sudo chmod 1777 "${dir}/tmp"
+  if [ "$(stat -c '%a' "${dir}/tmp")" != "1777" ]; then
+    echo "build-rootfs: /tmp is $(stat -c '%a' "${dir}/tmp"), expected 1777" >&2
+    exit 1
+  fi
 
   # bash is checked by ProotLauncher.isReady(); assert it explicitly rather than
   # trusting the pass above to have preserved it.
