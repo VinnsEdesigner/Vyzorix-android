@@ -6,6 +6,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -189,5 +190,89 @@ class ProotLauncherTest {
             },
         )
         assertTrue("the overlay prefix must be bound", binds.any { it.contains("/usr-local") })
+    }
+
+    @Test
+    fun `shared storage is bound so the container sees the public collections`() {
+        // Tier 1 (unrooted) reaches shared storage through the app's own uid and the
+        // storage permission, so the container is given the same tree the app has.
+        // The host side is read from the platform, so the assertion is on the shape
+        // and the guest target, not on a hardcoded /sdcard.
+        val root = ProotLauncher.sharedStorageRoot()
+        assumeTrue("device has no shared storage", root != null)
+
+        val bind = ProotLauncher.binds(context).firstOrNull { it.endsWith(":/sdcard") }
+        assertTrue("shared storage must be bound into the container", bind != null)
+        assertEquals(root, bind!!.substringBefore(":"))
+    }
+
+    @Test
+    fun `the app-private tree is never bound`() {
+        // The private tree holds the rootfs, the overlay, the secret store and the
+        // recordings. Only named subdirectories cross (apps, the socket), plus one
+        // file out of the rootfs for DNS. What must never cross is the tree itself,
+        // the overlay root, or the engine zone — or the container would hold the
+        // keys to itself.
+        val files = context.filesDir.absolutePath
+        val overlay = ProotLauncher.overlay(context).absolutePath
+
+        for (bind in ProotLauncher.binds(context)) {
+            val host = bind.substringBefore(":")
+            assertFalse("filesDir itself must not be bound: $bind", host == files)
+            assertFalse("the overlay root must not be bound: $bind", host == overlay)
+            assertFalse(
+                "the engine zone must not be bound: $bind",
+                ProotLauncher.isEngineZonePath(host),
+            )
+        }
+    }
+
+    @Test
+    fun `the android trees are exposed under a prefix, never at their host path`() {
+        // The container's / is the Debian rootfs, which has its own /bin, /usr, /lib.
+        // Binding a host tree at its own top-level path risks shadowing the Debian
+        // filesystem; the prefix makes the boundary explicit.
+        //
+        // Exercised through androidBindsFor: on the JVM androidBinds() is empty (no
+        // /system), so a test over it would pass vacuously.
+        val binds =
+            ProotLauncher.androidBindsFor(
+                listOf("/system", "/system/lib64", "/vendor", "/product", "/odm", "/oem"),
+            )
+
+        assertEquals("every tree maps to one bind", 6, binds.size)
+
+        for (bind in binds) {
+            val host = bind.substringBefore(":")
+            val guest = bind.substringAfter(":")
+
+            assertTrue(
+                "an android tree must be exposed under the prefix: $bind",
+                guest.startsWith("${ProotLauncher.ANDROID_ROOT_IN_CONTAINER}/"),
+            )
+            assertEquals(
+                "the guest path mirrors the host basename: $bind",
+                ProotLauncher.ANDROID_ROOT_IN_CONTAINER + "/" + File(host).name,
+                guest,
+            )
+            assertFalse("host and guest must differ: $bind", host == guest)
+        }
+
+        // The concrete shape, so a rename of the prefix is a visible test change.
+        assertTrue(binds.contains("/system:/android/system"))
+        assertTrue(binds.contains("/vendor:/android/vendor"))
+    }
+
+    @Test
+    fun `android binds are skipped when the tree is absent`() {
+        // On the JVM there is no /system, so androidBinds() is empty — which is the
+        // point: an absent tree is skipped rather than passed through as a dead bind.
+        for (bind in ProotLauncher.androidBinds()) {
+            val host = bind.substringBefore(":")
+            assertTrue("only existing trees are bound: $bind", File(host).isDirectory)
+        }
+
+        // And the filter is what does it: an empty input maps to an empty output.
+        assertEquals(emptyList<String>(), ProotLauncher.androidBindsFor(emptyList()))
     }
 }

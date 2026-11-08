@@ -180,3 +180,45 @@ The bind list is the app's own allowlist, narrower than what the OS permits: §1
 the architecture doc calls it the "closed world". A host folder beyond that list is
 an explicit addition, and on API 29+ it must first be reachable by the app at all,
 which is what this document records.
+
+## Bound today (tier 1)
+
+The launcher's list (`ProotLauncher.binds`) is:
+
+| Host | In the container | Why |
+|:--|:--|:--|
+| `/dev`, `/proc`, `/sys` | same | Kernel interfaces the container needs |
+| `rootfs/etc/resolv.conf` | `/etc/resolv.conf` | DNS; without it there is no name resolution |
+| `overlay/usr-local` | `/usr/local` | Writable overlay, survives a rootfs swap |
+| `overlay/opt` | `/opt` | Same |
+| `overlay/etc` | `/etc/vyzorix` | Config that survives a rootfs swap |
+| `files/apps` | `/home/apps` | App storage (Layer 3) |
+| **shared-storage root** | **`/sdcard`** | The folders this document measures (below) |
+| `files/android.sock` | `/tmp/android.sock` | The API bridge |
+
+The shared-storage root is bound on **tier 1** (a stock, unrooted device). It is read
+from `Environment.getExternalStorageDirectory()` rather than hardcoded, and skipped
+when the device has none, so the list always equals what exists. Binding it exposes
+the whole tree the app can reach — the public collections (Download, DCIM, Pictures,
+Music, Movies, Documents) and `Android/media` — without naming each one.
+
+This is a reversal of §6.1's "optional export target, never a dependency": shared
+storage is now bound on every start, not only when an export feature asks for it.
+`ProotLauncher.SHARED_STORAGE_IN_CONTAINER` is the single constant that records the
+decision.
+
+**A bind cannot grant more than the app already has.** proot does not change the real
+uid, so a container process runs as the app's own uid, in the app's SELinux domain,
+under the same Unix permissions. The bind changes what the container can *see*, never
+what the app may *touch*. `/sdcard/Android/data`, `/sdcard/Android/obb` and other
+apps' collections stay denied to the container exactly as they are denied to the app.
+
+## Never bound
+
+The app's own private tree (`context.filesDir`, `/data/user/0/<pkg>`) is **not** bound
+as a whole. It holds the rootfs, the overlay, the secret store and the recordings, so
+binding it would hand the container the keys to itself. Only named subdirectories cross
+(`apps`, the socket) plus one file out of the rootfs for DNS. `isEngineZonePath` is the
+second, independent check on the same rule, asserted in `ProotLauncherTest`.
+
+

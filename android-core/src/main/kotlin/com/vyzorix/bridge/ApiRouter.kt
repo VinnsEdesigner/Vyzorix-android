@@ -1,6 +1,7 @@
 package com.vyzorix.bridge
 
 import android.content.Context
+import android.os.Build
 import com.vyzorix.permissions.PermissionRegistry
 import com.vyzorix.permissions.PermissionRequester
 import org.json.JSONObject
@@ -129,9 +130,17 @@ class ApiRouter(
      *
      * Without a requester (a test, or a build with no app module) an API that needs
      * a permission is refused: fail-closed, matching the token rule.
+     *
+     * The SDK rule lives in [PermissionRegistry.needsNoPermission], so this method
+     * and the requester cannot disagree about whether a permission applies on the
+     * running device.
      */
     private fun permissionGranted(api: String): Boolean {
         if (PermissionRegistry.needsNoPermission(api)) return true
+
+        // The SDK rule lives in the registry, so this method and the requester cannot
+        // disagree about whether a permission applies on the running device.
+        if (!PermissionRegistry.requiresPermissionOn(api, Build.VERSION.SDK_INT)) return true
 
         val def = PermissionRegistry.forApi(api) ?: return true
         val requester = permissions ?: return false

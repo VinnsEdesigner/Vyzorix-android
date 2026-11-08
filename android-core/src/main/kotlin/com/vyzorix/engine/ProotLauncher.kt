@@ -1,6 +1,7 @@
 package com.vyzorix.engine
 
 import android.content.Context
+import android.os.Environment
 import com.vyzorix.capability.PtyRequest
 import java.io.File
 
@@ -34,6 +35,64 @@ object ProotLauncher {
     const val PROOT_LIBRARY = "libproot.so"
 
     /**
+     * Shared storage, bound for a stock (tier 1) device.
+     *
+     * `DEVICE_FILESYSTEM_ACCESS.md` records what an unrooted app can reach once the
+     * storage permission is granted: the shared-storage root and the public
+     * collections beneath it (Download, DCIM, Pictures, Music, Movies, Documents).
+     * Binding the root exposes them all, so the collections are not named one by one.
+     *
+     * Binding a host path cannot grant the container more than the app already has.
+     * proot does not change the real uid, so a container process runs as the app's
+     * own uid, in the app's SELinux domain, under the same Unix permissions. The
+     * bind changes what the container can *see*, never what the app may *touch*.
+     *
+     * This reverses §6.1's "optional export target, never a dependency" default: the
+     * shared-storage tree is now bound on every start. It is one named constant so
+     * the decision is visible and reversible in one place.
+     *
+     * The literal is a **guest** path — where the tree appears *inside* the container
+     * — not a host path, which is why it is not derived from
+     * `Environment.getExternalStorageDirectory()`. The host side of the bind is read
+     * from the platform in [sharedStorageRoot].
+     */
+    @Suppress("SdCardPath") // A guest path, not a host one: lint cannot tell them apart.
+    const val SHARED_STORAGE_IN_CONTAINER = "/sdcard"
+
+    /**
+     * Where the Android read-only trees appear inside the container.
+     *
+     * They are exposed under a **prefix**, never at their host paths. The container's
+     * `/` is the Debian rootfs, which has its own `/bin`, `/usr`, `/lib`, `/etc`;
+     * binding a host tree at `/system` would be harmless only by luck, and anything
+     * landing on a shared top-level name silently shadows the Debian filesystem —
+     * the exact failure §6.1 warns about ("content [in a bind target] would be
+     * shadowed and look like a bug"). A prefix makes the boundary explicit: these
+     * are the device's files, read-only, over there.
+     *
+     * The trees are read-only because the app's uid cannot write them (SELinux and
+     * the mount's own mode), **not** because proot enforces it — proot's `-b` has no
+     * read-only flag. Do not describe this as a read-only bind in code or docs.
+     *
+     * They are also not runnable inside the container: `/system/lib64` is bionic, and
+     * the guest is glibc Debian. This is for inspection and for the odd host file a
+     * tool wants to read, not for executing Android binaries.
+     */
+    const val ANDROID_ROOT_IN_CONTAINER = "/android"
+
+    /**
+     * The Android trees exposed under [ANDROID_ROOT_IN_CONTAINER].
+     *
+     * Top-level only: `/system/lib64` is a child of `/system`, so binding the parent
+     * already carries it and a second entry would be a redundant bind.
+     *
+     * A tree that does not exist on the device is skipped (see [androidBinds]), so a
+     * device without `/oem` or `/product` gets a shorter list rather than a dead
+     * entry — the same rule the shared-storage bind follows.
+     */
+    private val ANDROID_TREES = listOf("/system", "/vendor", "/product", "/odm", "/oem")
+
+    /**
      * proot's scratch directory, app-private.
      *
      * proot writes a temporary file — the loader it embeds — before every exec, and
@@ -46,29 +105,34 @@ object ProotLauncher {
     /** The env var proot reads for [TMP_DIR]. It reads its *own* environment. */
     const val TMP_DIR_ENV = "PROOT_TMP_DIR"
 
-    /**
-     * Disables proot's own seccomp-based ptrace acceleration.
-     *
-     * proot can use `PTRACE_O_TRACESECCOMP` to be notified only at syscall *enter*
-     * (its "seccomp mode 2" acceleration). On Android that collides with the app's
-     * own seccomp filter and with proot's SIGSYS rewrite: the rewritten syscall is
-     * mishandled and fails with a bogus errno. Measured on the Android 13 emulator
-     * (kernel 5.15) from the app's process — `mkdir` returns `EROFS` (errno 30) with
-     * acceleration on, and succeeds with `PROOT_NO_SECCOMP=1`.
-     *
-     * Setting it costs performance, not correctness: it is proot's original
-     * `PTRACE_SYSCALL` flow, which is how proot worked before the acceleration was
-     * added. This is the workaround proot itself documents for a kernel whose
-     * seccomp handling conflicts with it.
-     */
-    const val NO_SECCOMP_ENV = "PROOT_NO_SECCOMP"
-
     /** App-private directories that hold secrets and recordings, never bound. */
     const val SECRETS_DIR = "secrets"
     const val RECORDINGS_DIR = "recordings"
 
     /** Where the bridge socket is bound inside the container. */
     const val BRIDGE_SOCKET_IN_CONTAINER = "/tmp/android.sock"
+
+    /**
+     * The node compatibility prelude, inside the container, and the variable that
+     * loads it for every node process.
+     *
+     * The prelude works around two environmental defects — an emulator CPU that
+     * mis-emulates `cvttsd2si(NaN)` (so `Buffer.prototype.toString(enc)` throws, and
+     * node cannot load any module from disk) and a proot rename that reports ENOENT
+     * after it succeeded (which breaks npm's content store). Both make `npm` and
+     * `vite` unusable without it. The file is `debian-engine/rootfs/node-prelude.mjs`
+     * and is installed into the rootfs; it is a no-op on a healthy host, so it is
+     * loaded unconditionally.
+     *
+     * `--import` (not `--require`) because `NODE_OPTIONS` propagates to child
+     * processes, and npm spawns node for lifecycle scripts — the vite build would
+     * otherwise fail in its own child. An `.mjs` prelude runs before the entry
+     * module, so the patch is in place before anything reads a file.
+     */
+    const val NODE_PRELUDE_IN_CONTAINER = "/usr/lib/vyzorix/node-prelude.mjs"
+
+    /** The variable node reads for [NODE_PRELUDE_IN_CONTAINER]. */
+    const val NODE_OPTIONS_ENV = "NODE_OPTIONS"
 
     /** The child reads the bridge socket path and token from these variables. */
     const val BRIDGE_SOCKET_ENV = "VYZORIX_BRIDGE_SOCKET"
@@ -101,6 +165,50 @@ object ProotLauncher {
     fun appsDir(context: Context): File = File(context.filesDir, APPS_DIR)
 
     fun socketPath(context: Context): File = File(context.filesDir, "android.sock")
+
+    /**
+     * The shared-storage root bound into the container, or null when the device has
+     * none.
+     *
+     * Read from the platform rather than hardcoded: `Environment.getExternalStorageDirectory()`
+     * is `/sdcard` on a stock device, but a device with a real removable card or a
+     * non-default mount can differ, and the app must bind what the app can actually
+     * reach — the same source `ExternalStorageApi` reads.
+     *
+     * Null (no external storage, or it does not exist) means the bind is skipped
+     * rather than passed through. A `-b` naming a path that is not there is not
+     * fatal to proot, but it would put a dead entry in every argv and misreport the
+     * container's world; skipping it keeps the bind list equal to what exists.
+     */
+    fun sharedStorageRoot(): String? =
+        Environment.getExternalStorageDirectory()?.takeIf { it.exists() }?.absolutePath
+
+    /**
+     * The `-b` entries exposing the Android read-only trees under
+     * [ANDROID_ROOT_IN_CONTAINER].
+     *
+     * Each tree that exists is bound to `<prefix>/<basename>`: `/system` becomes
+     * `/android/system`. A tree that is absent is skipped, so the list matches what
+     * the device actually has.
+     *
+     * The guest target's parent directory does not exist in the rootfs. proot creates
+     * missing bind targets as needed (it is a path rewrite, not a mount), so no
+     * rootfs change is required — but that also means an *empty* source would appear
+     * as an empty directory rather than an error, which is why existence is checked
+     * here rather than left to proot.
+     */
+    fun androidBinds(): List<String> =
+        androidBindsFor(ANDROID_TREES.filter { File(it).isDirectory })
+
+    /**
+     * The mapping from existing trees to `-b` entries, split out so it is testable.
+     *
+     * [androidBinds] cannot be asserted on the JVM — there is no `/system` there, so
+     * it returns an empty list and a test over it proves nothing. This takes the
+     * already-filtered list, so the mapping is exercised with real inputs.
+     */
+    internal fun androidBindsFor(trees: List<String>): List<String> =
+        trees.map { "$it:$ANDROID_ROOT_IN_CONTAINER/${File(it).name}" }
 
     /**
      * proot's scratch dir, created.
@@ -160,39 +268,58 @@ object ProotLauncher {
         val overlay = overlay(context).absolutePath
 
         val binds =
-            listOf(
+            buildList {
                 // Kernel interfaces the container needs.
-                "/dev",
-                "/proc",
-                "/sys",
+                add("/dev")
+                add("/proc")
+                add("/sys")
                 // DNS, or there is no name resolution inside the container.
-                "$rootfs/etc/resolv.conf:/etc/resolv.conf",
+                add("$rootfs/etc/resolv.conf:/etc/resolv.conf")
                 // The writable overlay prefix, so on-device installs survive a
                 // rootfs replacement. Only named subdirectories, never the overlay
                 // root and never files/.
-                "$overlay/usr-local:/usr/local",
-                "$overlay/opt:/opt",
+                add("$overlay/usr-local:/usr/local")
+                add("$overlay/opt:/opt")
                 // The config area that survives a rootfs replacement (§6.1). The
                 // target is /etc/vyzorix, a directory the rootfs does not ship, so
                 // the overlay is the only thing there — which is the point: an
                 // update swaps files/rootfs and leaves on-device config alone.
-                "$overlay/etc:/etc/vyzorix",
+                add("$overlay/etc:/etc/vyzorix")
                 // App storage (§2: Layer 2 is disposable, Layer 3's storage is not).
                 // The supervisor's registry, its logs and the apps' files live here,
                 // so a rootfs replacement leaves every app and its data alone.
-                "${appsDir(context).absolutePath}:$APPS_IN_CONTAINER",
+                add("${appsDir(context).absolutePath}:$APPS_IN_CONTAINER")
+                // Shared storage, so the container can read and write the folders a
+                // stock device exposes: the public collections (Download, DCIM,
+                // Pictures, Music, Movies, Documents) and `Android/media`. The
+                // app-private tree is NOT bound — see the note below. Skipped when
+                // the device has no shared storage, so the list equals what exists.
+                sharedStorageRoot()?.let { add("$it:$SHARED_STORAGE_IN_CONTAINER") }
+                // The Android read-only trees, under a prefix so they cannot shadow
+                // the Debian filesystem. Present only if the device has them.
+                addAll(androidBinds())
                 // The bridge socket, so the container can reach the API bridge. The
                 // socket file only, not the directory that holds the secret store.
-                "${socketPath(context).absolutePath}:$BRIDGE_SOCKET_IN_CONTAINER",
-            )
+                add("${socketPath(context).absolutePath}:$BRIDGE_SOCKET_IN_CONTAINER")
+            }
 
-        // The architecture doc's §6.2 argv sketch also shows
-        // `-b $SDCARD/Android/data/<pkg>/files:/sdcard`. It is deliberately NOT
-        // here: §6.1 says /sdcard is "an optional export target, never a
-        // dependency", and binding it into the container by default would hand the
-        // container broad shared-storage access that nothing in the design requires.
-        // It is added when an export feature needs it, with the path passed in,
-        // not assumed from the app's package name.
+        // The app's own private tree (`context.filesDir`, i.e. /data/user/0/<pkg>)
+        // is deliberately NOT bound. It holds the rootfs, the overlay, the secret
+        // store and the recordings — the engine zone — so binding it would hand the
+        // container the keys to itself. Only named subdirectories cross (apps, the
+        // socket); the tree as a whole never does. `isEngineZonePath` is the second,
+        // independent check on the same rule.
+        //
+        // Shared storage is safe to bind wholesale: proot does not change the real
+        // uid, so a container process runs as the app's own uid, in the app's SELinux
+        // domain, under the same Unix permissions. The bind changes what the
+        // container can *see*, never what the app may *touch* — `/sdcard/Android/data`
+        // and other apps' collections stay denied to the container exactly as they
+        // are denied to the app.
+        //
+        // This reverses §6.1's "optional export target, never a dependency": shared
+        // storage is now bound on every start. `SHARED_STORAGE_IN_CONTAINER` is the
+        // single place that decision lives.
 
         // Assert the invariant rather than trusting the list above. A path that is
         // not engine-zone but is also not one of the expected shapes is still
@@ -262,6 +389,7 @@ object ProotLauncher {
                 "TERM=xterm-256color",
                 "LANG=C.UTF-8",
                 "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "$NODE_OPTIONS_ENV=--import $NODE_PRELUDE_IN_CONTAINER",
                 "$BRIDGE_SOCKET_ENV=$BRIDGE_SOCKET_IN_CONTAINER",
                 "$BRIDGE_TOKEN_ENV=$token",
             )
@@ -341,7 +469,6 @@ object ProotLauncher {
                     "TERM=xterm-256color",
                     "LANG=C.UTF-8",
                     "$TMP_DIR_ENV=${tmpDir(context).absolutePath}",
-                    "$NO_SECCOMP_ENV=1",
                 ),
         )
 

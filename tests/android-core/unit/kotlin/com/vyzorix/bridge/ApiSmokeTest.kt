@@ -1,7 +1,9 @@
 package com.vyzorix.bridge
 
 import android.content.Context
+import android.os.Build
 import androidx.test.core.app.ApplicationProvider
+import com.vyzorix.bridge.apis.SmsReceivedApi
 import com.vyzorix.bridge.apis.UsbAttachApi
 import com.vyzorix.bridge.apis.UsbDetachApi
 import com.vyzorix.bridge.apis.UsbStateApi
@@ -73,6 +75,10 @@ class ApiSmokeTest {
             .register(UsbStateApi.NAME, UsbStateApi(usb))
             .register(UsbAttachApi.NAME, UsbAttachApi(usb))
             .register(UsbDetachApi.NAME, UsbDetachApi(usb))
+            // `sms_received` is service-registered too: it owns a receiver with a
+            // start/stop lifecycle. A fresh instance here reports `listening: false`,
+            // which is the correct answer for a receiver that was never started.
+            .register(SmsReceivedApi.NAME, SmsReceivedApi())
     }
 
     /** A USB host with nothing attached, so the handlers answer without hardware. */
@@ -97,8 +103,8 @@ class ApiSmokeTest {
      * and is therefore still checked.
      */
     private val permissionGated =
-        ApiCatalogue.names.filterNot {
-            PermissionRegistry.needsNoPermission(it)
+        ApiCatalogue.names.filter {
+            PermissionRegistry.requiresPermissionOn(it, Build.VERSION.SDK_INT)
         }
 
     @Test

@@ -47,6 +47,7 @@ installed_apps
 kernel_info
 load_average
 locale_info
+location
 logcat
 memory_info
 mount_points
@@ -56,6 +57,7 @@ nfc_state
 notification_policy
 package_info
 phone_state
+phone_state_detailed
 power_save
 process_list
 proxy_state
@@ -66,7 +68,9 @@ security_patch
 sensor_list
 session
 sms_capability
+sms_received
 storage
+storage_all_files
 storage_volumes
 system_properties
 thermal

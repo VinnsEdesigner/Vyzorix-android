@@ -39,10 +39,30 @@ object BluetoothStateApi : ApiHandler {
             manager.adapter
                 ?: return ApiOutcome.ok(JSONObject().put("supported", false).put("enabled", false))
 
+        // `isEnabled()` needs BLUETOOTH_CONNECT from API 31, where BLUETOOTH was
+        // split. The router gates this API on BLUETOOTH (the permission that exists
+        // across the whole range), so on a 31+ device without the CONNECT grant the
+        // call throws rather than the API failing closed. Caught and reported as
+        // unknown, which is honest: the device may well be enabled, we just cannot
+        // see it, and saying "off" would be a wrong answer rather than a missing one.
+        val enabled =
+            try {
+                adapter.isEnabled
+            } catch (e: SecurityException) {
+                return ApiOutcome.ok(
+                    JSONObject()
+                        .put("supported", true)
+                        .put("enabled", false)
+                        .put("known", false)
+                        .put("reason", "BLUETOOTH_CONNECT not granted: ${e.message}"),
+                )
+            }
+
         return ApiOutcome.ok(
             JSONObject()
                 .put("supported", true)
-                .put("enabled", adapter.isEnabled),
+                .put("enabled", enabled)
+                .put("known", true),
         )
     }
 }

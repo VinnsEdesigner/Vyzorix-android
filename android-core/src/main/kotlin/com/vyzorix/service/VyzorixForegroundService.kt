@@ -15,6 +15,7 @@ import com.vyzorix.bridge.ApiCatalogue
 import com.vyzorix.bridge.ApiRouter
 import com.vyzorix.bridge.SessionTokenRegistry
 import com.vyzorix.bridge.apis.SessionApi
+import com.vyzorix.bridge.apis.SmsReceivedApi
 import com.vyzorix.bridge.apis.UsbAttachApi
 import com.vyzorix.bridge.apis.UsbDetachApi
 import com.vyzorix.bridge.apis.UsbStateApi
@@ -59,6 +60,7 @@ class VyzorixForegroundService : Service() {
     private lateinit var router: ApiRouter
     private lateinit var broker: PtyBroker
     private lateinit var usbBroker: UsbBroker
+    private lateinit var smsReceived: SmsReceivedApi
     private lateinit var bridge: AndroidSocketServer
     private lateinit var watchdog: ServiceWatchdog
     private var cloudLink: CloudLink? = null
@@ -124,6 +126,11 @@ class VyzorixForegroundService : Service() {
         tokens = SessionTokenRegistry()
         broker = PtyBroker()
         usbBroker = UsbBroker(AndroidUsbHost(this))
+        smsReceived = SmsReceivedApi()
+        // Register the receiver before the router serves `sms_received`, or the API
+        // reports `listening: false` for a device that is in fact watching nothing.
+        // Idempotent, so a service restart does not stack receivers.
+        smsReceived.start(this)
         router = buildRouter()
 
         // Install the container's userspace if it is not already there, before
@@ -310,11 +317,6 @@ class VyzorixForegroundService : Service() {
                     .apply {
                         environment()[ProotLauncher.TMP_DIR_ENV] =
                             ProotLauncher.tmpDir(this@VyzorixForegroundService).absolutePath
-                        // proot's seccomp acceleration collides with Android's own
-                        // filter and corrupts the SIGSYS rewrite: without this, the
-                        // supervisor's mkdir fails with EROFS on Android 13. See
-                        // ProotLauncher.NO_SECCOMP_ENV.
-                        environment()[ProotLauncher.NO_SECCOMP_ENV] = "1"
                     }
 
             val process = builder.start()
@@ -426,6 +428,7 @@ class VyzorixForegroundService : Service() {
             .register(UsbStateApi.NAME, UsbStateApi(usbBroker))
             .register(UsbAttachApi.NAME, UsbAttachApi(usbBroker))
             .register(UsbDetachApi.NAME, UsbDetachApi(usbBroker))
+            .register(SmsReceivedApi.NAME, smsReceived)
     }
 
     /**
@@ -565,6 +568,10 @@ class VyzorixForegroundService : Service() {
         readers.clear()
 
         if (::bridge.isInitialized) bridge.stop()
+        // Unregister the SMS receiver: a receiver outliving the service would leak
+        // the context it was registered against, and the count it feeds no longer
+        // has a reader.
+        if (::smsReceived.isInitialized) smsReceived.stop(this)
         if (::tokens.isInitialized) tokens.sweep()
         if (::watchdog.isInitialized) watchdog.stop()
         cloudLink?.stop()

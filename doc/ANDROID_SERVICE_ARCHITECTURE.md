@@ -585,9 +585,18 @@ Notes:
 
 - `-0` fakes userspace root (sufficient for apt/dpkg).
 - `resolv.conf` **must** be bound, or there is no DNS.
+- `/etc/hosts` **must exist in the rootfs** and be non-empty. glibc's
+  `getaddrinfo(3)` dereferences it unconditionally, so a missing file segfaults the
+  resolver rather than returning an error. The rootfs build script writes it.
 - The socket path is `files/android.sock` everywhere; v2 had two different paths.
 - The PTY is allocated in Layer 1 (Kotlin + NDK) and the fd passed in; proot does
   not allocate it. See §4.1.
+- The inner environment also carries `NODE_OPTIONS=--import
+  /usr/lib/vyzorix/node-prelude.mjs`. The prelude works around two environmental
+  defects that otherwise make node unable to load a module from disk (and so make
+  `npm`, `vite` and every other node tool unusable): the emulator CPU's mis-emulated
+  `cvttsd2si(NaN)` and a proot rename that reports ENOENT after it succeeded. See
+  the prelude's own header and `doc/NODE_IN_CONTAINER.md`.
 
 ### 6.3 PTY contract — implemented on the server
 

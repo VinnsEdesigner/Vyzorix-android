@@ -49,6 +49,13 @@ class LaunchActivity : Activity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             needed += Manifest.permission.POST_NOTIFICATIONS
         }
+        // BLUETOOTH_CONNECT is dangerous from API 31, where BLUETOOTH was split.
+        // BluetoothStateApi reads `adapter.isEnabled`, which needs it on 31+; below
+        // 31 the normal BLUETOOTH permission covers the same call, so the request is
+        // gated rather than unconditional.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            needed += Manifest.permission.BLUETOOTH_CONNECT
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             needed += Manifest.permission.READ_EXTERNAL_STORAGE
         }

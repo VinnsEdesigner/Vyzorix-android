@@ -67,7 +67,32 @@ object PermissionRegistry {
             // SecurityException, which reads as a broken handler rather than a
             // missing grant.
             "camera" to PermissionDef("android.permission.CAMERA", 1, Protection.DANGEROUS),
+            // The adapter-state trio. WifiStateApi and NfcStateApi read normal
+            // permissions, so there is no dialog — but a normal permission still has
+            // to be declared, and a declared one still has to be checked, or the
+            // handler calls a platform method it cannot.
+            "wifi_state" to
+                PermissionDef("android.permission.ACCESS_WIFI_STATE", 1, Protection.NORMAL),
+            "nfc_state" to PermissionDef("android.permission.NFC", 1, Protection.NORMAL),
+            // Bluetooth is the awkward one: BLUETOOTH is normal and covers every
+            // level, but `isEnabled()` needs BLUETOOTH_CONNECT (dangerous) from API
+            // 31. The registry names the permission that exists across the whole
+            // range, so the gate never wrongly refuses; the handler catches the 31+
+            // SecurityException and reports the state as unknown rather than off.
+            "bluetooth_state" to
+                PermissionDef("android.permission.BLUETOOTH", 1, Protection.NORMAL),
+            // READ_BASIC_PHONE_STATE, not READ_PHONE_STATE. The basic permission is
+            // API 33+, protection `normal` (no dialog), and covers the operator and
+            // SIM facts this API reports. The dangerous half is `phone_state_detailed`.
             "phone_state" to
+                PermissionDef(
+                    "android.permission.READ_BASIC_PHONE_STATE",
+                    33,
+                    Protection.NORMAL,
+                ),
+            // The fields that need the dangerous grant: software version, network
+            // type, roaming. Separate API so declining the dialog costs only these.
+            "phone_state_detailed" to
                 PermissionDef("android.permission.READ_PHONE_STATE", 1, Protection.DANGEROUS),
             // SEND_SMS is what `SmsManager.getDefault()` requires; without it the
             // capability question cannot be answered truthfully.
@@ -114,10 +139,41 @@ object PermissionRegistry {
     /**
      * True when [api] needs no runtime permission, including when it is unknown:
      * an API with no entry requests nothing, and the handler decides for itself.
+     *
+     * **Structural, not SDK-aware.** This answers "does this API have a permission
+     * requirement at all", which is a property of the catalogue. Whether that
+     * permission *applies on the running device* is [requiresPermissionOn], a
+     * different question with a different answer per API level. Keeping them apart
+     * matters: a plain-JVM test has `SDK_INT == 0`, so folding the SDK rule in here
+     * would report every permission as not-yet-existing and make the registry
+     * untestable without Robolectric.
      */
     fun needsNoPermission(api: String): Boolean {
         val def = defs[api] ?: return true
 
         return def.androidPermission.isEmpty()
+    }
+
+    /**
+     * True when [api]'s permission is required on a device running [sdkInt].
+     *
+     * A permission that does not exist below its `minSdk` is not required there: the
+     * platform has no such permission, so a granted-check reports it denied and the
+     * API would be uncallable on a device where it is in fact fine (`phone_state` on
+     * API 26-32 is the case — it gates on `READ_BASIC_PHONE_STATE`, which arrived in
+     * 33). The SDK is a parameter rather than read from `Build` so the rule is
+     * testable at any level, including in a plain JVM test.
+     *
+     * False for an API that needs no permission at all, so a caller can use this as
+     * the single gate.
+     */
+    fun requiresPermissionOn(
+        api: String,
+        sdkInt: Int,
+    ): Boolean {
+        val def = defs[api] ?: return false
+        if (def.androidPermission.isEmpty()) return false
+
+        return sdkInt >= def.minSdk
     }
 }

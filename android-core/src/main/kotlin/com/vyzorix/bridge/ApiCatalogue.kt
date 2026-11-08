@@ -31,6 +31,7 @@ import com.vyzorix.bridge.apis.InstalledAppsApi
 import com.vyzorix.bridge.apis.KernelInfoApi
 import com.vyzorix.bridge.apis.LoadAverageApi
 import com.vyzorix.bridge.apis.LocaleInfoApi
+import com.vyzorix.bridge.apis.LocationApi
 import com.vyzorix.bridge.apis.LogcatApi
 import com.vyzorix.bridge.apis.MemoryInfoApi
 import com.vyzorix.bridge.apis.MountPointsApi
@@ -40,6 +41,7 @@ import com.vyzorix.bridge.apis.NfcStateApi
 import com.vyzorix.bridge.apis.NotificationPolicyApi
 import com.vyzorix.bridge.apis.PackageInfoApi
 import com.vyzorix.bridge.apis.PhoneStateApi
+import com.vyzorix.bridge.apis.PhoneStateDetailedApi
 import com.vyzorix.bridge.apis.PowerSaveApi
 import com.vyzorix.bridge.apis.ProcessListApi
 import com.vyzorix.bridge.apis.ProxyStateApi
@@ -49,6 +51,8 @@ import com.vyzorix.bridge.apis.ScreenTimeoutApi
 import com.vyzorix.bridge.apis.SecurityPatchApi
 import com.vyzorix.bridge.apis.SensorListApi
 import com.vyzorix.bridge.apis.SmsCapabilityApi
+import com.vyzorix.bridge.apis.SmsReceivedApi
+import com.vyzorix.bridge.apis.StorageAllFilesApi
 import com.vyzorix.bridge.apis.StorageApi
 import com.vyzorix.bridge.apis.StorageVolumesApi
 import com.vyzorix.bridge.apis.SystemPropertiesApi
@@ -130,6 +134,7 @@ object ApiCatalogue {
             KernelInfoApi.NAME to KernelInfoApi,
             LoadAverageApi.NAME to LoadAverageApi,
             LocaleInfoApi.NAME to LocaleInfoApi,
+            LocationApi.NAME to LocationApi,
             LogcatApi.NAME to LogcatApi,
             MemoryInfoApi.NAME to MemoryInfoApi,
             MountPointsApi.NAME to MountPointsApi,
@@ -139,6 +144,7 @@ object ApiCatalogue {
             NotificationPolicyApi.NAME to NotificationPolicyApi,
             PackageInfoApi.NAME to PackageInfoApi,
             PhoneStateApi.NAME to PhoneStateApi,
+            PhoneStateDetailedApi.NAME to PhoneStateDetailedApi,
             PowerSaveApi.NAME to PowerSaveApi,
             ProcessListApi.NAME to ProcessListApi,
             ProxyStateApi.NAME to ProxyStateApi,
@@ -148,6 +154,7 @@ object ApiCatalogue {
             ScreenTimeoutApi.NAME to ScreenTimeoutApi,
             SecurityPatchApi.NAME to SecurityPatchApi,
             SensorListApi.NAME to SensorListApi,
+            StorageAllFilesApi.NAME to StorageAllFilesApi,
             StorageApi.NAME to StorageApi,
             StorageVolumesApi.NAME to StorageVolumesApi,
             SystemPropertiesApi.NAME to SystemPropertiesApi,
@@ -165,8 +172,9 @@ object ApiCatalogue {
      * the service holds.
      *
      * `session` needs the session table; the USB trio needs the `UsbBroker`, which
-     * owns the open device descriptors. They are listed here — not in [handlers] —
-     * so [names] still carries them for `apis.txt`, while the service is what builds
+     * owns the open device descriptors; `sms_received` needs a registered receiver
+     * with a start/stop lifecycle. They are listed here — not in [handlers] — so
+     * [names] still carries them for `apis.txt`, while the service is what builds
      * them with their dependency.
      *
      * Declared after [SESSION_API_NAME] deliberately: a `const val` used in another
@@ -179,6 +187,7 @@ object ApiCatalogue {
             UsbStateApi.NAME,
             UsbAttachApi.NAME,
             UsbDetachApi.NAME,
+            SmsReceivedApi.NAME,
         )
 
     /**

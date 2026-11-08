@@ -434,3 +434,65 @@ progress and could not answer for it. Now both halves are wired:
   whole body; re-verified it still catches a genuinely unused param.
 - Live: device reports 0..100% for the 64 MB APK; server returns the record with the
   right filename. `UpdateLiveE2ETest` is 3/3, 0 skipped.
+
+## proot is now the Termux fork — 2026-11-07
+
+**The vendored proot is `termux/proot` v5.1.107.102, not upstream `proot-me`
+v5.5.0.** Upstream could not run a real workload on Android 13: its SIGSYS handling
+was hand-patched here and still broke three things an operator would hit. Termux's
+fork is the same code base built for exactly this environment (Termux runs under the
+same app seccomp filter). Detail + the three upstream defects:
+`2026-11-07-termux-proot.md`, `third_party/README.md`.
+
+- **`PROOT_NO_SECCOMP=1` must NOT be set.** It was required by upstream; with Termux
+  it *breaks* `rename(2)` (ENOSYS), because Termux's seccomp path is the mechanism by
+  which it handles the trap. `ProotLauncher` now sets only `PROOT_TMP_DIR`; the
+  constant is gone.
+- **The NDK port** is `third_party/proot/CMakeLists.txt` + `cmake/gen-loader-info.cmake`.
+  Three traps: ninja passes `-D` values **with literal quotes** (a shell strips them,
+  ninja does not — the pokedata script must strip them itself); `loader.unstripped`
+  must be a declared OUTPUT and the symbol read an ordered command on the same rule
+  (a second rule sharing the file is a race ninja wins by deleting it); and the
+  upstream awk uses `strtonum` (gawk-only) so the offset is computed in CMake.
+- **The rootfs must ship `/etc/hosts`.** glibc's `getaddrinfo` segfaults without it
+  (it dereferences the file unconditionally). Fixed in `scripts/build-rootfs.sh`, and
+  the bundled tarballs + `SHA256SUMS` were patched to match. `/etc/services` and
+  `/etc/protocols` too — libcurl reads them.
+- **`OperatorCommandE2ETest`** runs one arbitrary command through the production
+  terminal path (`-e command '<cmd>'`), chunking the transcript to logcat. It is how
+  the container was driven; a real `apt-get install build-essential … && make` runs in
+  it.
+- **Verified on API 33, from the app process:** `cd`, `rename`, `poll`, `getaddrinfo`,
+  `curl` (200), `git clone` + `ls-remote` over HTTPS, `apt-get update`/`install`, and
+  the **Vfd engine built in the container** (`media-ingest-c/build/vyzor`, runs on the
+  host). `node`/`npm` install but **npm crashes at startup under proot** (a
+  `readFileSync` size mismatch) — so the React console cannot be built in-container.
+
+## Node/npm in the container — 2026-11-08
+
+**npm works in the container now** (it did not before). Two defects, both fixed by
+one prelude loaded via `NODE_OPTIONS=--import`; detail: `doc/NODE_IN_CONTAINER.md`,
+`2026-11-08-node-in-container.md`.
+
+- **THE BIG ONE: the emulator CPU mis-emulates `cvttsd2si(NaN)`.** No KVM here →
+  QEMU TCG; it returns `INT32_MAX` where x86 defines `INT32_MIN` (reproduced in a
+  **static C program with no proot**). V8's `ToInt32` maps the indefinite result to
+  0; the mapping is missed, so **`ToInt32(NaN)` is `-1`** and *every bitwise op* is
+  wrong: `undefined|0` → -1, `undefined&8` → 8, `undefined>>>0` → 4294967295.
+  `Buffer.prototype.toString(enc)` does `start |= 0` on `undefined` → -1 → throws, and
+  node reads every module with that call, so **nothing could load from disk**. Not a
+  proot bug, not fixable by swapping proot, and not present on a real device.
+- **A proot rename can report ENOENT after it succeeded** (dest already exists) —
+  breaks npm's cacache (~25% of puts). The prelude treats "ENOENT but dest exists" as
+  success.
+- **`tsc` still fails** on `undefined & 8` in TypeScript's own internals — a bitwise
+  op, unpatchable from JS. Host tsc on the same commit is clean. Emulator-only.
+- Works in-container, from the app process: node (CJS+ESM), `npm install`, `npm run
+  build` (vite), `pnpm install`, `vite build`, `vitest run` (assertions pass), rollup,
+  esbuild, prettier, eslint. Only `tsc` fails.
+- `pnpm` needs `--config.dangerouslyAllowAllBuilds=true` (esbuild postinstall), and
+  Debian's `npm install -g` half-completes ("Exit handler never called", no bin
+  symlink) — run pnpm via `node /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs`.
+- **Disk is the recurring failure.** The container's installs grow the AVD userdata
+  (→6.8 GB); `/workspace` hit 96% and killed the emulator twice. Free
+  `gradle-home/caches/build-cache-1` + `avd/api33.avd/cache.img.qcow2` and restart.
