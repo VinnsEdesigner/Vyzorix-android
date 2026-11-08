@@ -1,30 +1,31 @@
-# proot — vendored, cross-compiled to libproot.so for Android.
+# proot (Termux fork) — vendored, cross-compiled to libproot.so for Android.
+#
+# Why the Termux fork and not upstream proot-me: upstream is written for a normal
+# Linux where the app does not run under a seccomp filter. Android's app policy traps
+# a large set of syscalls with SECCOMP_RET_TRAP, which cancels the syscall *before*
+# proot's PTRACE_TRACEME can see it, and it also traps the "avoider" syscall number
+# proot uses to cancel a syscall it emulates itself. Termux carries the fixes for
+# exactly this environment (they run it under the same Android filter), so it is the
+# supported base for an Android target. Upstream v5.5.0 needed a hand-written SIGSYS
+# handler and still broke `chdir`, `poll` and `getaddrinfo` here.
+#
+# Licence: proot is GPL-2.0-or-later (see COPYING), compatible with this repo's
+# GPL-3.0.
 #
 # Why a hand-written CMake: proot ships a hand-written GNUmakefile that assumes a
-# host `gcc`, `pkg-config`, and a `talloc.pc`. None of that exists for an NDK build,
-# and the one place it matters — the loader — is not expressible as a plain source
-# list anyway (see "The loader" below).
-#
-# Licence: proot is GPL-2.0-or-later (the source headers say "version 2 ... or (at
-# your option) any later version"), which is compatible with this repository's
-# GPL-3.0. See COPYING.
+# host `gcc`, `pkg-config` and a `talloc.pc`, none of which exists for an NDK build,
+# and the loader step is not expressible as a plain source list anyway (see below).
 
 cmake_minimum_required(VERSION 3.22.1)
 
-# The `care` extension and the Python extension are not built.
-#
-#   * care needs libarchive and implements self-extracting archives (`proot -c`),
-#     which this project does not use. Its entry point, `get_care_cli`, is declared
-#     `__attribute__((weak))` in cli/cli.h and the only call site is guarded by a
-#     NULL check, so omitting it links cleanly and the feature is simply absent.
-#   * the Python extension needs swig and a host python; it is a scripting binding,
-#     not part of the launcher.
-#
-# Neither is referenced from the object list below, and both directories are pruned
-# from the vendored tree, so a stray include would fail the build rather than link a
-# half-built feature in.
+# The vendored revision, reported by `proot --version`. The GNUmakefile derives it
+# from `git describe`; this tree is vendored (no git), so it is pinned here.
+set(PROOT_VENDOR_VERSION "5.1.107.102-termux")
 
-# --- Sources for the `proot` target, from src/GNUmakefile's OBJECTS -------------
+# The vendored tree is flat: src/'s contents live at third_party/proot/. So includes
+# are "cli/cli.h", "syscall/syscall.h", etc., and the proot root is an include dir.
+
+# --- Sources, from src/GNUmakefile's OBJECTS -----------------------------------
 set(PROOT_SOURCES
     cli/cli.c
     cli/proot.c
@@ -39,6 +40,7 @@ set(PROOT_SOURCES
     path/binding.c
     path/glue.c
     path/canon.c
+    path/f2fs-bug.c
     path/path.c
     path/proc.c
     path/temp.c
@@ -48,50 +50,69 @@ set(PROOT_SOURCES
     syscall/enter.c
     syscall/exit.c
     syscall/sysnum.c
-    syscall/sigsys.c
     syscall/socket.c
     syscall/heap.c
     syscall/rlimit.c
+    syscall/pipe_shadow.c
     tracee/tracee.c
     tracee/mem.c
     tracee/reg.c
     tracee/event.c
+    tracee/seccomp.c
+    tracee/statx.c
     ptrace/ptrace.c
     ptrace/user.c
     ptrace/wait.c
     extension/extension.c
+    extension/ashmem_memfd/ashmem_memfd.c
     extension/kompat/kompat.c
+    extension/fake_id0/chown.c
+    extension/fake_id0/chroot.c
+    extension/fake_id0/getsockopt.c
+    extension/fake_id0/sendmsg.c
+    extension/fake_id0/socket.c
+    extension/fake_id0/open.c
+    extension/fake_id0/unlink.c
+    extension/fake_id0/rename.c
+    extension/fake_id0/chmod.c
+    extension/fake_id0/utimensat.c
+    extension/fake_id0/access.c
+    extension/fake_id0/exec.c
+    extension/fake_id0/link.c
+    extension/fake_id0/symlink.c
+    extension/fake_id0/mk.c
+    extension/fake_id0/stat.c
+    extension/fake_id0/helper_functions.c
     extension/fake_id0/fake_id0.c
+    extension/hidden_files/hidden_files.c
+    extension/mountinfo/mountinfo.c
+    extension/port_switch/port_switch.c
+    extension/sysvipc/sysvipc.c
+    extension/sysvipc/sysvipc_msg.c
+    extension/sysvipc/sysvipc_sem.c
+    extension/sysvipc/sysvipc_shm.c
     extension/link2symlink/link2symlink.c
-    extension/portmap/portmap.c
-    extension/portmap/map.c)
+    extension/fix_symlink_size/fix_symlink_size.c)
 
 # ==============================================================================
 # build.h — proot's feature header.
 #
-# The GNUmakefile generates it by compiling and *running* two probe programs
-# (src/.check_*.c). Running is not possible when cross-compiling, and it is the wrong
-# question anyway: the probe answers "does this device support it", and proot is
-# allowed to assume its own target. So the same questions are asked at compile time
-# with CMake, which is what check_c_source_compiles does.
+# The GNUmakefile generates it by compiling and *running* two probe programs. Running
+# is impossible when cross-compiling, and it is the wrong question: the probe answers
+# "does this device support it", and proot may assume its own target. The same
+# questions are asked at compile time with CMake instead.
 #
-#   * HAVE_PROCESS_VM      — process_vm_readv/writev exist. Used by tracee/mem.c as a
-#                            fast path, with a ptrace fallback when absent.
-#   * HAVE_SECCOMP_FILTER  — seccomp headers are usable. seccomp.c is *entirely*
-#                            guarded by it, so a wrong answer changes behaviour, not
-#                            just a warning: without it proot falls back to the
-#                            PTRACE_SYSCALL path, which is slower but correct.
-#   * HAVE_PYTHON_EXTENSION is deliberately left undefined — the extension is not
-#                            built (see the note at the top).
+#   * HAVE_PROCESS_VM     — process_vm_readv/writev exist; tracee/mem.c uses them as a
+#                           fast path with a ptrace fallback when absent.
+#   * HAVE_SECCOMP_FILTER — seccomp headers are usable. seccomp.c is *entirely*
+#                           guarded by it, so a wrong answer changes behaviour, not
+#                           just a warning.
+#   * VERSION             — the vendored revision, reported by `proot --version`.
 # ==============================================================================
-
 include(CheckCSourceCompiles)
 
 set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
 
-# The probe asks whether the *headers and constants* are present. It must not link a
-# binary that calls into libc the way the upstream probe does, because at configure
-# time CMake can link but the NDK sysroot is a different libc than the host's.
 check_c_source_compiles(
     "#include <sys/uio.h>
      #include <stdlib.h>
@@ -137,13 +158,14 @@ set(PROOT_BUILD_H
 "/* Generated by third_party/proot/CMakeLists.txt — do not edit, and do not commit.
  *
  * proot's own build writes this by running probe programs on the host. That cannot
- * work when cross-compiling, so the same questions are answered at compile time
- * here. See the CMakeLists comment for what each one changes.
+ * work when cross-compiling, so the same questions are answered at compile time here.
  */
 #ifndef BUILD_H
 #define BUILD_H
 ${_have_process_vm}
 ${_have_seccomp}
+#undef VERSION
+#define VERSION \"${PROOT_VENDOR_VERSION}\"
 #endif /* BUILD_H */
 ")
 
@@ -151,34 +173,8 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/build.h" "${PROOT_BUILD_H}")
 message(STATUS "proot: HAVE_PROCESS_VM=${HAVE_PROCESS_VM} HAVE_SECCOMP_FILTER=${HAVE_SECCOMP_FILTER}")
 
 # ==============================================================================
-# The loader — the part the GNUmakefile does in three steps, expressed in CMake.
-#
-# proot embeds a small freestanding program ("the loader") inside itself as a binary
-# blob, then writes it to a temp file at runtime and points the traced process at it.
-# It is not a normal library:
-#
-#   1. built `-fPIC -ffreestanding -nostdlib`, linked `-static -Ttext=<addr>` at a
-#      fixed address from arch.h (0x2000000000 on arm64, 0x600000000000 on x86_64);
-#   2. stripped;
-#   3. `objcopy --input-target binary` into an object exporting
-#      `_binary_loader_elf_start/_end`, which execve/enter.c refers to by name.
-#
-# CMake cannot express step 3 as a source file, so it is a custom command.
+# Per-ABI loader parameters.
 # ==============================================================================
-
-# Does this ABI need a second, 32-bit loader? arch.h sets HAS_LOADER_32BIT for
-# x86_64, because a 64-bit proot can run 32-bit tracees. On arm64 there is no 32-bit
-# ABI to support, and on armeabi-v7a the loader *is* the 32-bit one. The 32-bit
-# loader is not built here: the NDK has no i686 sysroot for an arm64 build, and this
-# fleet is arm64. The weak symbols enter.c declares for it resolve to NULL, and the
-# `wants_32bit_version` path is only taken for a 32-bit tracee — which an arm64
-# device cannot produce.
-if(ANDROID_ABI STREQUAL "x86_64")
-    message(STATUS "proot: x86_64 would want a 32-bit loader; building only the 64-bit one (fleet is arm64)")
-endif()
-
-# objcopy's `--binary-architecture` name, per target. These are BFD names, not the
-# Android ABI names.
 if(ANDROID_ABI STREQUAL "arm64-v8a")
     set(LOADER_BFD_ARCH "aarch64")
     set(LOADER_ELF_TARGET "elf64-littleaarch64")
@@ -191,30 +187,15 @@ elseif(ANDROID_ABI STREQUAL "x86_64")
     set(LOADER_BFD_ARCH "i386:x86-64")
     set(LOADER_ELF_TARGET "elf64-x86-64")
     set(LOADER_ARCH_DEFS ARCH_X86_64)
-elseif(ANDROID_ABI STREQUAL "x86")
-    set(LOADER_BFD_ARCH "i386")
-    set(LOADER_ELF_TARGET "elf32-i386")
-    set(LOADER_ARCH_DEFS ARCH_X86)
 else()
     message(FATAL_ERROR "proot: unsupported ANDROID_ABI '${ANDROID_ABI}'")
 endif()
 
-# LOADER_ADDRESS is read from arch.h so the two cannot drift. The Makefile extracts
-# it by preprocessing arch.h; the same trick works here and is more honest than
-# repeating the literal. The `-dM` output is a list of `#define NAME VALUE` lines, so
-# the match is anchored to a line rather than scanning the whole blob — an unanchored
-# pattern happily matched "LOADER_ADDRESS" in a comment or an unrelated macro.
-#
-# Note arch.h's auto-detect guard (line 41) lists ARCH_X86_64, ARCH_ARM_EABI,
-# ARCH_X86 and ARCH_SH4 but NOT ARCH_ARM64 — so defining ARCH_ARM64 by hand does not
-# suppress the host detection. That is why `--target` above is load-bearing: it makes
-# the compiler's own macros describe the target so __x86_64__ is not defined at all.
-# The NDK's `CMAKE_C_COMPILER` is a wrapper that adds `--target`; invoking the
-# compiler by path does not. Without the target the compiler's predefined macros
-# describe the *host* (x86_64), and arch.h's auto-detect then defines ARCH_X86_64 —
-# which is checked first at line 60 and wins over the ARCH_ARM64 we pass. The result
-# was a silently wrong LOADER_ADDRESS. CMAKE_C_COMPILER_TARGET is what the toolchain
-# file set, so reuse it rather than reconstructing a triple.
+# LOADER_ADDRESS is read from arch.h so the two cannot drift. arch.h's auto-detect
+# guard lists ARCH_X86_64, ARCH_ARM_EABI, ARCH_X86 and ARCH_SH4 but NOT ARCH_ARM64,
+# so defining ARCH_ARM64 by hand does not suppress host detection — the compiler's
+# own `--target` is what makes __x86_64__ undefined. CMAKE_C_COMPILER_TARGET is set by
+# the toolchain file, so reuse it rather than reconstructing a triple.
 set(_cc_target_args "")
 if(CMAKE_C_COMPILER_TARGET)
     list(APPEND _cc_target_args "--target=${CMAKE_C_COMPILER_TARGET}")
@@ -229,30 +210,71 @@ execute_process(
 if(NOT _arch_rc EQUAL 0)
     message(FATAL_ERROR "proot: could not preprocess arch.h to read LOADER_ADDRESS")
 endif()
+
 string(REGEX MATCH "(^|\n)#define LOADER_ADDRESS (0x[0-9a-fA-F]+|[0-9]+)"
        _match "${_arch_defs}")
 if(NOT CMAKE_MATCH_2)
     message(FATAL_ERROR "proot: LOADER_ADDRESS not found in arch.h for ${LOADER_ARCH_DEFS}")
 endif()
 set(LOADER_ADDRESS "${CMAKE_MATCH_2}")
-message(STATUS "proot: loader address ${LOADER_ADDRESS} (${ANDROID_ABI})")
 
-# Steps 1 + 2: compile and link the loader, then strip it. One custom command,
-# because the strip is part of producing the blob and an intermediate file between
-# them buys nothing.
+string(REGEX MATCH "(^|\n)#define HAS_POKEDATA_WORKAROUND true" _pokedata "${_arch_defs}")
+if(_pokedata)
+    set(PROOT_HAS_POKEDATA TRUE)
+else()
+    set(PROOT_HAS_POKEDATA FALSE)
+endif()
+message(STATUS "proot: loader address ${LOADER_ADDRESS} (${ANDROID_ABI}), pokedata=${PROOT_HAS_POKEDATA}")
+
+# ==============================================================================
+# The loader.
 #
-# The include path is the proot tree itself, because that is where `loader/` lives:
-# loader.c includes "loader/script.h", so `-I<proot-root>` makes it resolve. (Upstream
-# compiles from `src/`, where the same `-I.` works — this tree is vendored flat, with
-# `src/`'s contents at the root.)
-# The filename is load-bearing, not cosmetic: objcopy names the symbols it exports
-# after the input basename, and execve/enter.c refers to `_binary_loader_elf_start`
-# and `_end` by name. So the file must be `loader.elf` exactly. Each ABI has its own
-# binary dir (the subdirectory is keyed by ABI by CMake), so the name cannot collide
-# between ABIs in one build.
-set(_loader_elf "${CMAKE_CURRENT_BINARY_DIR}/loader.elf")
+# proot embeds a small freestanding program ("the loader") inside itself as a binary
+# blob, then writes it to a temp file at runtime and points the traced process at it:
+#
+#   1. built `-fPIC -ffreestanding -nostdlib`, linked `-static -Ttext=<LOADER_ADDRESS>`;
+#   2. copied to `loader.exe` and stripped;
+#   3. `objcopy --input-target binary` into `loader-wrapped.o`, exporting
+#      `_binary_loader_exe_start/_end` — the names execve/enter.c refers to.
+#
+# Step 3 is a custom command because CMake cannot express it as a source. The
+# intermediate name must be `loader.exe` exactly: objcopy derives the exported symbol
+# names from the input basename, and enter.c names `_binary_loader_exe_start`.
+# ==============================================================================
+set(_loader_unstripped "${CMAKE_CURRENT_BINARY_DIR}/loader.unstripped")
+set(_loader_exe "${CMAKE_CURRENT_BINARY_DIR}/loader.exe")
+
+# The pokedata workaround (arm64 only) needs the offset of the loader's
+# `pokedata_workaround` symbol from its entry point, read out of the loader's symbol
+# table. That read is done as an EXTRA COMMAND on the loader rule rather than as a
+# separate rule that DEPENDS on the loader: two rules that share the loader as an
+# output is a race, and ninja deleted `loader.unstripped` before the reader ran
+# ("loader does not exist" on a file it had just built). One rule, ordered commands.
+set(_loader_info_c "${CMAKE_CURRENT_BINARY_DIR}/loader-info.c")
+set(_loader_extra_outputs "")
+set(_loader_extra_commands "")
+
+if(PROOT_HAS_POKEDATA)
+    get_filename_component(_toolchain_bin "${CMAKE_OBJCOPY}" DIRECTORY)
+    set(_readelf "${_toolchain_bin}/llvm-readelf")
+    if(NOT EXISTS "${_readelf}")
+        message(FATAL_ERROR "proot: llvm-readelf not found at ${_readelf}")
+    endif()
+
+    list(APPEND _loader_extra_outputs "${_loader_info_c}")
+    list(APPEND _loader_extra_commands
+        COMMAND "${CMAKE_COMMAND}"
+                -DREADELF="${_readelf}"
+                -DLOADER="${_loader_unstripped}"
+                -DOUT="${_loader_info_c}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/gen-loader-info.cmake")
+endif()
+
+# `loader.unstripped` is kept (not deleted) because the pokedata step reads its
+# symbol table, which `strip` removes. The GNUmakefile reads `loader/loader`, the
+# pre-strip artifact, for the same reason.
 add_custom_command(
-    OUTPUT "${_loader_elf}"
+    OUTPUT "${_loader_exe}" "${_loader_unstripped}" ${_loader_extra_outputs}
     COMMAND "${CMAKE_C_COMPILER}" ${_cc_target_args}
             -fPIC -ffreestanding -static -nostdlib
             -D${LOADER_ARCH_DEFS} -DNO_LIBC_HEADER
@@ -260,15 +282,12 @@ add_custom_command(
             -Wl,--build-id=none -Wl,-Ttext=${LOADER_ADDRESS} -Wl,-z,noexecstack
             "${CMAKE_CURRENT_SOURCE_DIR}/loader/loader.c"
             "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly.S"
-            -o "${_loader_elf}.unstripped"
-    COMMAND "${CMAKE_STRIP}" --strip-all
-            "${_loader_elf}.unstripped" -o "${_loader_elf}"
+            -o "${_loader_unstripped}"
+    ${_loader_extra_commands}
+    COMMAND "${CMAKE_STRIP}" --strip-all "${_loader_unstripped}" -o "${_loader_exe}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/loader.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly.S"
-        # The per-architecture syscall numbers live in these headers, so a change to
-        # one must rebuild the loader. Without them in DEPENDS a corrected syscall
-        # number is silently ignored and the stale loader ships.
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-x86_64.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-x86.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/loader/assembly-arm64.h"
@@ -278,19 +297,8 @@ add_custom_command(
     COMMENT "proot: building the ${ANDROID_ABI} loader"
     VERBATIM)
 
-# Step 3: objcopy the stripped loader into a linkable object.
-#
-# objcopy derives the exported symbol names from the *input filename*:
-# `loader.elf` becomes `_binary_loader_elf_start/_end`, which is what execve/enter.c
-# refers to by name. Passing an absolute path would produce
-# `_binary__tmp_pb_proot_loader_arm64_v8a_elf_start` instead and the link would fail
-# with undefined symbols — which is exactly what happened first time. So the command
-# runs in the file's own directory and passes the bare filename, the way the
-# Makefile does.
-#
-# `--rename-section` puts the blob in .rodata so it is read-only in the .so.
-get_filename_component(_loader_dir "${_loader_elf}" DIRECTORY)
-get_filename_component(_loader_name "${_loader_elf}" NAME)
+get_filename_component(_loader_dir "${_loader_exe}" DIRECTORY)
+get_filename_component(_loader_name "${_loader_exe}" NAME)
 set(_loader_obj "${CMAKE_CURRENT_BINARY_DIR}/loader-wrapped.o")
 add_custom_command(
     OUTPUT "${_loader_obj}"
@@ -301,53 +309,53 @@ add_custom_command(
             --rename-section .data=.rodata,alloc,load,readonly,data,contents
             "${_loader_name}" "${_loader_obj}"
     WORKING_DIRECTORY "${_loader_dir}"
-    DEPENDS "${_loader_elf}"
+    DEPENDS "${_loader_exe}"
     COMMENT "proot: embedding the ${ANDROID_ABI} loader"
     VERBATIM)
+
+set(PROOT_LINK_EXTRA "${_loader_obj}")
+
+# Compile the generated pokedata offset (arm64 only) into the link.
+if(PROOT_HAS_POKEDATA)
+    set(_loader_info_obj "${CMAKE_CURRENT_BINARY_DIR}/loader-info.o")
+    add_custom_command(
+        OUTPUT "${_loader_info_obj}"
+        COMMAND "${CMAKE_C_COMPILER}" ${_cc_target_args}
+                -D${LOADER_ARCH_DEFS}
+                "-I${CMAKE_CURRENT_SOURCE_DIR}"
+                -c "${_loader_info_c}" -o "${_loader_info_obj}"
+        DEPENDS "${_loader_info_c}"
+        COMMENT "proot: compiling the pokedata offset"
+        VERBATIM)
+
+    list(APPEND PROOT_LINK_EXTRA "${_loader_info_obj}")
+endif()
 
 # ==============================================================================
 # The library itself.
 #
-# proot is built as a shared library named libproot.so, because that is the name
-# ProotLauncher.prootBinary() looks for in nativeLibraryDir — the jniLibs trick
-# (§1.1): Android extracts a native library with the executable bit set, which is
-# how a binary that is not a library still gets to be executed.
-#
-# An executable's `main` is the entry point; here the entry point is proot's own
-# `main`, which is what `proot ...` runs. The SONAME is irrelevant (nothing links
-# against it) so it is left unset.
+# Built as a *PIE executable* named libproot.so. Two independent requirements fix the
+# name and shape:
+#   * ProotLauncher.prootBinary() looks for exactly `libproot.so` in nativeLibraryDir,
+#     and AGP only packages `lib*.so` out of the native build dir — so the file must be
+#     named that or it is silently absent from the APK;
+#   * Android extracts a jniLibs .so with mode 0755, which is how a binary that is not
+#     a library still gets to be executed (§1.1). A SHARED library has no entry point
+#     and segfaults on exec; it must be an executable.
 # ==============================================================================
-
-# A PIE *executable*, not a shared library.
-#
-# This was the one thing that did not work first time. `add_library(SHARED)` links a
-# DYN with no entry point and no PT_INTERP, so exec'ing it jumps to address 0 and
-# segfaults instantly — it links perfectly and then dies on the device. proot must be
-# an executable: it is a program, it reads /proc/self/exe, and Android runs it.
-#
-# Android packages executables the same way as native libraries: an .so in
-# jniLibs/<abi>/ is extracted with mode 0755, which is the jniLibs trick the
-# architecture doc describes (§1.1). So the artifact keeps the .so name that
-# ProotLauncher.prootBinary() looks for, but is built as an executable.
-add_executable(proot ${PROOT_SOURCES} "${_loader_obj}")
+add_executable(proot ${PROOT_SOURCES} ${PROOT_LINK_EXTRA})
 set_target_properties(proot PROPERTIES
-    # The ELF type changes; the *name* must stay libproot.so. Two independent
-    # requirements fix it: ProotLauncher.PROOT_LIBRARY looks for exactly that name in
-    # nativeLibraryDir, and AGP only packages `lib*.so` out of the native build dir —
-    # an executable called proot.so is silently left out of the APK.
     PREFIX "lib"
     OUTPUT_NAME "proot"
     SUFFIX ".so"
     PIE TRUE)
 
-# The generated headers (build.h) and the vendored tree.
 target_include_directories(proot PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"     # build.h
     "${CMAKE_CURRENT_SOURCE_DIR}")    # arch.h, compat.h, tracee/, ...
 
 target_link_libraries(proot PRIVATE talloc log)
 
-# The same flags the GNUmakefile uses, minus the host-specific ones.
 target_compile_definitions(proot PRIVATE _GNU_SOURCE _FILE_OFFSET_BITS=64)
 target_compile_options(proot PRIVATE
     -Wall -Wextra -O2
@@ -355,8 +363,6 @@ target_compile_options(proot PRIVATE
     -Wno-unused-parameter       # upstream is not warning-clean on that
     -Wno-sign-compare)
 
-# proot writes the loader to a temp file and executes it, and traces by ptrace.
-# Nothing here needs libc++ — it is a C program — so no C++ runtime is linked.
 set_target_properties(proot PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON
