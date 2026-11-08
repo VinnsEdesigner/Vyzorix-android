@@ -496,3 +496,28 @@ one prelude loaded via `NODE_OPTIONS=--import`; detail: `doc/NODE_IN_CONTAINER.m
 - **Disk is the recurring failure.** The container's installs grow the AVD userdata
   (→6.8 GB); `/workspace` hit 96% and killed the emulator twice. Free
   `gradle-home/caches/build-cache-1` + `avd/api33.avd/cache.img.qcow2` and restart.
+
+## Go toolchain + server in the container — 2026-11-08
+
+**The Go server builds and serves inside the container, no crash.** Verified from
+the app's own process: `go build` → 70 MB binary; the binary runs and answers
+`/healthz`, `/health`, `/v1/version`, `/v1/changelog`, `/v1/check-update` all 200,
+process stays alive, **0 panics/fatals**; `go vet` and `go test` both pass. Detail:
+`2026-11-08-go-in-container.md`.
+
+- **Debian's Go is 1.19; the server needs 1.27.2.** Install the official tarball:
+  `curl -fsSL https://go.dev/dl/go1.27.2.linux-amd64.tar.gz` then extract to
+  `/usr/local` (go.dev is reachable from the container). `go version` → 1.27.2.
+- **Build needs `GOMAXPROCS=1` and `-p 1`.** The emulator has only 2 GB RAM; a
+  default-parallelism build was **OOM-killed** (log ended with no message). With
+  `-p 1` it completes.
+- **The link step needs headroom.** `gocache` (~700 MB) + `gopath` (~950 MB) filled
+  the container's 5.9 GB root and the link failed with "no space left on device".
+  Free the Go tarball and the Vfd `node_modules` first.
+- **Stage the server source via `files/apps` (`/home/apps` in the container)** —
+  `/data/local/tmp` is NOT bound (`/mnt` was not), and `run-as ... cat >` into
+  `files/apps/` works. `tar` with `--exclude=apps/api/bin` (124 MB of APKs) keeps it
+  ~4 MB.
+- **A server started as a background child dies when the PTY session closes**
+  (proot `--kill-on-exit`). Run it and curl it **in the same `am instrument` call**,
+  or keep the session open. That is why the first run showed `DEAD` on the next call.

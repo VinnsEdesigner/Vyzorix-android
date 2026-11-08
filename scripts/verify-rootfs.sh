@@ -99,10 +99,36 @@ verify() { # tarball-path
     *) check "/bin/bash is executable" 1; printf '        found: %s\n' "${bashline:-<missing>}" ;;
   esac
 
-  # No setuid/setgid: meaningless under proot and a review red flag.
+  # No setuid/setgid on FILES. The build strips those (they are meaningless under
+  # proot and a review red flag). Setgid *directories* are deliberately not flagged:
+  # Debian ships `/var/mail` and `/var/local` as drwxr-sr-x, which is normal layout,
+  # and the build only strips file bits. Flagging them was a false positive.
   local setid
-  setid="$(tar tvzf "$tarball" 2>/dev/null | awk 'substr($1,4,1)=="s" || substr($1,7,1)=="s"' | wc -l)"
-  check "no setuid/setgid entries" "$([ "$setid" -eq 0 ] && echo 0 || echo 1)"
+  setid="$(tar tvzf "$tarball" 2>/dev/null \
+    | awk 'substr($1,1,1) != "d" && (substr($1,4,1)=="s" || substr($1,7,1)=="s")' \
+    | wc -l)"
+  check "no setuid/setgid files" "$([ "$setid" -eq 0 ] && echo 0 || echo 1)"
+  if [ "$setid" -ne 0 ]; then
+    tar tvzf "$tarball" 2>/dev/null \
+      | awk 'substr($1,1,1) != "d" && (substr($1,4,1)=="s" || substr($1,7,1)=="s")' \
+      | head -3 | sed 's/^/        /'
+  fi
+
+  # The published hash must match the published file. The device verifies SHA256SUMS
+  # before extracting, so a stale line makes it refuse a perfectly good tarball —
+  # which is exactly what `sort -u -k2` used to produce on a rebuild. The check only
+  # runs when a SHA256SUMS sits beside the tarball.
+  local sums
+  sums="$(dirname "$tarball")/SHA256SUMS"
+  if [ -f "$sums" ]; then
+    if (cd "$(dirname "$tarball")" && grep "[[:space:]]$(basename "$tarball")\$" SHA256SUMS \
+        | sha256sum -c --quiet - 2>/dev/null); then
+      check "SHA256SUMS matches the file" 0
+    else
+      check "SHA256SUMS matches the file" 1
+      printf '        %s does not agree with %s\n' "$(basename "$sums")" "$(basename "$tarball")"
+    fi
+  fi
 }
 
 if [ "$#" -gt 0 ]; then

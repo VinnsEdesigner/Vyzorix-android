@@ -77,7 +77,11 @@ EXTENDED_PACKAGES=(
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
-trap 'rm -rf "${WORK}"' EXIT
+# `|| true` is load-bearing: the work tree holds proot-owned directories that root
+# cannot always unlink, so the cleanup exits non-zero — and an EXIT trap's status
+# becomes the script's, which made `build-rootfs.sh --arch A && build-rootfs.sh
+# --arch B` stop after A while reporting success.
+trap 'rm -rf "${WORK}" 2>/dev/null || true' EXIT
 
 mkdir -p "${OUT}"
 
@@ -228,10 +232,37 @@ build_tarball debian-core "${CORE_PACKAGES[@]}"
 build_tarball debian-extended "${CORE_PACKAGES[@]}" "${EXTENDED_PACKAGES[@]}"
 
 log "checksums"
-# Appends: a three-arch release collects all six tarballs into one SHA256SUMS, which
-# is what the release carries and what the device verifies against.
-( cd "${OUT}" && sha256sum "debian-core-${ARCH}.tar.gz" "debian-extended-${ARCH}.tar.gz" \
-    >> SHA256SUMS && sort -u -k2 SHA256SUMS -o SHA256SUMS && cat SHA256SUMS )
+# One entry per filename, always the CURRENT file's hash.
+#
+# This appended and then `sort -u -k2`'d, which was wrong in two ways. `sort -u -k2`
+# deduplicates on the *filename* field only, and which of two lines with the same
+# filename survives is unspecified — so a rebuild that left the previous line in
+# place could keep the STALE hash. That is not cosmetic: the device verifies
+# SHA256SUMS before extracting, so a stale line makes it refuse a perfectly good
+# tarball. It also kept entries for architectures whose files are long gone.
+#
+# The fix: keep only lines whose file still exists, replace the ones this run wrote,
+# and append the fresh hashes. Each filename then appears exactly once, with the hash
+# of the file actually on disk — which is what `sha256sum -c` proves.
+( cd "${OUT}" || exit 1
+  if [ -f SHA256SUMS ]; then
+    # Drop a line for a file that is not here (a stale architecture), and a line for
+    # a file this run is about to rewrite (its hash is about to change).
+    : > SHA256SUMS.keep
+    while read -r _ name; do
+      [ -z "${name}" ] && continue
+      [ -f "${name}" ] || continue
+      case "${name}" in
+        "debian-core-${ARCH}.tar.gz"|"debian-extended-${ARCH}.tar.gz") continue ;;
+      esac
+      grep "[[:space:]]${name}\$" SHA256SUMS >> SHA256SUMS.keep 2>/dev/null || true
+    done < SHA256SUMS
+    mv SHA256SUMS.keep SHA256SUMS
+  fi
+  sha256sum "debian-core-${ARCH}.tar.gz" "debian-extended-${ARCH}.tar.gz" >> SHA256SUMS
+  sort -k2 SHA256SUMS -o SHA256SUMS
+  cat SHA256SUMS
+)
 
 # The record that makes a rebuild comparable (§6.1.1).
 log "writing BUILD.md"
