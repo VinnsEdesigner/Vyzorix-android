@@ -536,6 +536,10 @@ class CloudConnection(
 
             if (!result.success) {
                 Log.w(TAG, "deploy refused: ${result.reason} (${result.detail})")
+                // The applier changed nothing, so restore the config the device is
+                // actually running. The version then differs from the server's, so the
+                // next reconnect re-fetches and retries (FR-21).
+                configStore.rollback()
             }
             sendText(DeployReporter.frame(result).toJson())
         }, "vyzorix-deploy-apply").apply { isDaemon = true }.start()

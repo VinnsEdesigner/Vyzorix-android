@@ -552,3 +552,33 @@ process stays alive, **0 panics/fatals**; `go vet` and `go test` both pass. Deta
 - **ktlint**: `./gradlew :cloud-connector:ktlintFormat` fixes most of it, but it
   does NOT fix chain-method-continuation / argument-list-wrapping / max-line-length
   (100) in one pass — re-run `ktlintCheck` and hand-fix the rest.
+
+## Deploy — device side, Builds 2 & 3 (2026-11-09)
+- **Build 2** (`cloud-connector/.../deploy/` + `secret/`): `ArtifactFetcher`
+  (resumable fetch, whole-file digest), `DeployApplier` (ping supervisor, fetch +
+  stage all, resolve secrets, purge, per-artifact rename install, write secrets +
+  PWA, write registry, stop removed), `AppRegistryWriter` (the supervisor's
+  `apps.json` shape — NOT the config), `SecretKey` (Keystore RSA-3072,
+  PURPOSE_DECRYPT, **OAEP-SHA1 only** — the Keystore rejects MGF1-SHA256),
+  `SecretStore`/`HttpSecretTransport`, and delivery wired in `CloudConnection`
+  (enroll sends `secretKey`; a verified config's apps are applied off-thread and
+  the outcome reported as a `device_ready` frame).
+- **Build 3**: `PwaManifest` — writes `site.webmanifest` into a webroot's `www/`
+  only when `pwa = true`; `ConfigValidator` refuses an invalid `display`.
+- **Review caught three real bugs** (fixed): artifacts were installed *before*
+  secrets were written (a bad secret left new artifacts, no `.env`); the transport
+  ignored the server's `envelope` field; a thrown apply would kill its thread with
+  no report. `SecretStore` is now `resolve()` + `writeEnv()` so validation happens
+  before any live-tree mutation.
+- **Emulator**: `scripts/run-emulator.sh` boots in ~1-3 min (no KVM, `-accel off`).
+  Instrumented tests must use camelCase method names — **spaced backtick names
+  fail D8** ("Space characters in SimpleName … not allowed prior to DEX 040").
+- **The secret roundtrip is proven on-device**: `SecretEnvelopeRoundtripTest`
+  (instrumented) — a real Keystore key, the server's own Go `crypto.WrapSecret`
+  ciphertext (served by a tiny host helper over `adb reverse tcp:3000`), decrypts
+  to the expected value; a foreign ciphertext does not open. 2 tests, 0 skipped.
+- **Go for the server**: `go1.27.3` tarball extracts to `/usr/local` only with
+  sudo; extract to `/tmp` instead and run `/tmp/goextract/go/bin/go`. Building the
+  server needs `GOTOOLCHAIN=local`.
+- Pushed: `774497e` (Build 1) → `8d15411`/`2bae416`/`59294bb` (Build 2) →
+  `9d71dde` (Build 3).

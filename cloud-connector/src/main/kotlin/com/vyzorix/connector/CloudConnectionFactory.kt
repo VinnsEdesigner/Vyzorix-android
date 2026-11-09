@@ -219,11 +219,17 @@ object CloudConnectionFactory {
         }
     }
 
-    /** File-backed config storage: the last verified document, kept verbatim. */
+    /**
+     * File-backed config storage: the current document and the previous known-good
+     * one, both kept verbatim (`keep_last = 2`, FR-21). Two files rather than a
+     * directory of versions: the recovery path that matters is "put back what worked",
+     * one prior version answers it, and disk is the scarce resource on a phone.
+     */
     private class FileConfigStorage(
         context: Context,
     ) : com.vyzorix.connector.config.ConfigStorage {
         private val file = java.io.File(context.filesDir, "vyzorix.v")
+        private val lastGood = java.io.File(context.filesDir, "vyzorix.last-good.v")
 
         override fun read(): String? = if (file.exists()) file.readText() else null
 
@@ -231,8 +237,15 @@ object CloudConnectionFactory {
             file.writeText(document)
         }
 
+        override fun readLastGood(): String? = if (lastGood.exists()) lastGood.readText() else null
+
+        override fun writeLastGood(document: String) {
+            lastGood.writeText(document)
+        }
+
         override fun clear() {
             file.delete()
+            lastGood.delete()
         }
     }
 }

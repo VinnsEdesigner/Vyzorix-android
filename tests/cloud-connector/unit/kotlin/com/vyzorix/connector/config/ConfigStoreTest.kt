@@ -34,6 +34,7 @@ class ConfigStoreTest {
 
     private class MapStorage : ConfigStorage {
         var value: String? = null
+        var lastGood: String? = null
 
         override fun read(): String? = value
 
@@ -41,8 +42,15 @@ class ConfigStoreTest {
             value = document
         }
 
+        override fun readLastGood(): String? = lastGood
+
+        override fun writeLastGood(document: String) {
+            lastGood = document
+        }
+
         override fun clear() {
             value = null
+            lastGood = null
         }
     }
 
@@ -112,6 +120,49 @@ class ConfigStoreTest {
         val (s, _) = store()
 
         assertEquals(true, s.isStale(1))
+    }
+
+    @Test
+    fun `applying a second config promotes the first to last-good`() {
+        val (s, storage) = store()
+        val first = sign(body(1))
+        s.apply(first)
+
+        val second = sign(body(2))
+        s.apply(second)
+
+        assertEquals(second, storage.value)
+        assertEquals(first, storage.lastGood)
+        assertEquals(2, s.version())
+    }
+
+    @Test
+    fun `a current document that no longer verifies falls back to last-good`() {
+        val (s, storage) = store()
+        val good = sign(body(1))
+        s.apply(good)
+        s.apply(sign(body(2)))
+        // Corrupt the current document, as a tampered store would.
+        storage.value = "v device dev-1\nvv org org-1\nv version 9\n"
+
+        val current = s.current()
+
+        assertEquals(1, current?.version)
+        // The fallback is promoted to current, so the next read is stable.
+        assertEquals(good, storage.value)
+    }
+
+    @Test
+    fun `a refused apply leaves the last-good slot untouched`() {
+        val (s, storage) = store()
+        s.apply(sign(body(1)))
+        val good = storage.value
+
+        assertThrows(ConfigError.BadSignature::class.java) {
+            s.apply(sign(body(2)).replace("v version 2", "v version 9"))
+        }
+
+        assertEquals(good, storage.value)
     }
 
     private fun generateKey(): KeyPair =
