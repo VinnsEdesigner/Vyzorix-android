@@ -189,6 +189,9 @@ int main(int argc, char **argv) {
     // SIGPIPE — the default action — and every app it supervises is orphaned.
     std::signal(SIGPIPE, SIG_IGN);
 
+    // Adopt anything the previous supervisor left running before starting autostart,
+    // or an app that survived a supervisor restart is both orphaned and duplicated.
+    manager.AdoptRunning();
     manager.StartAutostart();
 
     // An expose is state on disk, so it outlives a restart. Without this a reboot

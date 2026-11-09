@@ -26,7 +26,9 @@ class FrameCompressionTest {
     @Test
     fun `a compressed envelope is decompressed to the plain frame`() {
         val plain = """{"type":"device_config","command":"DEVICE_CONFIG","args":{"version":1}}"""
-        val envelope = """{"type":"device_config","data":"${gzipBase64(plain)}","compressed":true,"originalSize":${plain.length}}"""
+        val envelope = """{"type":"device_config","data":"${gzipBase64(
+            plain,
+        )}","compressed":true,"originalSize":${plain.length}}"""
 
         assertEquals(plain, FrameCompression.decode(envelope))
     }

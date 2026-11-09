@@ -110,6 +110,17 @@ public:
     /** Stops `name`: SIGTERM, then SIGKILL if it does not go. Idempotent. */
     bool Stop(const std::string &name);
 
+    /**
+     * Adopts processes the *previous* supervisor started.
+     *
+     * The running table is in memory, so after a restart the supervisor knows
+     * nothing about apps that are still alive: it would not reap them, would not
+     * restart them on a crash, and `StartAutostart` would spawn a second copy. The
+     * registry holds each app's pid record, so a live process whose start ticks still
+     * match is adopted back into the table. Call once, before [StartAutostart].
+     */
+    void AdoptRunning();
+
     /** Stops then starts. */
     bool Restart(const std::string &name);
 

@@ -139,6 +139,19 @@ public:
         spawnFails_ = fail;
     }
 
+    /** Registers a process this host did not spawn, as a restart would find. */
+    void PretendAlive(int pid, std::uint64_t startTicks) {
+        Proc p;
+        p.startTicks = startTicks;
+        procs_[pid] = p;
+    }
+
+    bool IsExited(int pid) const {
+        const auto it = procs_.find(pid);
+
+        return it == procs_.end() || it->second.exited;
+    }
+
     const std::string &lastLogPath() const {
         return lastLogPath_;
     }
@@ -221,6 +234,62 @@ void TestUnknownAppIsRefused() {
     Check(!f.manager.Start("nope"), "starting an unknown app fails");
     Check(!f.manager.Stop("nope") == false, "stopping an unknown app is not an error");
     Check(f.host.spawnCount() == 0, "nothing was spawned");
+}
+
+/** A registry app carrying a live pid record, as a restart would leave it. */
+vapps::App RecordedApp(const std::string &name, int pid, std::uint64_t ticks) {
+    vapps::App app = MakeApp(name);
+
+    app.pid = pid;
+    app.pidStartTicks = ticks;
+
+    return app;
+}
+
+void TestAdoptRunningReclaimsALiveProcess() {
+    // A process the previous supervisor started is still alive: its start ticks
+    // match. Adoption must put it back in the running table so this supervisor reaps
+    // and can stop it, and must NOT spawn a duplicate.
+    vapps::App app = RecordedApp("a", 4242, 4242 * 1000);
+    Fixture f({app});
+    f.host.PretendAlive(4242, 4242 * 1000);
+
+    f.manager.AdoptRunning();
+
+    Check(f.manager.IsRunning("a"), "the live process is adopted");
+    f.manager.StartAutostart();
+    Check(f.host.spawnCount() == 0, "an adopted app is not spawned again");
+
+    Check(f.manager.Stop("a"), "the adopted app can be stopped");
+    Check(!f.host.terminated().empty(), "stopping the adopted app signalled it");
+}
+
+void TestAdoptRunningDropsAStaleRecord() {
+    // The recorded pid is gone or recycled: its ticks do not match. The record must be
+    // cleared, so autostart spawns a fresh process rather than signalling a pid that
+    // is no longer ours.
+    vapps::App app = RecordedApp("a", 4242, 999);
+    Fixture f({app});
+    f.host.PretendAlive(4242, 4242 * 1000); // ticks differ: not our process
+
+    f.manager.AdoptRunning();
+    f.manager.StartAutostart();
+
+    Check(f.host.spawnCount() == 1, "a stale record is replaced with a fresh spawn");
+}
+
+void TestStopKillsAnOrphanLeftByAPreviousSupervisor() {
+    // The failure the live run hit: the app was started by a supervisor that has since
+    // exited, so this one has no running entry. Stop must adopt the recorded pid and
+    // kill it, not merely clear the record.
+    vapps::App app = RecordedApp("a", 4242, 4242 * 1000);
+    Fixture f({app});
+    f.host.PretendAlive(4242, 4242 * 1000);
+
+    Check(f.manager.Stop("a"), "stopping an untracked but recorded app succeeds");
+
+    Check(!f.host.terminated().empty(), "the orphan was signalled");
+    Check(f.host.IsExited(4242), "the orphan is no longer running");
 }
 
 void TestAutostartOnlyStartsFlaggedApps() {
@@ -401,6 +470,9 @@ void TestReloadKeepsRunningApps() {
 int main() {
     TestStartAndStop();
     TestUnknownAppIsRefused();
+    TestAdoptRunningReclaimsALiveProcess();
+    TestAdoptRunningDropsAStaleRecord();
+    TestStopKillsAnOrphanLeftByAPreviousSupervisor();
     TestAutostartOnlyStartsFlaggedApps();
     TestStartIsIdempotent();
     TestCrashRestartsWithBackoff();

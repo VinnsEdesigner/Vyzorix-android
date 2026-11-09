@@ -186,7 +186,6 @@ class CommandDispatcher(
                 args = argsRaw,
             )
 
-
         // Try every pinned key: during a rotation the server may sign with either.
         // A command that verifies under one of them is authentic; one that verifies
         // under none is not a command and is dropped.

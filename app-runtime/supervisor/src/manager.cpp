@@ -134,18 +134,57 @@ bool Manager::Start(const std::string &name) {
     return true;
 }
 
-bool Manager::Stop(const std::string &name) {
-    const auto it = running_.find(name);
-    if (it == running_.end()) {
-        // Not tracked. Make sure no stale record survives in the registry, then
-        // report success: stopping something that is not running is not a failure.
-        if (vapps::App *app = registry_.Find(name); app != nullptr) {
-            app->pid = 0;
-            app->pidStartTicks = 0;
-            Persist();
-        }
+void Manager::AdoptRunning() {
+    // A process the previous supervisor started is still alive and still ours if its
+    // start ticks match the recorded value (§7.1). Adopt it so this supervisor reaps
+    // it, restarts it on a crash, and does not spawn a duplicate on StartAutostart.
+    // A record whose ticks no longer match is stale: clear it so the next start is a
+    // fresh spawn rather than a signal to a recycled pid.
+    for (vapps::App &app : registry_.apps()) {
+        if (!app.HasPidRecord()) continue;
 
-        return true;
+        if (host_->StartTicks(app.pid) == app.pidStartTicks) {
+            Running adopted;
+            adopted.pid = app.pid;
+            adopted.startTicks = app.pidStartTicks;
+            adopted.startedAtMs = host_->NowMs();
+            running_[app.name] = adopted;
+        } else {
+            app.pid = 0;
+            app.pidStartTicks = 0;
+        }
+    }
+
+    Persist();
+}
+
+bool Manager::Stop(const std::string &name) {
+    auto it = running_.find(name);
+
+    if (it == running_.end()) {
+        // Not tracked in this process. That happens after a supervisor restart: the
+        // running table is in memory, so an app the *previous* supervisor started is
+        // unknown here even though its process is still alive. The registry keeps the
+        // pid record, so adopt it rather than leaving the process orphaned — a
+        // removed app whose process is never killed keeps its port bound and its
+        // data dir in use, which is exactly the failure §9.3 exists to avoid.
+        const vapps::App *recorded = registry_.Find(name);
+        if (recorded != nullptr && recorded->HasPidRecord()) {
+            Running adopted;
+            adopted.pid = recorded->pid;
+            adopted.startTicks = recorded->pidStartTicks;
+            it = running_.emplace(name, adopted).first;
+        } else {
+            // Genuinely not running. Make sure no stale record survives, then report
+            // success: stopping something that is not running is not a failure.
+            if (vapps::App *app = registry_.Find(name); app != nullptr) {
+                app->pid = 0;
+                app->pidStartTicks = 0;
+                Persist();
+            }
+
+            return true;
+        }
     }
 
     const int pid = it->second.pid;

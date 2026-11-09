@@ -68,7 +68,7 @@ esac
 # sudo (`-0` fakes root), no compiler.
 CORE_PACKAGES=(
   bash coreutils util-linux procps sed grep gawk findutils tar gzip xz-utils
-  ca-certificates curl socat less nano
+  ca-certificates curl socat less nano python3
 )
 
 EXTENDED_PACKAGES=(

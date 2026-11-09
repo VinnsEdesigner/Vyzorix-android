@@ -124,8 +124,14 @@ object ProotLauncher {
      */
     const val NO_SECCOMP_ENV = "PROOT_NO_SECCOMP"
 
+    /**
+     * The last API level whose kernel delivers the seccomp event at sysexit, where
+     * proot's acceleration segfaults the guest (Android 9). See [NO_SECCOMP_ENV].
+     */
+    private const val LAST_OLD_ORDER_SECCOMP_API = 28
+
     /** True when proot must run without its seccomp acceleration on this device. */
-    fun disablesSeccomp(): Boolean = android.os.Build.VERSION.SDK_INT <= 28
+    fun disablesSeccomp(): Boolean = android.os.Build.VERSION.SDK_INT <= LAST_OLD_ORDER_SECCOMP_API
 
     /** The environment proot itself must be started with, for this device's kernel. */
     fun prootEnv(context: Context): List<String> =
