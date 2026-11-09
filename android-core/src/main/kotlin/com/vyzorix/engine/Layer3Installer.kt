@@ -62,9 +62,20 @@ class Layer3Installer(
         }
     }
 
-    /** True when the supervisor is installed for this ABI. */
+    /** True when the supervisor is installed for this ABI and this build's archive. */
     fun isInstalled(): Boolean =
-        ProotLauncher.hasSupervisor(context) && marker(context).readTextOrNull() == abi
+        ProotLauncher.hasSupervisor(context) && marker(context).readTextOrNull() == installKey()
+
+    /**
+     * What the marker records: the ABI **and** the archive's length.
+     *
+     * The ABI alone is not enough. A rebuilt supervisor with the same ABI has the
+     * same name, so an ABI-only marker made every rebuild a no-op on a device that
+     * already had one — the new binaries never reached it. The length changes when
+     * the binaries change, which is the case that matters; a same-length rebuild is
+     * rare enough that a reinstall on app-update is the honest trade.
+     */
+    private fun installKey(): String = "$abi:${assetLength()}"
 
     private fun install() {
         val overlay = ProotLauncher.overlay(context)
@@ -97,7 +108,7 @@ class Layer3Installer(
             )
         }
 
-        marker(context).writeText(abi)
+        marker(context).writeText(installKey())
 
         Log.i(TAG, "layer 3 binaries installed")
     }
@@ -105,6 +116,21 @@ class Layer3Installer(
     /** This device's ABI, which is the archive's name. */
     private val abi: String
         get() = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+
+    /**
+     * The bundled archive's byte length, or -1 when it cannot be read.
+     *
+     * A compressed asset has no fd and an absent one throws; both mean "unknown",
+     * which is distinct from a real length so the marker changes once the asset is
+     * readable.
+     */
+    @Suppress("SwallowedException")
+    private fun assetLength(): Long =
+        try {
+            context.assets.openFd(assetName).use { it.length }
+        } catch (e: Exception) {
+            -1
+        }
 
     private fun marker(context: Context): File = File(context.filesDir, MARKER)
 
