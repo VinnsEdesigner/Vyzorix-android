@@ -198,6 +198,16 @@ public:
     void Persist() const;
 
     /**
+     * True when the registry file differs from what this manager holds in memory.
+     *
+     * The control loop calls it after an inotify event: after the manager's own write
+     * the two match, so the event is skipped; an operator's edit makes them differ,
+     * so the reload runs. Without it, a control op that writes the registry (a stop)
+     * is reloaded and StartAutostart restarts the app the operator just stopped.
+     */
+    [[nodiscard]] bool RegistryOnDiskDiffers() const;
+
+    /**
      * Re-reads the registry from disk, keeping running state.
      *
      * Used by the inotify path: a manifest changed, so the set of apps may have.

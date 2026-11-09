@@ -361,13 +361,21 @@ void ControlServer::Run() {
         if (watcher_.IsWatching() && FD_ISSET(watcher_.fd(), &readable)) {
             const vwatch::Change change = watcher_.Drain(registryName_);
             if (change.registryChanged || change.overflowed || !change.createdDirs.empty()) {
-                try {
-                    manager_->Reload();
-                    manager_->StartAutostart();
-                } catch (const std::exception &e) {
-                    // A half-written or malformed registry must not stop the
-                    // supervisor; the next event retries.
-                    std::fprintf(stderr, "supervisor: reload failed: %s\n", e.what());
+                // Only reload when the file actually differs from what we hold. A
+                // control op that writes the registry (stop, create) triggers the
+                // watcher too; reloading and running StartAutostart would then restart
+                // an app the operator just stopped. After the supervisor's own write
+                // the file matches memory, so this is skipped; an operator's edit makes
+                // them differ, so the reload runs.
+                if (manager_->RegistryOnDiskDiffers()) {
+                    try {
+                        manager_->Reload();
+                        manager_->StartAutostart();
+                    } catch (const std::exception &e) {
+                        // A half-written or malformed registry must not stop the
+                        // supervisor; the next event retries.
+                        std::fprintf(stderr, "supervisor: reload failed: %s\n", e.what());
+                    }
                 }
             }
         }

@@ -56,6 +56,22 @@ void Manager::Persist() const {
     registry_.Save(registryPath_);
 }
 
+bool Manager::RegistryOnDiskDiffers() const {
+    // True only when the file holds something other than what this manager holds in
+    // memory. After the manager's own write the two match, so the inotify reload can
+    // skip it; an operator's edit makes them differ. Without this a control op that
+    // writes the registry (a stop, a create) is seen by the watcher, reloaded, and
+    // StartAutostart restarts the app the operator just stopped — the stop reports
+    // success and the app keeps running.
+    try {
+        return vapps::Registry::Load(registryPath_).ToJson() != registry_.ToJson();
+    } catch (const std::exception &) {
+        // Unreadable or malformed: treat it as "differs" so the reload path runs and
+        // reports the problem, rather than silently ignoring a broken file.
+        return true;
+    }
+}
+
 void Manager::Reload() {
     // Running state is keyed by name and kept; only the app definitions change. An
     // edit to apps.json must not stop a running app.

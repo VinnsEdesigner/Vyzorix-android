@@ -465,6 +465,22 @@ void TestReloadKeepsRunningApps() {
     Check(pid == f.host.lastPid(), "the process is unchanged");
 }
 
+void TestRegistryOnDiskDiffersDetectsOnlyForeignEdits() {
+    Fixture f({MakeApp("a")});
+
+    // After the manager's own write the file matches memory: no reload needed.
+    f.manager.Persist();
+    Check(!f.manager.RegistryOnDiskDiffers(), "own write is not seen as a foreign edit");
+
+    // An operator edit changes the file on disk, without touching the manager: a
+    // reload is needed. Write a separate registry with an extra app.
+    vapps::Registry foreign;
+    foreign.Upsert(MakeApp("a"));
+    foreign.Upsert(MakeApp("b"));
+    foreign.Save(f.manager.registryPath());
+    Check(f.manager.RegistryOnDiskDiffers(), "an operator edit is seen as a foreign edit");
+}
+
 } // namespace
 
 int main() {
@@ -485,6 +501,7 @@ int main() {
     TestRestartClearsCrashHistory();
     TestLogPathIsPerApp();
     TestReloadKeepsRunningApps();
+    TestRegistryOnDiskDiffersDetectsOnlyForeignEdits();
 
     if (failures == 0) {
         std::cout << "manager_test: all checks passed\n";
