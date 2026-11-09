@@ -76,6 +76,7 @@ class DeployApplier(
 
         purge(config.apps)
         install(pending)
+        verifyCmds(config.apps, config.version)?.let { return it }
         writeSecrets(config, resolved)
         writePwaManifests(config)
         registry.write(registryPath(), config.apps)
@@ -203,6 +204,21 @@ class DeployApplier(
                 else -> supervisor.unexpose(app.name)
             }
         }
+    }
+
+    /** Re-checks each app's `cmd` after install (§8 rules 3-4), or returns a refusal. */
+    private fun verifyCmds(
+        apps: List<AppConfig>,
+        version: Int,
+    ): ApplyResult? {
+        for (app in apps) {
+            val reason = AppCmdCheck.check(app, File(appsRoot(), app.name))
+            if (reason != null) {
+                return ApplyResult.refused(version, reason, app.name)
+            }
+        }
+
+        return null
     }
 
     private fun appsRoot(): File = stagingDir.parentFile ?: stagingDir

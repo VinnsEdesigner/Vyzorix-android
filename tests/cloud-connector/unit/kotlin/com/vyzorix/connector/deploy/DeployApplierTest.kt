@@ -108,7 +108,7 @@ class DeployApplierTest {
         applier.apply(
             config(
                 app("vfd", listOf(artifact("engine", archive))),
-                app("wiki", listOf(artifact("site", archive))).copy(expose = "lan"),
+                app("wiki", listOf(artifact("engine", archive))).copy(expose = "lan"),
             ),
         )
 
@@ -133,7 +133,7 @@ class DeployApplierTest {
                 stagingDir = staging,
                 exposeTokens = tokens,
             )
-        val wiki = app("wiki", listOf(artifact("site", archive))).copy(expose = "lan")
+        val wiki = app("wiki", listOf(artifact("engine", archive))).copy(expose = "lan")
 
         applier.apply(config(wiki))
         val first = tokens.tokenFor("wiki")
@@ -149,7 +149,7 @@ class DeployApplierTest {
     ) = AppConfig(
         name = name,
         dir = "/home/apps/$name",
-        cmd = "/home/apps/$name/run.sh",
+        cmd = "/home/apps/$name/engine/run.sh",
         port = 8080,
         autostart = true,
         expose = "loopback",
@@ -200,7 +200,7 @@ class DeployApplierTest {
         val entry = registry.first()
         assertEquals("vfd", entry.name)
         assertEquals("/home/apps/vfd", entry.dir)
-        assertEquals("/home/apps/vfd/run.sh", entry.cmd)
+        assertEquals("/home/apps/vfd/engine/run.sh", entry.cmd)
         assertEquals(8080, entry.port)
         assertEquals(mapOf("MI_PORT" to "8080"), entry.env)
         assertTrue(entry.autostart)
@@ -273,7 +273,7 @@ class DeployApplierTest {
         applier.apply(
             config(
                 app("vfd", listOf(artifact("engine", archive))),
-                app("wiki", listOf(artifact("site", archive))),
+                app("wiki", listOf(artifact("engine", archive))),
             ),
         )
 
@@ -282,7 +282,7 @@ class DeployApplierTest {
         assertTrue(result.success)
         assertEquals(listOf("wiki"), supervisor.stopped)
         // The removed app's directory and artifact are retained; only purge deletes them.
-        assertTrue(File(appsRoot, "wiki/site/run.sh").isFile)
+        assertTrue(File(appsRoot, "wiki/engine/run.sh").isFile)
     }
 
     @Test

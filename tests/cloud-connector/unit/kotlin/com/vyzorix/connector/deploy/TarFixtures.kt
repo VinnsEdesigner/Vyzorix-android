@@ -34,7 +34,7 @@ object TarFixtures {
     ): ByteArray {
         val h = ByteArray(BLOCK)
         put(h, 0, 100, name)
-        put(h, 100, 8, "0000644")
+        put(h, 100, 8, "0000755")
         put(h, 108, 8, "0000000")
         put(h, 116, 8, "0000000")
         put(h, 124, 12, size.toString(8).padStart(11, '0'))
