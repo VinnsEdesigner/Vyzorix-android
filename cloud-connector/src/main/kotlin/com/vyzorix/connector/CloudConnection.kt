@@ -15,6 +15,8 @@ import com.vyzorix.connector.cloud.EnrollmentClient
 import com.vyzorix.connector.command.CommandDispatcher
 import com.vyzorix.connector.config.ConfigError
 import com.vyzorix.connector.config.ConfigStore
+import com.vyzorix.connector.deploy.DeployApplier
+import com.vyzorix.connector.deploy.DeployReporter
 import com.vyzorix.connector.enroll.PairingCode
 import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceFactsCollector
@@ -56,6 +58,11 @@ class CloudConnection(
     data class Deps(
         val context: Context,
         val signer: DeviceSigner,
+        /**
+         * The public half of the secret-decryption key, for enroll, or empty when the
+         * build has no secret key (VYZORIX_DEPLOY_CONTRACT.md §9b.3).
+         */
+        val secretKeyPem: String = "",
         val uuid: String,
         val appVersion: String,
         val enrollmentClient: EnrollmentClient,
@@ -70,11 +77,17 @@ class CloudConnection(
         // Run on connect: a device that has been offline checks as soon as it can
         // reach the server.
         val updateChecker: UpdateChecker? = null,
+        /**
+         * Applies a verified config's apps: fetch, verify, install, write the
+         * registry. Null when the build has no deploy applier (a test, bridge-only).
+         */
+        val deployApplier: DeployApplier? = null,
         val tierHint: Int = DeviceFactsCollector.TIER_UNROOTED,
     )
 
     private val context = deps.context
     private val signer = deps.signer
+    private val secretKeyPem = deps.secretKeyPem
     private val uuid = deps.uuid
     private val appVersion = deps.appVersion
     private val enrollmentClient = deps.enrollmentClient
@@ -84,6 +97,7 @@ class CloudConnection(
     private val notification = deps.notification
     private val telemetrySource = deps.telemetrySource
     private val updateChecker = deps.updateChecker
+    private val deployApplier = deps.deployApplier
     private val tierHint = deps.tierHint
     private val running = AtomicBoolean(false)
     private var wsClient: DeviceWsClient? = null
@@ -246,6 +260,7 @@ class CloudConnection(
                     EnrollRequest(
                         deviceUuid = facts.deviceUuid,
                         publicKey = signer.publicKeyPem(),
+                        secretKey = secretKeyPem,
                         model = facts.model,
                         manufacturer = facts.manufacturer,
                         osVersion = facts.osVersion,
@@ -484,9 +499,32 @@ class CloudConnection(
                 TAG,
                 "applied config version $version (telemetry every ${config.heartbeatSeconds}s)",
             )
+
+            applyApps(config)
         } catch (e: ConfigError) {
             Log.w(TAG, "refused a config: ${e.message}")
         }
+    }
+
+    /**
+     * Applies the config's apps, and reports the outcome over the socket.
+     *
+     * A refusal is reported, not thrown: the config is verified and stored, so the
+     * device stays configured with what it had, and the operator gets the reason
+     * (FR-16). This runs off the frame-handling path — the fetch is a blocking
+     * download — so it does not stall the socket.
+     */
+    private fun applyApps(config: com.vyzorix.connector.config.DeviceConfig) {
+        val applier = deployApplier ?: return
+        if (config.apps.isEmpty()) return
+
+        Thread({
+            val result = applier.apply(config)
+            if (!result.success) {
+                Log.w(TAG, "deploy refused: ${result.reason} (${result.detail})")
+            }
+            sendText(DeployReporter.frame(result).toJson())
+        }, "vyzorix-deploy-apply").apply { isDaemon = true }.start()
     }
 
     /**

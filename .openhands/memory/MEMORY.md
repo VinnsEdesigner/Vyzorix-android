@@ -521,3 +521,34 @@ process stays alive, **0 panics/fatals**; `go vet` and `go test` both pass. Deta
 - **A server started as a background child dies when the PTY session closes**
   (proot `--kill-on-exit`). Run it and curl it **in the same `am instrument` call**,
   or keep the session open. That is why the first run showed `DEAD` on the next call.
+
+## Deploy — device side (Build 1 landed 2026-11-09)
+- **Contract**: `vyzorix-update-server/documents/VYZORIX_DEPLOY_CONTRACT.md`.
+  The device half (§13.3/§13.4) was entirely unbuilt — the contract's claim that
+  `SecretEnvelope.kt` "is already written" is stale; there is no `secret/` package.
+- **Build 1 (this commit) = config foundation**, in `config/`:
+  `AppConfig`/`ArtifactConfig`, `AppConfigReader`, `ConfigSecretScan`,
+  `ConfigValidator`; `ConfigVerifier` now reads `apps` and runs the scan + rules.
+  Nothing fetches or applies yet (that is `ArtifactFetcher`/`DeployApplier`).
+- **The libv gotcha that cost a cycle**: an app's NAME is the node's *value*
+  (`vvv app vfd` → `tokens[1]`), NOT a `name` child; the same for `artifact`
+  (`vvvv artifact engine`). Only fields are children. Verified with a throwaway
+  `VNode.toString()` dump.
+- **`VNode.find("device.apps")` works** (one level per dot segment) and returns a
+  list; `VNode.children` and `VNode.getKey()` exist. Apps live at
+  `device.apps.app`. Do NOT flatten with `find("device.apps.app.port")` — that
+  crosses every app and mixes their ports (contract §5.1).
+- **The no-secret check is structural, not a line scan** (§5.2). The old
+  `ConfigVerifier.assertNoSecrets` refused the word "secret" anywhere, which
+  refuses the schema's own `secret NAME` node. The authoritative reference is the
+  server's `apps/api/internal/infrastructure/configscan/vyzorix_config_secret_scan.go`
+  — the Kotlin `ConfigSecretScan` is a port and the two must agree.
+- **Toolchain/emulator**: `scripts/install-toolchain.sh` → `/workspace/toolchain`
+  (JDK21 + SDK 6.1G + AVD x86test + cross-compilers), then
+  `source /workspace/toolchain/env.sh` and `echo sdk.dir=$ANDROID_HOME > local.properties`.
+  `./gradlew gate` is green in ~1m20s (nativeGate compiles the whole C++ tree, so
+  it is the slow part). Run long gradle jobs detached: `setsid bash -c './gradlew
+  gate < /dev/null > log 2>&1' &` — a plain `&` dies with "Bad file descriptor".
+- **ktlint**: `./gradlew :cloud-connector:ktlintFormat` fixes most of it, but it
+  does NOT fix chain-method-continuation / argument-list-wrapping / max-line-length
+  (100) in one pass — re-run `ktlintCheck` and hand-fix the rest.

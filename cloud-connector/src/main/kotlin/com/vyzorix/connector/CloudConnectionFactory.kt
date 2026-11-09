@@ -2,6 +2,7 @@ package com.vyzorix.connector
 
 import android.content.Context
 import com.vyzorix.capability.PtyBroker
+import com.vyzorix.connector.cloud.DeviceRequestSigner
 import com.vyzorix.connector.cloud.DeviceWsClient
 import com.vyzorix.connector.cloud.EnrollmentClient
 import com.vyzorix.connector.command.AppCommands
@@ -11,16 +12,24 @@ import com.vyzorix.connector.command.ShellExecExecutor
 import com.vyzorix.connector.config.ConfigStore
 import com.vyzorix.connector.config.ConfigVerifier
 import com.vyzorix.connector.config.PinnedServerKeys
+import com.vyzorix.connector.deploy.AppRegistryWriter
+import com.vyzorix.connector.deploy.ArtifactFetcher
+import com.vyzorix.connector.deploy.ControlSocketSupervisor
+import com.vyzorix.connector.deploy.DeployApplier
 import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
 import com.vyzorix.connector.identity.KeystoreDeviceIdentity
+import com.vyzorix.connector.secret.HttpSecretTransport
+import com.vyzorix.connector.secret.SecretKey
+import com.vyzorix.connector.secret.SecretStore
 import com.vyzorix.connector.telemetry.DeviceTelemetrySource
 import com.vyzorix.connector.update.ApkInstaller
 import com.vyzorix.connector.update.UpdateChecker
 import com.vyzorix.connector.update.UpdateClient
 import java.io.File
 import java.security.KeyStore
+import okhttp3.OkHttpClient
 
 /**
  * Builds a [CloudConnection] from a URL and the pinned server key.
@@ -61,6 +70,9 @@ object CloudConnectionFactory {
 
         val signer: DeviceSigner =
             KeystoreDeviceIdentity(KeyStore.getInstance(KeystoreDeviceIdentity.ANDROID_KEYSTORE))
+        // The second Keystore key, for decrypting an app secret. Separate from the
+        // identity key and never exposed over the bridge (VYZORIX_DEPLOY_CONTRACT.md §9b.3).
+        val secretKey = SecretKey(KeyStore.getInstance(SecretKey.ANDROID_KEYSTORE))
         val uuid = DeviceUuidStore(FileUuidStorage(context)).uuid()
         // One client for both HTTP and the WebSocket, with the WebSocket heartbeat
         // enabled: OkHttp's ping fails a silently dead link so the reconnect loop
@@ -129,8 +141,48 @@ object CloudConnectionFactory {
                         currentVersionCode = appVersionCode,
                         stagingDir = File(context.filesDir, "updates"),
                     ),
+                secretKeyPem = secretKey.publicKeyPem(),
+                deployApplier = deployApplier(context, baseUrl, http, uuid, signer, secretKey),
                 tierHint = tierHint,
             ),
+        )
+    }
+
+    /**
+     * The deploy applier: fetch, verify and install a config's apps, and write the
+     * supervisor's registry.
+     *
+     * Everything it touches lives under `files/apps` — the host path the proot
+     * launcher binds to `/home/apps` in the container — so the install renames stay on
+     * one filesystem and land where the supervisor reads them.
+     */
+    private fun deployApplier(
+        context: Context,
+        baseUrl: String,
+        http: OkHttpClient,
+        uuid: String,
+        signer: DeviceSigner,
+        secretKey: SecretKey,
+    ): DeployApplier {
+        val appsRoot = File(context.filesDir, APPS_DIR)
+        val signerForDevice = DeviceRequestSigner(signer, uuid)
+
+        return DeployApplier(
+            fetcher = ArtifactFetcher(http),
+            registry = AppRegistryWriter(),
+            supervisor = ControlSocketSupervisor(appControl(context)),
+            stagingDir = File(appsRoot, STAGING_DIR),
+            secrets =
+                SecretStore(
+                    key = secretKey,
+                    transport =
+                        HttpSecretTransport(
+                            baseUrl = baseUrl,
+                            http = http,
+                            deviceId = uuid,
+                            requestSigner = signerForDevice,
+                        ),
+                ),
         )
     }
 
@@ -147,6 +199,9 @@ object CloudConnectionFactory {
 
     /** Must match `ProotLauncher.APPS_DIR` — the app-storage directory. */
     private const val APPS_DIR = "apps"
+
+    /** Scratch space for downloads and unpacking, inside the app-storage directory. */
+    private const val STAGING_DIR = ".deploy-staging"
 
     /** Must match the supervisor's socket name inside that directory. */
     private const val SUPERVISOR_SOCKET = "supervisor.sock"

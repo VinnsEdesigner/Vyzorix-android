@@ -43,7 +43,7 @@ import java.util.zip.GZIPInputStream
  * extended headers beyond the name, sparse files, and long-name GNU extensions.
  * A tar containing them fails with a clear message rather than being half-read.
  */
-internal object TarGz {
+object TarGz {
     private const val TAG = "TarGz"
 
     /** How much to copy at a time. Large enough that a 145 MB tree is not 35k syscalls. */

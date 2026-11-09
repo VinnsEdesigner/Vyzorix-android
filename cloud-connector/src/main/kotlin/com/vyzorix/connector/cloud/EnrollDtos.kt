@@ -15,6 +15,12 @@ import kotlinx.serialization.Serializable
 data class EnrollRequest(
     @SerialName("deviceUuid") val deviceUuid: String,
     @SerialName("publicKey") val publicKey: String,
+    /**
+     * The public half of the secret-decryption key (`vyzorix.secret`), so the server
+     * can wrap an app secret to this device (VYZORIX_DEPLOY_CONTRACT.md §9b.3). Empty
+     * when the build has no secret key; the server then cannot set a secret for it.
+     */
+    @SerialName("secretKey") val secretKey: String = "",
     @SerialName("model") val model: String = "",
     @SerialName("manufacturer") val manufacturer: String = "",
     @SerialName("osVersion") val osVersion: String = "",
