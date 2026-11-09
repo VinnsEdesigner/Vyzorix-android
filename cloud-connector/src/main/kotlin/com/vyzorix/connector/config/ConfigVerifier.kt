@@ -1,6 +1,7 @@
 package com.vyzorix.connector.config
 
 import com.vyzorix.libv.VDocument
+import com.vyzorix.libv.VNode
 import com.vyzorix.libv.VParseError
 import com.vyzorix.libv.VParser
 import com.vyzorix.libv.VVerifier
@@ -40,6 +41,15 @@ sealed class ConfigError(
     class CarriesASecret(
         detail: String,
     ) : ConfigError("config must not carry a secret: $detail")
+
+    /**
+     * A static rule refused the config (VYZORIX_DEPLOY_CONTRACT.md §5.3, §8). The
+     * [reason] is the machine-readable code the server and console key off.
+     */
+    class Refused(
+        val reason: String,
+        detail: String,
+    ) : ConfigError("config refused: $reason ($detail)")
 }
 
 /**
@@ -59,6 +69,8 @@ data class DeviceConfig(
     val usbEnabled: Boolean,
     val appsEnabled: Boolean,
     val version: Int,
+    /** The apps the config declares, in document order. Empty when it carries none. */
+    val apps: List<AppConfig>,
     /** The verified document text, stored verbatim so a re-check sees the same bytes. */
     val document: String,
 )
@@ -77,6 +89,9 @@ data class DeviceConfig(
  */
 class ConfigVerifier(
     private val pinnedServerKeys: PinnedServerKeys,
+    private val appConfigReader: AppConfigReader = AppConfigReader(),
+    private val secretScan: ConfigSecretScan = ConfigSecretScan(),
+    private val validator: ConfigValidator = ConfigValidator(),
 ) {
     /**
      * Convenience for a single key. Kept because a caller that holds exactly one
@@ -115,7 +130,7 @@ class ConfigVerifier(
             throw ConfigError.Unsigned
         }
 
-        assertNoSecrets(document)
+        assertNoSecrets(parsed.root)
 
         // Try every pinned key: during a rotation the server may sign with either,
         // and a document that verifies under one of them is authentic. A failure
@@ -141,24 +156,12 @@ class ConfigVerifier(
     }
 
     /**
-     * Refuses a document that names anything secret.
-     *
-     * The same token list the server checks, for the same reason. A line is only
-     * inspected when it is a node (not a comment) and is not the signature line,
-     * which names an algorithm rather than a secret.
+     * Refuses a document that carries a secret, and names the offending key (§5.2).
+     * The walk lives in [ConfigSecretScan], matching the server's `configscan`.
      */
-    private fun assertNoSecrets(document: String) {
-        for (raw in document.split('\n')) {
-            val trimmed = raw.trim()
-            if (trimmed.isEmpty() || trimmed.startsWith("'")) continue
-            if (trimmed.startsWith("v sig ")) continue
-
-            val lower = trimmed.lowercase()
-            for (token in FORBIDDEN_TOKENS) {
-                if (lower.contains(token)) {
-                    throw ConfigError.CarriesASecret("line \"$trimmed\" mentions \"$token\"")
-                }
-            }
+    private fun assertNoSecrets(root: VNode) {
+        secretScan.offendingKey(root)?.let { key ->
+            throw ConfigError.CarriesASecret("node \"$key\" carries a secret")
         }
     }
 
@@ -186,6 +189,11 @@ class ConfigVerifier(
         val deviceId = value("device") ?: throw ConfigError.Malformed("missing device")
         val orgId = value("device.org") ?: throw ConfigError.Malformed("missing org")
 
+        val apps = appConfigReader.read(root)
+        validator.validate(apps)?.let { refusal ->
+            throw ConfigError.Refused(refusal.reason, refusal.detail)
+        }
+
         return DeviceConfig(
             deviceId = deviceId,
             organizationId = orgId,
@@ -197,6 +205,7 @@ class ConfigVerifier(
             usbEnabled = value("device.features.usb") == "true",
             appsEnabled = value("device.features.apps") == "true",
             version = value("version")?.toIntOrNull() ?: 0,
+            apps = apps,
             document = document,
         )
     }
@@ -210,8 +219,6 @@ class ConfigVerifier(
     }
 
     companion object {
-        private val FORBIDDEN_TOKENS = listOf("secret", "token", "password", "key", "hmac")
-
         const val DEFAULT_HEARTBEAT_SECONDS = 60
     }
 }

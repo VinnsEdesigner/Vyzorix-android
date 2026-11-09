@@ -171,7 +171,98 @@ class ConfigVerifierTest {
         assertEquals(false, config.usbEnabled)
         assertEquals(false, config.appsEnabled)
         assertEquals(ConfigVerifier.DEFAULT_HEARTBEAT_SECONDS, config.heartbeatSeconds)
+        assertEquals(emptyList<AppConfig>(), config.apps)
     }
+
+    @Test
+    fun `a signed two-app config verifies and reads both apps`() {
+        val config = verifier().verify(sign(twoAppBody()))
+
+        assertEquals(true, config.appsEnabled)
+        assertEquals(listOf("vfd", "wiki"), config.apps.map { it.name })
+        assertEquals(8080, config.apps.first().port)
+    }
+
+    @Test
+    fun `a config that names a secret is accepted`() {
+        // The half the shipped line scanner failed: a `secret NAME` node names a
+        // secret without carrying one, which is exactly what the field is for.
+        val config = verifier().verify(sign(twoAppBody()))
+
+        assertEquals(listOf("DATABASE_URL"), config.apps.first().secretNames)
+    }
+
+    @Test
+    fun `a config that carries a secret value is refused`() {
+        val body =
+            """
+            v device dev-1
+            vv org org-1
+            vv apps
+            vvv app vfd
+            vvvv cmd /home/apps/vfd/run.sh
+            vvvv env DATABASE_URL=postgres://user:pass@db.internal:5432/app
+            v version 1
+            """.trimIndent() + "\n"
+
+        assertThrows(ConfigError.CarriesASecret::class.java) {
+            verifier().verify(sign(body))
+        }
+    }
+
+    @Test
+    fun `a config with an artifact missing its digest is refused`() {
+        val body =
+            """
+            v device dev-1
+            vv org org-1
+            vv apps
+            vvv app vfd
+            vvvv cmd /home/apps/vfd/run.sh
+            vvvv artifact engine
+            vvvvv url https://example.invalid/engine.tar.gz
+            v version 1
+            """.trimIndent() + "\n"
+
+        val error =
+            assertThrows(ConfigError.Refused::class.java) {
+                verifier().verify(sign(body))
+            }
+
+        assertEquals("unhashed_reference", error.reason)
+    }
+
+    private fun twoAppBody(): String =
+        """
+        ' vyzorix.v — device configuration
+        v device dev-1
+        vv org org-1
+        vv features
+        vvv terminal true
+        vvv usb false
+        vvv apps true
+        vv apps
+        vvv app vfd
+        vvvv dir /home/apps/vfd
+        vvvv cmd /home/apps/vfd/run.sh
+        vvvv port 8080
+        vvvv autostart true
+        vvvv expose loopback
+        vvvv purge false
+        vvvv env MI_PORT=8080
+        vvvv secret DATABASE_URL
+        vvvv artifact engine
+        vvvvv arch arm64-v8a
+        vvvvv url https://example.invalid/vyzor-arm64.tar.gz
+        vvvvv sha256 9f2c
+        vvvvv kind dir
+        vvv app wiki
+        vvvv dir /home/apps/wiki
+        vvvv cmd /home/apps/wiki/run.sh
+        vvvv port 9000
+        vvvv expose lan
+        v version 1
+        """.trimIndent() + "\n"
 
     private fun generateKey(): KeyPair =
         KeyPairGenerator
