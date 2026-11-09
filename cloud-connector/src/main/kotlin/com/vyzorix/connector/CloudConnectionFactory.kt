@@ -16,6 +16,7 @@ import com.vyzorix.connector.deploy.AppRegistryWriter
 import com.vyzorix.connector.deploy.ArtifactFetcher
 import com.vyzorix.connector.deploy.ControlSocketSupervisor
 import com.vyzorix.connector.deploy.DeployApplier
+import com.vyzorix.connector.deploy.FileExposeTokens
 import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
@@ -183,6 +184,9 @@ object CloudConnectionFactory {
                             requestSigner = signerForDevice,
                         ),
                 ),
+            // App-private, NOT under files/apps: that subdirectory is bound to
+            // /home/apps and readable by every app in the container.
+            exposeTokens = FileExposeTokens(File(context.filesDir, "expose-tokens")),
         )
     }
 

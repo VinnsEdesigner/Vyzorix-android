@@ -49,11 +49,29 @@ class DeployApplierTest {
         private val reachable: Boolean = true,
     ) : SupervisorControl {
         val stopped = mutableListOf<String>()
+        val exposed = mutableListOf<Pair<String, String>>()
+        val unexposed = mutableListOf<String>()
 
         override fun ping(): Boolean = reachable
 
         override fun stop(name: String): Boolean {
             stopped += name
+
+            return true
+        }
+
+        override fun expose(
+            name: String,
+            bind: String,
+            token: String,
+        ): Boolean {
+            exposed += name to bind
+
+            return true
+        }
+
+        override fun unexpose(name: String): Boolean {
+            unexposed += name
 
             return true
         }
@@ -78,6 +96,52 @@ class DeployApplierTest {
         sha256 = TarFixtures.sha256(bytes),
         kind = kind,
     )
+
+    @Test
+    fun `a lan app is exposed on 0_0_0_0 and a loopback app is not`() {
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "echo hi\n"))
+        serve(archive)
+        serve(archive)
+        val supervisor = FakeSupervisor()
+        val applier = applier(supervisor)
+
+        applier.apply(
+            config(
+                app("vfd", listOf(artifact("engine", archive))),
+                app("wiki", listOf(artifact("site", archive))).copy(expose = "lan"),
+            ),
+        )
+
+        assertEquals(listOf("wiki" to "0.0.0.0"), supervisor.exposed)
+        // `loopback` is the default, so the loopback app is unexposed rather than
+        // bound to 127.0.0.1 through the proxy.
+        assertEquals(listOf("vfd"), supervisor.unexposed)
+    }
+
+    @Test
+    fun `the lan token is stable across applies`() {
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "echo hi\n"))
+        serve(archive)
+        serve(archive)
+        val tokens = InMemoryExposeTokens()
+        val supervisor = FakeSupervisor()
+        val applier =
+            DeployApplier(
+                fetcher = ArtifactFetcher(OkHttpClient()),
+                registry = AppRegistryWriter(),
+                supervisor = supervisor,
+                stagingDir = staging,
+                exposeTokens = tokens,
+            )
+        val wiki = app("wiki", listOf(artifact("site", archive))).copy(expose = "lan")
+
+        applier.apply(config(wiki))
+        val first = tokens.tokenFor("wiki")
+
+        applier.apply(config(wiki))
+
+        assertEquals(first, tokens.tokenFor("wiki"))
+    }
 
     private fun app(
         name: String = "vfd",

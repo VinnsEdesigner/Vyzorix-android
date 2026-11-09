@@ -37,6 +37,7 @@ class DeployApplier(
     private val stagingDir: File,
     private val secrets: SecretStore? = null,
     private val pwa: PwaManifest = PwaManifest(),
+    private val exposeTokens: ExposeTokenSource = InMemoryExposeTokens(),
 ) {
     /** Applies [config]. Returns the outcome; an expected refusal is not thrown. */
     fun apply(config: DeviceConfig): ApplyResult {
@@ -78,6 +79,7 @@ class DeployApplier(
         writeSecrets(config, resolved)
         writePwaManifests(config)
         registry.write(registryPath(), config.apps)
+        exposeApps(config.apps)
         removed.forEach { supervisor.stop(it) }
 
         return ApplyResult.ok(config.version)
@@ -187,6 +189,22 @@ class DeployApplier(
         }
     }
 
+    /**
+     * Sets each app's exposure (US-011). `loopback` is the default and unexposes;
+     * `lan` binds `0.0.0.0` with a token; `cloud` is refused by the config rules in v1.
+     *
+     * The token comes from [exposeTokens], which persists it outside the container's
+     * bind — a token written under `files/apps` would be readable by every app.
+     */
+    private fun exposeApps(apps: List<AppConfig>) {
+        for (app in apps) {
+            when (app.expose) {
+                EXPOSE_LAN -> supervisor.expose(app.name, LAN_BIND, exposeTokens.tokenFor(app.name))
+                else -> supervisor.unexpose(app.name)
+            }
+        }
+    }
+
     private fun appsRoot(): File = stagingDir.parentFile ?: stagingDir
 
     private fun registryPath(): File = File(appsRoot(), REGISTRY_NAME)
@@ -203,5 +221,7 @@ class DeployApplier(
         const val STAGING_SUFFIX = ".stage"
         const val BACKUP_SUFFIX = ".old"
         const val ANY_ARCH = "any"
+        const val EXPOSE_LAN = "lan"
+        const val LAN_BIND = "0.0.0.0"
     }
 }
