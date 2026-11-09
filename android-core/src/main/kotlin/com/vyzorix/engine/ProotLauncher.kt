@@ -105,6 +105,35 @@ object ProotLauncher {
     /** The env var proot reads for [TMP_DIR]. It reads its *own* environment. */
     const val TMP_DIR_ENV = "PROOT_TMP_DIR"
 
+    /**
+     * proot's seccomp acceleration switch, read from proot's own environment.
+     *
+     * Termux proot accelerates syscall handling with a seccomp filter
+     * (`SECCOMP_RET_TRACE`), which is the fast path on modern Android. On Android 9
+     * (API 28) the kernel delivers the seccomp event at **sysexit** rather than
+     * sysenter, and proot's handling of that order **segfaults the guest**: the
+     * supervisor died with SIGSEGV the moment it was launched, so no app could ever
+     * run (measured on the API 28 emulator). Disabling the acceleration makes proot
+     * fall back to the plain `PTRACE_SYSCALL` path, which is correct on that kernel.
+     *
+     * It is gated to API <= 28 on purpose. On API 33 the acceleration is the working
+     * path and this variable must NOT be set: with it, proot mishandles its own
+     * syscall rewrites and `rename(2)` fails with ENOSYS (a measured upstream
+     * defect, see `third_party/README.md`). The two kernels need opposite settings,
+     * so the setting is chosen by API level rather than fixed.
+     */
+    const val NO_SECCOMP_ENV = "PROOT_NO_SECCOMP"
+
+    /** True when proot must run without its seccomp acceleration on this device. */
+    fun disablesSeccomp(): Boolean = android.os.Build.VERSION.SDK_INT <= 28
+
+    /** The environment proot itself must be started with, for this device's kernel. */
+    fun prootEnv(context: Context): List<String> =
+        buildList {
+            add("$TMP_DIR_ENV=${tmpDir(context).absolutePath}")
+            if (disablesSeccomp()) add("$NO_SECCOMP_ENV=1")
+        }
+
     /** App-private directories that hold secrets and recordings, never bound. */
     const val SECRETS_DIR = "secrets"
     const val RECORDINGS_DIR = "recordings"
@@ -468,8 +497,7 @@ object ProotLauncher {
                 listOf(
                     "TERM=xterm-256color",
                     "LANG=C.UTF-8",
-                    "$TMP_DIR_ENV=${tmpDir(context).absolutePath}",
-                ),
+                ) + prootEnv(context),
         )
 
     /**

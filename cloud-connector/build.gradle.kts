@@ -72,6 +72,9 @@ dependencies {
     testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    // `android.util.Base64` is an Android API; Robolectric provides it on the JVM so
+    // FrameCompression can be tested without a device.
+    testImplementation(libs.robolectric)
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)

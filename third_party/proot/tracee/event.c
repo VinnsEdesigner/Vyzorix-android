@@ -711,7 +711,19 @@ int handle_tracee_event(Tracee *tracee, int tracee_status)
 				break;
 			}
 
-			assert(IS_IN_SYSENTER(tracee));
+			/* Local change (vyzorix). The seccomp event must arrive at sysenter,
+			 * and upstream asserts it. On Android's app filter with old-order
+			 * delivery (measured on API 28) the event can arrive while the tracee
+			 * is at sysexit, and the assert then calls abort(3) - killing the
+			 * *tracer*. That is what crashed the supervisor every time it forked a
+			 * child: proot died with SIGABRT, so no app could ever start. Treat the
+			 * mis-timed event like the already-handled-enter case above: skip it and
+			 * keep the previous restart policy, without the abort. */
+			if (!IS_IN_SYSENTER(tracee)) {
+				tracee->restart_how = tracee->last_restart_how;
+				VERBOSE(tracee, 6, "skipping PTRACE_EVENT_SECCOMP that arrived at sysexit");
+				break;
+			}
 
 			/* Use the common ptrace flow if seccomp was
 			 * explicitely disabled for this tracee.  */

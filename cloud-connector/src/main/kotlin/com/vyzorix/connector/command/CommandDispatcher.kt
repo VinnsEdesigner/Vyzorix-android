@@ -2,6 +2,7 @@ package com.vyzorix.connector.command
 
 import com.vyzorix.connector.cloud.CloudJson
 import com.vyzorix.connector.cloud.CommandResultFrame
+import com.vyzorix.connector.cloud.FrameCompression
 import com.vyzorix.connector.cloud.RawJson
 import com.vyzorix.connector.cloud.Signatures
 import com.vyzorix.connector.cloud.TYPE_DEVICE_CONFIG
@@ -79,7 +80,9 @@ class CommandDispatcher(
      * [raw] is the frame's exact bytes: the signature covers `args` verbatim, so it
      * is read from the raw text rather than a re-encoded form.
      */
-    fun handle(raw: String): Handled {
+    fun handle(rawFrame: String): Handled {
+        val raw = FrameCompression.decode(rawFrame) ?: return Handled.Dropped("frame did not parse")
+
         val type = frameTypeOf(raw) ?: return Handled.Dropped("frame has no type")
 
         if (type == TYPE_DEVICE_CONFIG) {
@@ -183,9 +186,11 @@ class CommandDispatcher(
                 args = argsRaw,
             )
 
+
         // Try every pinned key: during a rotation the server may sign with either.
         // A command that verifies under one of them is authentic; one that verifies
         // under none is not a command and is dropped.
+
         return pinnedServerKeys.anyVerifies { key ->
             try {
                 val sig = Base64.getDecoder().decode(frame.signature)

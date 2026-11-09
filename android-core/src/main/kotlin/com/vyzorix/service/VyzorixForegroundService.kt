@@ -312,11 +312,14 @@ class VyzorixForegroundService : Service() {
             val builder =
                 ProcessBuilder(ProotLauncher.supervisorArgs(this))
                     .redirectErrorStream(true)
-                    // The proot launcher reads PROOT_TMP_DIR from its own
-                    // environment, before it execs anything.
+                    // The proot launcher reads PROOT_TMP_DIR (and, on API <= 28,
+                    // PROOT_NO_SECCOMP) from its own environment, before it execs
+                    // anything.
                     .apply {
-                        environment()[ProotLauncher.TMP_DIR_ENV] =
-                            ProotLauncher.tmpDir(this@VyzorixForegroundService).absolutePath
+                        ProotLauncher.prootEnv(this@VyzorixForegroundService).forEach { entry ->
+                            val cut = entry.indexOf('=')
+                            environment()[entry.substring(0, cut)] = entry.substring(cut + 1)
+                        }
                     }
 
             val process = builder.start()

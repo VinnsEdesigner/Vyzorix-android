@@ -582,3 +582,27 @@ process stays alive, **0 panics/fatals**; `go vet` and `go test` both pass. Deta
   server needs `GOTOOLCHAIN=local`.
 - Pushed: `774497e` (Build 1) → `8d15411`/`2bae416`/`59294bb` (Build 2) →
   `9d71dde` (Build 3).
+
+## Deploy — device side, Builds 4-6 (2026-11-09)
+- **Build 4**: `ConfigStore` keeps current + last-good (`keep_last = 2`, FR-21).
+  `apply` promotes the replaced doc to last-good; a current doc that no longer
+  verifies falls back to last-good; `rollback()` is called after a refused apply.
+  `ConfigStorage` grew `readLastGood`/`writeLastGood` (FileConfigStorage persists
+  `vyzorix.v` + `vyzorix.last-good.v`).
+- **Build 5**: exposure wiring (US-011). `SupervisorControl.expose/unexpose`;
+  `DeployApplier` exposes `lan` on `0.0.0.0` with a token, unexposes `loopback`.
+  **The token must NOT live under `files/apps`** — that dir is bound to `/home/apps`
+  and proot is root inside, so every app could read it. `ExposeTokenSource`
+  persists it app-privately (`filesDir/expose-tokens`). The `lan` token delivery is
+  unspecified by the contract — this is an assumption to confirm.
+- **Build 6**: `AppCmdCheck` re-checks `cmd` on-device after install (§8 rules 3-4):
+  symlink-resolved path inside the app dir, and exists+executable. Runs after
+  install, before the registry.
+- **Gate/test gotchas**: unit-test fixtures that pass the `cmd` check must ship an
+  **executable** `run.sh` (tar mode 0755) AND the `cmd` must point where the
+  artifact actually unpacks (`<app>/<artifact>/run.sh`), not the app root. ktlint
+  `ktlintFormat` fixes most style but not chain-method-continuation /
+  argument-list-wrapping / max-line-length in one pass. `File.createSymbolicLink`
+  is not resolvable in unit tests — use `java.nio.file.Files.createSymbolicLink`.
+- Pushed: `ae3baf0` (B4) → `c9df268` (B5) → `0ab86eb` (B6). Device-side deploy is
+  now feature-complete per §13.3/§13.4.
