@@ -15,6 +15,7 @@ import com.vyzorix.connector.cloud.EnrollmentClient
 import com.vyzorix.connector.command.CommandDispatcher
 import com.vyzorix.connector.config.ConfigError
 import com.vyzorix.connector.config.ConfigStore
+import com.vyzorix.connector.deploy.ApplyResult
 import com.vyzorix.connector.deploy.DeployApplier
 import com.vyzorix.connector.deploy.DeployReporter
 import com.vyzorix.connector.enroll.PairingCode
@@ -519,7 +520,20 @@ class CloudConnection(
         if (config.apps.isEmpty()) return
 
         Thread({
-            val result = applier.apply(config)
+            val result =
+                try {
+                    applier.apply(config)
+                } catch (
+                    @Suppress("SwallowedException") e: Exception,
+                ) {
+                    // An unexpected failure (a rename that would not complete, a
+                    // registry that could not be written) must still be reported: a
+                    // silent apply thread is a deploy the operator never hears about.
+                    Log.w(TAG, "deploy failed: ${e.message}")
+
+                    ApplyResult.refused(config.version, "apply_failed", e.message.orEmpty())
+                }
+
             if (!result.success) {
                 Log.w(TAG, "deploy refused: ${result.reason} (${result.detail})")
             }
