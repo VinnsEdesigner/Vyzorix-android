@@ -26,6 +26,17 @@ class ConfigValidator {
         for (app in apps) {
             validateArtifacts(app)?.let { return it }
             validateCmd(app)?.let { return it }
+            validatePwa(app)?.let { return it }
+        }
+
+        return null
+    }
+
+    /** §6: an invalid `display` is a hard error — it would silently degrade to `browser`. */
+    private fun validatePwa(app: AppConfig): Refusal? {
+        val display = app.pwaOverrides["display"] ?: return null
+        if (display !in PWA_DISPLAY_VALUES) {
+            return Refusal("invalid_display", "app.${app.name}.pwa.display is \"$display\"")
         }
 
         return null
@@ -81,5 +92,8 @@ class ConfigValidator {
 
         /** The shell characters the `cmd` rule refuses. `cmd` runs with no shell. */
         val METACHARACTERS = ";|&$`><(){}*?~!\n\r".toSet()
+
+        /** The valid PWA `display` values (§6); anything else degrades silently. */
+        val PWA_DISPLAY_VALUES = setOf("standalone", "fullscreen", "minimal-ui", "browser")
     }
 }

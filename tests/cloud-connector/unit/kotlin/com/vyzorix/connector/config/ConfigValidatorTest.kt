@@ -92,4 +92,18 @@ class ConfigValidatorTest {
     fun `an app with no artifacts passes the reference check`() {
         assertNull(validator.validate(listOf(app(artifacts = emptyList()))))
     }
+
+    @Test
+    fun `an invalid pwa display is refused`() {
+        val bad = app().copy(pwa = true, pwaOverrides = mapOf("display" to "kiosk"))
+
+        assertEquals("invalid_display", validator.validate(listOf(bad))?.reason)
+    }
+
+    @Test
+    fun `a valid pwa display passes`() {
+        val good = app().copy(pwa = true, pwaOverrides = mapOf("display" to "fullscreen"))
+
+        assertNull(validator.validate(listOf(good)))
+    }
 }

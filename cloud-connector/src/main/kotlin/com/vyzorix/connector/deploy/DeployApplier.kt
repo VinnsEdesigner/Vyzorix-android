@@ -36,6 +36,7 @@ class DeployApplier(
     private val supervisor: SupervisorControl,
     private val stagingDir: File,
     private val secrets: SecretStore? = null,
+    private val pwa: PwaManifest = PwaManifest(),
 ) {
     /** Applies [config]. Returns the outcome; an expected refusal is not thrown. */
     fun apply(config: DeviceConfig): ApplyResult {
@@ -75,6 +76,7 @@ class DeployApplier(
         purge(config.apps)
         install(pending)
         writeSecrets(config, resolved)
+        writePwaManifests(config)
         registry.write(registryPath(), config.apps)
         removed.forEach { supervisor.stop(it) }
 
@@ -175,6 +177,13 @@ class DeployApplier(
 
         for (app in config.apps) {
             store.writeEnv(File(appsRoot(), app.name), resolved[app.name].orEmpty())
+        }
+    }
+
+    /** Writes each app's PWA manifest, when it declares one (§6). */
+    private fun writePwaManifests(config: DeviceConfig) {
+        for (app in config.apps) {
+            pwa.write(app, File(appsRoot(), app.name))
         }
     }
 
