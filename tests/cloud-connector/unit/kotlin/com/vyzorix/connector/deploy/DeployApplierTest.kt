@@ -230,6 +230,7 @@ class DeployApplierTest {
                 key = { null },
                 transport = { _, _ -> WrappedSecret("c1", "RSA-OAEP-SHA1") },
             )
+        // A secret the store cannot open must refuse the apply before any install.
         val applier =
             DeployApplier(
                 fetcher = ArtifactFetcher(OkHttpClient()),

@@ -37,14 +37,28 @@ fun interface SecretDecryptor {
     fun decrypt(ciphertextBase64: String): ByteArray?
 }
 
+/** The result of resolving an app's secrets: the values, or the key that will not open. */
+sealed interface SecretResolution {
+    data class Resolved(
+        val values: Map<String, String>,
+    ) : SecretResolution
+
+    data class Undecryptable(
+        val key: String,
+    ) : SecretResolution
+}
+
 /**
- * Fetches, decrypts and writes an app's secrets
- * (VYZORIX_DEPLOY_CONTRACT.md §9b.2, §9b.4, FR-26).
+ * Fetches and decrypts an app's secrets, and writes them where the supervisor reads
+ * them (VYZORIX_DEPLOY_CONTRACT.md §9b.2, §9b.4, FR-26).
  *
- * A decrypted value is written to `files/apps/<app>/.env` at mode `0600` and is
- * never put in `apps.json`: the registry is inside `/home/apps`, which every app in
- * the container can read, so a secret there would hand one app another's credential.
- * The supervisor reads the `.env` at start.
+ * Resolution and writing are separate so the applier can validate every secret
+ * **before** it touches the live tree: a secret that will not open aborts with the
+ * device unchanged, rather than after an artifact swap.
+ *
+ * A decrypted value is written to `files/apps/<app>/.env` at mode `0600` and is never
+ * put in `apps.json`: the registry is inside `/home/apps`, which every app in the
+ * container can read, so a secret there would hand one app another's credential.
  *
  * A secret that will not decrypt is a refusal, not a silent skip (§9b.5): starting
  * the app with the variable absent produces an app that looks up but talks to the
@@ -55,38 +69,36 @@ class SecretStore(
     private val transport: SecretTransport,
 ) {
     /**
-     * Writes [app]'s secrets to [appDir]/.env at mode 0600.
+     * Fetches and decrypts [app]'s secrets, or names the first that will not open.
      *
-     * @return the name of a secret that would not open, or null on success. An app
-     *   with no secrets writes no file.
+     * A named secret the server has not set is simply absent; only a value that is
+     * present and will not decrypt is a refusal.
      */
-    fun write(
-        app: AppConfig,
-        appDir: File,
-    ): String? {
-        if (app.secretNames.isEmpty()) return null
-
+    fun resolve(app: AppConfig): SecretResolution {
         val values = linkedMapOf<String, String>()
         for (name in app.secretNames) {
             val wrapped = transport.ciphertext(app.name, name) ?: continue
-            val plaintext = key.decrypt(wrapped.ciphertext) ?: return name
+            val plaintext = key.decrypt(wrapped.ciphertext)
+            if (plaintext == null) {
+                return SecretResolution.Undecryptable(name)
+            }
             values[name] = String(plaintext, Charsets.UTF_8)
         }
 
-        writeEnvFile(File(appDir, ENV_FILE), values)
-
-        return null
+        return SecretResolution.Resolved(values)
     }
 
     /** Writes `KEY=VALUE` lines at mode 0600, creating the app directory if needed. */
-    private fun writeEnvFile(
-        file: File,
+    fun writeEnv(
+        appDir: File,
         values: Map<String, String>,
     ) {
+        if (values.isEmpty()) return
+
+        val file = File(appDir, ENV_FILE)
         file.parentFile?.mkdirs()
 
-        val text = values.entries.joinToString("\n", postfix = "\n") { (k, v) -> "$k=$v" }
-        file.writeText(text)
+        file.writeText(values.entries.joinToString("\n", postfix = "\n") { (k, v) -> "$k=$v" })
         file.setReadable(false, false)
         file.setReadable(true, true)
         file.setWritable(false, false)

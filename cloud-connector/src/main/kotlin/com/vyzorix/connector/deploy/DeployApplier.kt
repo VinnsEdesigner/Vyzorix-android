@@ -3,6 +3,7 @@ package com.vyzorix.connector.deploy
 import com.vyzorix.connector.config.AppConfig
 import com.vyzorix.connector.config.ArtifactConfig
 import com.vyzorix.connector.config.DeviceConfig
+import com.vyzorix.connector.secret.SecretResolution
 import com.vyzorix.connector.secret.SecretStore
 import com.vyzorix.engine.TarGz
 import java.io.File
@@ -51,13 +52,29 @@ class DeployApplier(
             prepare(config.version, app, pending)?.let { return it }
         }
 
+        // Resolve every secret before touching the live tree: a secret that will not
+        // open must abort with the device unchanged.
+        val resolved = mutableMapOf<String, Map<String, String>>()
+        for (app in config.apps) {
+            when (val resolution = resolveSecrets(app)) {
+                is SecretResolution.Resolved -> resolved[app.name] = resolution.values
+                is SecretResolution.Undecryptable ->
+                    return ApplyResult.refused(
+                        config.version,
+                        "secret_undecryptable",
+                        "${app.name}.${resolution.key}",
+                    )
+            }
+        }
+
         val removed =
             registry.read(registryPath()).map { it.name }.filterNot { name ->
                 config.apps.any { it.name == name }
             }
 
-        commit(config.apps, pending)
-        writeSecrets(config)?.let { return it }
+        purge(config.apps)
+        install(pending)
+        writeSecrets(config, resolved)
         registry.write(registryPath(), config.apps)
         removed.forEach { supervisor.stop(it) }
 
@@ -114,22 +131,12 @@ class DeployApplier(
         if (artifact.kind == WEBROOT) "${artifact.name}/$WEBROOT_DIR" else artifact.name
 
     /**
-     * Installs the staged artifacts, purging an app's data first when it declares it.
+     * Installs the staged artifacts.
      *
-     * This is the first point the live tree is touched, so everything before it is
-     * free to fail.
+     * The first point the live tree is touched, so everything before it is free to
+     * fail.
      */
-    private fun commit(
-        apps: List<AppConfig>,
-        pending: List<Install>,
-    ) {
-        for (app in apps) {
-            if (app.purge) {
-                // The only thing that deletes an app's data (§9.3, FR-20).
-                File(appsRoot(), app.name).deleteRecursively()
-            }
-        }
-
+    private fun install(pending: List<Install>) {
         for (install in pending) {
             install.live.parentFile?.mkdirs()
             val backup = File(install.live.parentFile, "${install.live.name}$BACKUP_SUFFIX")
@@ -146,22 +153,29 @@ class DeployApplier(
         }
     }
 
-    /** Writes each app's secrets, or returns a refusal naming the secret that failed. */
-    private fun writeSecrets(config: DeviceConfig): ApplyResult? {
-        val store = secrets ?: return null
-
-        for (app in config.apps) {
-            val failed = store.write(app, File(appsRoot(), app.name))
-            if (failed != null) {
-                return ApplyResult.refused(
-                    config.version,
-                    "secret_undecryptable",
-                    "${app.name}.$failed",
-                )
+    /** Deletes the data of an app that declares `purge` (§9.3, FR-20). */
+    private fun purge(apps: List<AppConfig>) {
+        for (app in apps) {
+            if (app.purge) {
+                File(appsRoot(), app.name).deleteRecursively()
             }
         }
+    }
 
-        return null
+    /** Resolves [app]'s secrets, or reports the store is absent as no secrets. */
+    private fun resolveSecrets(app: AppConfig): SecretResolution =
+        secrets?.resolve(app) ?: SecretResolution.Resolved(emptyMap())
+
+    /** Writes the resolved secrets into each app's directory. */
+    private fun writeSecrets(
+        config: DeviceConfig,
+        resolved: Map<String, Map<String, String>>,
+    ) {
+        val store = secrets ?: return
+
+        for (app in config.apps) {
+            store.writeEnv(File(appsRoot(), app.name), resolved[app.name].orEmpty())
+        }
     }
 
     private fun appsRoot(): File = stagingDir.parentFile ?: stagingDir

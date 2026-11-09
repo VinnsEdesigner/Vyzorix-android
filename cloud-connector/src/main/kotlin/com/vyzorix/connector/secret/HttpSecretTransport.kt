@@ -48,6 +48,11 @@ class HttpSecretTransport(
 
             val body = response.body?.string().orEmpty()
             val dto = json.decodeFromString(CiphertextDto.serializer(), body)
+            if (dto.envelope != EXPECTED_ENVELOPE) {
+                // The device only speaks RSA-OAEP-SHA1 (the Keystore's constraint), so
+                // an unknown envelope is a refusal rather than a decryption attempt.
+                throw IOException("unsupported secret envelope: ${dto.envelope}")
+            }
 
             return WrappedSecret(dto.ciphertext, dto.envelope)
         }
@@ -64,5 +69,8 @@ class HttpSecretTransport(
 
     private companion object {
         const val HTTP_NOT_FOUND = 404
+
+        /** The only envelope the device's Keystore key can open (§9b.3). */
+        const val EXPECTED_ENVELOPE = "RSA-OAEP-SHA1"
     }
 }

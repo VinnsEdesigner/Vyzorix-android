@@ -4,14 +4,14 @@ import com.vyzorix.connector.config.AppConfig
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * The secret store: decrypt, write a `0600` `.env`, and refuse rather than skip a
- * secret that will not open (VYZORIX_DEPLOY_CONTRACT.md §9b.4–§9b.5, FR-26).
+ * The secret store: resolve and decrypt, write a private `.env`, and report a secret
+ * that will not open rather than skipping it (VYZORIX_DEPLOY_CONTRACT.md
+ * §9b.4–§9b.5, FR-26).
  */
 class SecretStoreTest {
     @get:Rule
@@ -53,49 +53,58 @@ class SecretStoreTest {
     )
 
     @Test
-    fun `writes the decrypted values to a private env file`() {
-        val appDir = folder.newFolder("vfd")
+    fun `resolves the decrypted values`() {
         val store =
             SecretStore(
                 key = FakeKey(mapOf("c1" to "postgres://db")),
                 transport = FakeTransport(mapOf(("vfd" to "DATABASE_URL") to "c1")),
             )
 
-        val failure = store.write(app("vfd", listOf("DATABASE_URL")), appDir)
+        val resolution = store.resolve(app("vfd", listOf("DATABASE_URL")))
 
-        assertNull(failure)
+        assertEquals(
+            SecretResolution.Resolved(mapOf("DATABASE_URL" to "postgres://db")),
+            resolution,
+        )
+    }
+
+    @Test
+    fun `writes the resolved values to a private env file`() {
+        val appDir = folder.newFolder("vfd")
+
+        SecretStore(key = FakeKey(emptyMap()), transport = FakeTransport(emptyMap()))
+            .writeEnv(appDir, mapOf("DATABASE_URL" to "postgres://db"))
+
         val env = File(appDir, ".env")
         assertEquals("DATABASE_URL=postgres://db\n", env.readText())
         assertFalse(env.canExecute())
     }
 
     @Test
-    fun `an app with no secrets writes no file`() {
+    fun `writing an empty set creates no file`() {
         val appDir = folder.newFolder("vfd")
-        val store = SecretStore(key = FakeKey(emptyMap()), transport = FakeTransport(emptyMap()))
 
-        assertNull(store.write(app("vfd", emptyList()), appDir))
+        SecretStore(key = FakeKey(emptyMap()), transport = FakeTransport(emptyMap()))
+            .writeEnv(appDir, emptyMap())
+
         assertFalse(File(appDir, ".env").exists())
     }
 
     @Test
-    fun `a ciphertext that will not open is a refusal, not a skip`() {
-        val appDir = folder.newFolder("vfd")
+    fun `a ciphertext that will not open is reported, not skipped`() {
         val store =
             SecretStore(
                 key = FakeKey(emptyMap()),
                 transport = FakeTransport(mapOf(("vfd" to "DATABASE_URL") to "c1")),
             )
 
-        val failure = store.write(app("vfd", listOf("DATABASE_URL")), appDir)
+        val resolution = store.resolve(app("vfd", listOf("DATABASE_URL")))
 
-        assertEquals("DATABASE_URL", failure)
-        assertFalse(File(appDir, ".env").exists())
+        assertEquals(SecretResolution.Undecryptable("DATABASE_URL"), resolution)
     }
 
     @Test
     fun `an unset secret is simply absent`() {
-        val appDir = folder.newFolder("vfd")
         val store =
             SecretStore(
                 key = FakeKey(mapOf("c1" to "value")),
@@ -103,9 +112,8 @@ class SecretStoreTest {
             )
 
         // S3_SECRET_KEY is named but not set on the server.
-        val failure = store.write(app("vfd", listOf("DATABASE_URL", "S3_SECRET_KEY")), appDir)
+        val resolution = store.resolve(app("vfd", listOf("DATABASE_URL", "S3_SECRET_KEY")))
 
-        assertNull(failure)
-        assertEquals("DATABASE_URL=value\n", File(appDir, ".env").readText())
+        assertEquals(SecretResolution.Resolved(mapOf("DATABASE_URL" to "value")), resolution)
     }
 }
