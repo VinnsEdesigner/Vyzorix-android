@@ -86,6 +86,8 @@ class CloudConnection(
          */
         val deployApplier: DeployApplier? = null,
         val tierHint: Int = DeviceFactsCollector.TIER_UNROOTED,
+        /** The wall clock, injected so a test can expire a pairing code without waiting. */
+        val clock: () -> Long = System::currentTimeMillis,
     )
 
     private val context = deps.context
@@ -102,6 +104,7 @@ class CloudConnection(
     private val updateChecker = deps.updateChecker
     private val deployApplier = deps.deployApplier
     private val tierHint = deps.tierHint
+    private val clock = deps.clock
     private val running = AtomicBoolean(false)
 
     /**
@@ -127,6 +130,18 @@ class CloudConnection(
      * else happens to trigger a fetch.
      */
     private var configPoller: ConfigPoller? = null
+
+    /**
+     * The pairing code last issued by the server, or null before enroll and once the
+     * device is claimed.
+     *
+     * The code expires (the server's TTL), and a device that is never claimed would
+     * otherwise keep displaying a dead code forever: the operator typing it gets a
+     * 404 and the only fix is a service restart. Holding the code lets the poller see
+     * it has expired and re-enroll for a fresh one, so a live code is always on screen.
+     */
+    @Volatile
+    private var pairingCode: PairingCode? = null
 
     /**
      * How often to ask for the config while waiting to be claimed, in seconds.
@@ -361,15 +376,19 @@ class CloudConnection(
 
         deviceId = response.deviceId
         pollIntervalSeconds = response.pollIntervalSeconds
-        notification.waiting(
-            PairingCode
-                .from(
-                    code = response.pairingCode,
-                    display = response.pairingDisplay,
-                    expiresAt = response.expiresAt,
-                    expiresInSeconds = response.expiresInSeconds,
-                ).display,
-        )
+
+        val code =
+            PairingCode.from(
+                code = response.pairingCode,
+                display = response.pairingDisplay,
+                expiresAt = response.expiresAt,
+                expiresInSeconds = response.expiresInSeconds,
+            )
+        // Held so the poller can refresh it once it expires: the device enrolls once,
+        // and without this a code that lapses while the device waits to be claimed is
+        // shown forever even though the server has already forgotten it.
+        pairingCode = code
+        notification.waiting(code.display)
 
         // The code is shown; now wait to be claimed. The socket push is the primary
         // path, but a device whose socket is not up yet would otherwise sit
@@ -404,6 +423,11 @@ class CloudConnection(
      * device now holds one. Used by the poller as its cadence tick.
      */
     private fun fetchConfigOnce(): Boolean {
+        // While the device waits to be claimed its pairing code can lapse. Re-enroll
+        // for a fresh one first, so the code on screen is always claimable — a lapsed
+        // code is otherwise only fixable by restarting the service.
+        refreshPairingCodeIfExpired()
+
         val requestSigner = wsRequestSigner() ?: return false
 
         return try {
@@ -421,6 +445,32 @@ class CloudConnection(
             Log.d(TAG, "config poll failed: ${e.message}")
 
             false
+        }
+    }
+
+    /**
+     * Re-enrolls for a fresh pairing code when the one on screen has expired.
+     *
+     * The server issues the code once, at enroll, with a TTL and no way for the device
+     * to extend it. A device that sits unclaimed past that TTL would otherwise show a
+     * code the server has already forgotten — the operator types it and gets a 404,
+     * and only a service restart fixes it. Re-enrolling is idempotent for an unclaimed
+     * device (the server refreshes the pending record) and mints a new code, so this
+     * keeps a claimable code on screen for as long as the device waits.
+     */
+    private fun refreshPairingCodeIfExpired() {
+        val code = pairingCode ?: return
+        if (!code.needsRefresh(clock())) return
+
+        Log.i(TAG, "pairing code near or past expiry; re-enrolling for a fresh one")
+
+        when (attemptEnroll()) {
+            EnrollOutcome.Enrolled -> Log.i(TAG, "a fresh pairing code is on screen")
+            // Claimed while the code was expiring: there is no code to show any more.
+            EnrollOutcome.AlreadyClaimed -> pairingCode = null
+            // Transient (offline) or terminal: leave the state as it is and let the next
+            // tick retry. A terminal refusal has already stopped the connection.
+            else -> Unit
         }
     }
 
@@ -556,6 +606,9 @@ class CloudConnection(
         try {
             val config = configStore.apply(document)
             notification.running(config.name)
+            // A config means the device is claimed, so the pairing code is spent: drop
+            // it so the poller stops trying to refresh it.
+            pairingCode = null
             // A config has arrived, so the waiting is over: the socket push and the
             // reconnect-time version check own it from here.
             configPoller?.stop()

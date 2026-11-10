@@ -757,3 +757,41 @@ an Android 13 emulator. Pairing code shown in the notification. Key facts:
   the WS push frames are refused (device clock or pinned-key mismatch?). Config
   polling still works, so pairing is unaffected. Full detail:
   `2026-11-10-api33-emulator-e2e.md`.
+
+## Claim flow + the telemetry frame-drop bug (2026-11-10, later)
+- **Claim is CSRF-protected**: `GET /v1/auth/csrf-token` -> `POST /v1/auth/login`
+  (`X-CSRF-Token`) -> `POST /v1/device/claim` (cookie + `X-Organization-ID` +
+  `X-CSRF-Token`, body `{"pairingCode":"XXXX-XXXX"}`). Operator creds in
+  `/workspace/.vyzorix-secrets/provisioning.yaml`.
+- **Pairing code TTL is 10 min and the device never refreshes it** (re-enroll 409s once
+  claimed). To claim, restart the FGS for a fresh code, then claim immediately.
+- **`vyzorix.fly.dev` is >1 machine with in-memory sessions** — a login then a claim
+  that land on different machines gives `AUTH_TOKEN_INVALID`. Retry the pair.
+- **`dropped a frame: command frame signature invalid` (every ~60s) was the telemetry
+  echo.** The server `BroadcastTelemetry` sends every client (incl. the sender) an
+  unsigned `{type:"broadcast"}` frame each tick; the device treated it as a command.
+  Fixed device-side: `CommandDispatcher` returns `Handled.Ignored` for a frame with an
+  empty `command` (a real command always has one), logged at debug. Server is correct
+  (`TestHubBroadcastTelemetry`). Verified: 0 drops on the emulator.
+- **"Not running" on an already-configured restart**: `applyConfig` (which posts the
+  running notification) only runs for a *new* config, so a restart showed "Not running".
+  Fixed with `CloudConnection.reconcileNotificationFromStoredConfig()`.
+- **Publishing**: `scripts/release-apk.sh` needs `GH_TOKEN="$GIT"` (the ambient
+  `GITHUB_TOKEN` is `quavokheed` and cannot see `VinnsEdesigner/gz-_ASSETS`), the
+  keystore env, and **`g++-aarch64-linux-gnu`** installed (its internal gate runs
+  `:app:buildLayer3`). Published `app-v0.1.5`; `--latest=false` kept "latest" on
+  `v0.1.2` so the rootfs still resolves. Source commit `8a719c5` is local-only.
+
+## Server logs, DB, and the expired pairing code (2026-11-10, later still)
+- **`flyctl` install**: official release tarball, `export FLY_API_TOKEN="$FLY_IO_ORG_TOKEN"`,
+  then `flyctl logs -a vyzorix`. **Turso** via the `/v2/pipeline` HTTP API with
+  `$TURSO_Vyzorix_main_TOKEN` (null cells have no `value` key; column is `api_level`).
+- **Pairing codes expire in 10 min and the device never refreshes them** (it enrolls
+  once; `PairingCode.isExpired` is unused). So a claim more than 10 min after the device
+  booted 404s with "pairing code not found". Fix pending: re-enroll when the code expires.
+- **Minting a fresh code for an already-enrolled-but-unclaimed device**: re-POST
+  `/v1/device/enroll` with the *same* uuid + its stored publicKey/secretKey (idempotent
+  when unclaimed), then claim immediately.
+- Claimed the real Nokia C22 (`c48108aa…`): server `device claimed`, DB org+operator set,
+  `online=1`, and its config polls stopped (config received). No server errors.
+- `device_ready` is **not logged** by the server, so that step is unverifiable from logs.

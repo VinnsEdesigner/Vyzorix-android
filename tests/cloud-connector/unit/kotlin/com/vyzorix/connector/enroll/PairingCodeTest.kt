@@ -46,4 +46,36 @@ class PairingCodeTest {
         assertEquals(0, code.secondsRemaining(5_000))
         assertEquals(1, code.secondsRemaining(0))
     }
+
+    @Test
+    fun `a code well before expiry is not refreshed`() {
+        // expires at 100s; with a 30s lead, refresh only from 70s.
+        val code = PairingCode.from("K7QM3X2P", "", expiresAt = 100_000, expiresInSeconds = 100)
+
+        assertFalse(code.needsRefresh(69_999))
+    }
+
+    @Test
+    fun `a code within the refresh lead is refreshed`() {
+        val code = PairingCode.from("K7QM3X2P", "", expiresAt = 100_000, expiresInSeconds = 100)
+
+        assertTrue(code.needsRefresh(70_000))
+        assertTrue(code.needsRefresh(99_999))
+    }
+
+    @Test
+    fun `a code at or past expiry is refreshed`() {
+        val code = PairingCode.from("K7QM3X2P", "", expiresAt = 100_000, expiresInSeconds = 100)
+
+        assertTrue(code.needsRefresh(100_000))
+        assertTrue(code.needsRefresh(200_000))
+    }
+
+    @Test
+    fun `the refresh lead is adjustable`() {
+        val code = PairingCode.from("K7QM3X2P", "", expiresAt = 100_000, expiresInSeconds = 100)
+
+        assertFalse(code.needsRefresh(95_000, leadMs = 1_000))
+        assertTrue(code.needsRefresh(95_000, leadMs = 10_000))
+    }
 }

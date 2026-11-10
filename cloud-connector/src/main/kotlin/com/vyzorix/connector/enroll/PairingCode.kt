@@ -31,7 +31,23 @@ data class PairingCode(
     /** Seconds remaining, never negative. Uses the absolute deadline. */
     fun secondsRemaining(nowMs: Long): Long = ((expiresAt - nowMs) / 1000).coerceAtLeast(0)
 
+    /**
+     * True when the code should be replaced.
+     *
+     * The device refreshes on its config-poll cadence, so waiting until the exact
+     * instant of expiry would leave up to one poll interval of a code the server has
+     * already forgotten — the operator types it and gets a 404. Refreshing [leadMs]
+     * before expiry closes that window, so what is on screen is always claimable.
+     */
+    fun needsRefresh(
+        nowMs: Long,
+        leadMs: Long = REFRESH_LEAD_MS,
+    ): Boolean = nowMs >= expiresAt - leadMs
+
     companion object {
+        /** Refresh this long before expiry, so a shown code is never past its TTL. */
+        const val REFRESH_LEAD_MS = 30_000L
+
         /**
          * Builds from the server's response fields. [display] falls back to grouping
          * [code] in fours if the server did not send one, so the notification never
