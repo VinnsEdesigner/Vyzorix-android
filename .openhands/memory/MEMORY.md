@@ -737,3 +737,23 @@ name carries the flavor.
 - **Do not pass commit messages containing backticks through a double-quoted
   `git commit -m`** — the shell runs them as command substitution and mangles the
   message. Use `git commit -F -` with a quoted heredoc.
+
+## API 33 emulator E2E (2026-11-10) — pairing code verified live
+Ran build -> install -> accessibility -> enroll against `https://vyzorix.fly.dev` on
+an Android 13 emulator. Pairing code shown in the notification. Key facts:
+- The API 33 image was **not** installed by default (`x86test` is API 28); install
+  `system-images;android-33;default;x86_64` and create an AVD. No KVM here -> `-accel off`.
+- **AVD userdata is allocated eagerly**; the emulator refused to boot needing ~7.4 GB.
+  Editing `disk.dataPartition.size` in config.ini is overwritten — pass
+  `-partition-size 2048` (and free disk) instead.
+- **`./gradlew clean` fixes a Kotlin front-end `EOFException` ICE** after the recent
+  package rename (stale incremental cache). Do this before debugging further.
+- The FGS is **not exported**; `am start-foreground-service` fails from the shell.
+  `adb root` first, then it works. Action `com.vyzorix.service.action.START`.
+- Enabling accessibility (settings put secure enabled_accessibility_services +
+  accessibility_enabled 1) posts the "Start Vyzorix" notification and disables the
+  launcher alias. The pairing code appears after the FGS starts.
+- Open question: `dropped a frame: command frame signature invalid` every ~60 s —
+  the WS push frames are refused (device clock or pinned-key mismatch?). Config
+  polling still works, so pairing is unaffected. Full detail:
+  `2026-11-10-api33-emulator-e2e.md`.

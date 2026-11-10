@@ -46,6 +46,24 @@ class DeviceNotification(
         )
     }
 
+    /**
+     * The "starting" notification as an object, for `startForeground`.
+     *
+     * The foreground service must hand the system a Notification in the same call
+     * that promotes it, so it cannot go through [post]. This builds the same object
+     * [running] would for its state, exactly as [runningNotification] does.
+     *
+     * There is no `post`-based twin, unlike [running]: the only caller is
+     * `startForeground`, which needs the object. A second method nothing calls would
+     * be dead code the gate would (correctly) fail on.
+     */
+    fun startingNotification(): Notification =
+        base()
+            .setContentTitle("Vyzorix")
+            .setContentText("Starting…")
+            .setStyle(Notification.BigTextStyle().bigText("Starting…"))
+            .build()
+
     /** The container is running and waiting to be claimed; show the pairing code. */
     fun waiting(code: String) {
         post(

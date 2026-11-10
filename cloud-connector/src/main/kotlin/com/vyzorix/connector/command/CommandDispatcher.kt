@@ -68,8 +68,21 @@ class CommandDispatcher(
             val document: String,
         ) : Handled()
 
-        /** The frame was refused or is not a command; nothing to send. */
+        /** The frame was refused; nothing to send. */
         class Dropped(
+            val reason: String,
+        ) : Handled()
+
+        /**
+         * The frame is not addressed to the device as a command: nothing to verify and
+         * nothing to send.
+         *
+         * The server echoes device telemetry back to connected clients as a `broadcast`
+         * frame, which carries no `command`. Treating that as an unsigned command
+         * reported a signature failure on every telemetry tick. It is neither a command
+         * nor a refusal, so it is ignored.
+         */
+        class Ignored(
             val reason: String,
         ) : Handled()
     }
@@ -89,7 +102,18 @@ class CommandDispatcher(
             return handleConfig(raw)
         }
 
-        return handleCommand(raw)
+        val frame = decode(raw) ?: return Handled.Dropped("command frame did not parse")
+
+        // A command frame always carries a non-empty `command`: the server sets both
+        // `type` and `command` to the command name. A frame without one is not a
+        // command — the server's telemetry `broadcast` echo is the case seen in the
+        // field — so it is ignored rather than verified and refused. This is what
+        // keeps a non-command frame from being reported as a signature failure.
+        if (frame.command.isEmpty()) {
+            return Handled.Ignored("not a command frame (type=$type)")
+        }
+
+        return handleCommand(raw, frame)
     }
 
     @Suppress("SwallowedException")
@@ -118,9 +142,10 @@ class CommandDispatcher(
         return Handled.Config(version, document)
     }
 
-    private fun handleCommand(raw: String): Handled {
-        val frame = decode(raw) ?: return Handled.Dropped("command frame did not parse")
-
+    private fun handleCommand(
+        raw: String,
+        frame: ParsedFrame,
+    ): Handled {
         if (!verifySignature(frame, raw)) {
             return Handled.Dropped("command frame signature invalid")
         }

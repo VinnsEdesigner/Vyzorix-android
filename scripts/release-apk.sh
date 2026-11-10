@@ -8,7 +8,6 @@
 #       --cloud-url https://vyzorix.example.com
 #
 # Flags:
-#   --flavor NAME           product flavor: full (default) or sideload
 #   --debug                 build the debug APK (default: release)
 #   --tag TAG               release tag (default: app-v<versionName>)
 #   --version-code N        Android versionCode (default: 1)
@@ -44,7 +43,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
 BUILD_TYPE="release"
-FLAVOR="full"
 TAG=""
 VERSION_CODE="1"
 VERSION_NAME="0.1.0"
@@ -65,7 +63,6 @@ usage() { sed -n '2,40p' "$0"; exit 0; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --flavor)          FLAVOR="$2"; shift 2 ;;
     --debug)           BUILD_TYPE="debug"; shift ;;
     --release)         BUILD_TYPE="release"; shift ;;
     --tag)             TAG="$2"; shift 2 ;;
@@ -225,12 +222,8 @@ fi
 log "building the ${BUILD_TYPE} APK for ${ROOTFS_ABI}"
 echo "sdk.dir=${ANDROID_HOME}" > local.properties
 
-# Gradle task and output dir are flavor-qualified: :app:assemble<Flavor><Type>,
-# and the APK lands in outputs/apk/<flavor>/<type>/. The `full` flavor is the
-# default, so an invocation without --flavor is unchanged from before flavors.
-flavor_cap="$(printf '%s' "${FLAVOR}" | sed 's/^\(.\)/\U\1/')"
-task=":app:assemble${flavor_cap}Release"
-[[ "${BUILD_TYPE}" == "debug" ]] && task=":app:assemble${flavor_cap}Debug"
+task=":app:assembleRelease"
+[[ "${BUILD_TYPE}" == "debug" ]] && task=":app:assembleDebug"
 
 ./gradlew "${task}" --no-daemon \
   -ProotfsAbi="${ROOTFS_ABI}" \
@@ -239,16 +232,16 @@ task=":app:assemble${flavor_cap}Release"
   -PappVersionCode="${VERSION_CODE}" \
   -PappVersionName="${VERSION_NAME}"
 
-APK_DIR="${REPO_ROOT}/app/build/outputs/apk/${FLAVOR}/${BUILD_TYPE}"
-APK_NAME="vyzorix-app-v${VERSION_NAME}-${FLAVOR}-${BUILD_TYPE}-${ROOTFS_ABI}.apk"
+APK_DIR="${REPO_ROOT}/app/build/outputs/apk/${BUILD_TYPE}"
+APK_NAME="vyzorix-app-v${VERSION_NAME}-${BUILD_TYPE}-${ROOTFS_ABI}.apk"
 STAGE="$(mktemp -d)"
 APK="${STAGE}/${APK_NAME}"
 
 # An unsigned release build is named `app-release-unsigned.apk`; a signed one is
 # `app-release.apk`. Take whichever exists rather than assuming.
-SOURCE_APK="${APK_DIR}/app-${FLAVOR}-${BUILD_TYPE}.apk"
-[[ -f "${SOURCE_APK}" ]] || SOURCE_APK="${APK_DIR}/app-${FLAVOR}-${BUILD_TYPE}-unsigned.apk"
-[[ -f "${SOURCE_APK}" ]] || die "no APK at ${APK_DIR}/app-${FLAVOR}-${BUILD_TYPE}*.apk"
+SOURCE_APK="${APK_DIR}/app-${BUILD_TYPE}.apk"
+[[ -f "${SOURCE_APK}" ]] || SOURCE_APK="${APK_DIR}/app-${BUILD_TYPE}-unsigned.apk"
+[[ -f "${SOURCE_APK}" ]] || die "no APK at ${APK_DIR}/app-${BUILD_TYPE}*.apk"
 
 cp "${SOURCE_APK}" "${APK}"
 info "built ${APK} ($(du -h "${APK}" | cut -f1))"

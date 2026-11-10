@@ -631,15 +631,18 @@ class VyzorixForegroundService : Service() {
     }
 
     /**
-     * The foreground notification, in the shared "running" state.
+     * The foreground notification, in the "starting" state.
      *
-     * The container service only runs once the operator has tapped Start, so by the
-     * time this is posted the device is past the "needs start" state; the cloud
-     * connection moves it to "waiting" (pairing code) and then "running" (claimed).
+     * It is deliberately *not* "running": this is posted the instant the service is
+     * promoted, which is before enrollment has been attempted, and claiming "running"
+     * there hid a stalled enrollment behind a reassuring label. The cloud connection
+     * moves the same notification on to "waiting" (pairing code) and then "running"
+     * (claimed) once those are actually true.
+     *
      * It shares [DeviceNotification.NOTIFICATION_ID], so the service's notification
      * and the state machine's are the same object — one Vyzorix notification.
      */
-    private fun buildNotification(): Notification = DeviceNotification(this).runningNotification()
+    private fun buildNotification(): Notification = DeviceNotification(this).startingNotification()
 
     companion object {
         private const val TAG = "VyzorixService"

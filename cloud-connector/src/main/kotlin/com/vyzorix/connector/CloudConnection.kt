@@ -18,6 +18,8 @@ import com.vyzorix.connector.config.ConfigStore
 import com.vyzorix.connector.deploy.ApplyResult
 import com.vyzorix.connector.deploy.DeployApplier
 import com.vyzorix.connector.deploy.DeployReporter
+import com.vyzorix.connector.enroll.EnrollOutcome
+import com.vyzorix.connector.enroll.EnrollRetry
 import com.vyzorix.connector.enroll.PairingCode
 import com.vyzorix.connector.identity.DeviceFactsCollector
 import com.vyzorix.connector.identity.DeviceSigner
@@ -101,6 +103,15 @@ class CloudConnection(
     private val deployApplier = deps.deployApplier
     private val tierHint = deps.tierHint
     private val running = AtomicBoolean(false)
+
+    /**
+     * Retries a failed enroll until it succeeds.
+     *
+     * Enroll is the precondition for everything else: a device the server has not
+     * heard of cannot open an authenticated socket, so a single failed attempt must
+     * not fall through to one.
+     */
+    private val enrollRetry = EnrollRetry()
     private var wsClient: DeviceWsClient? = null
     private var dispatcher: CommandDispatcher? = null
 
@@ -157,12 +168,54 @@ class CloudConnection(
         Thread({
             if (!running.get()) return@Thread
 
-            ensureEnrolled()
+            // Enrollment is a precondition, not a step to attempt once. A failure here
+            // means the server has never heard of this device, so opening the socket
+            // would retry forever against a device that cannot be authenticated — the
+            // silent, permanent stall this loop exists to remove.
+            val outcome =
+                enrollRetry.run(
+                    shouldContinue = { running.get() },
+                    attempt = { attemptEnroll() },
+                )
 
             if (!running.get()) return@Thread
 
+            // A terminal refusal is not something the socket can fix: there is no
+            // valid request to send, so the connection stops rather than spinning.
+            // `Enrolled` and `AlreadyClaimed` both mean the server knows the device.
+            if (outcome is EnrollOutcome.Rejected) {
+                Log.w(TAG, "not opening the socket: enrollment was refused")
+
+                return@Thread
+            }
+
+            if (outcome is EnrollOutcome.Stopped) return@Thread
+
+            // A device that restarts holding a current config never reaches
+            // applyConfig — the config is not stale, so nothing re-applies it — and its
+            // notification therefore reverted to the service's "Not running" one even
+            // though it is configured. Reconcile it from the stored config before
+            // opening the socket.
+            reconcileNotificationFromStoredConfig()
+
             openSocket()
         }, "vyzorix-cloud-start").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Re-posts the "running" notification for a device that already holds a verified
+     * config.
+     *
+     * The "running" state is otherwise posted only from [applyConfig], which runs when a
+     * *new* config arrives. A device that restarts with a current config — the normal
+     * case after the first claim — takes no such path, so it showed "Not running" while
+     * it was in fact configured and online. A device with no stored config returns
+     * early: the enroll path owns the notification for an unclaimed device.
+     */
+    private fun reconcileNotificationFromStoredConfig() {
+        val config = configStore.current() ?: return
+
+        notification.running(config.name)
     }
 
     /** Stops the connection. The service calls this from `onDestroy`. */
@@ -243,7 +296,7 @@ class CloudConnection(
     }
 
     @Suppress("SwallowedException")
-    private fun ensureEnrolled() {
+    private fun attemptEnroll(): EnrollOutcome {
         // The server's enroll is idempotent for a pending device, so a device that
         // lost its code simply gets a fresh one. A device that is already claimed
         // returns 409, which means onboarding is done and there is nothing to show.
@@ -281,24 +334,29 @@ class CloudConnection(
                     // Onboarding is done: no code to show, go straight to the socket.
                     Log.i(TAG, "device is already claimed; skipping the pairing code")
 
-                    return
+                    return EnrollOutcome.AlreadyClaimed
                 }
 
-                // A rate limit or a server fault is worth retrying; a validation error
-                // is not, and retrying it would only repeat it.
+                // A rate limit or a server fault is transient and worth retrying; a
+                // validation error is the server refusing the request itself, and
+                // repeating it only repeats the refusal.
                 Log.i(TAG, "enroll did not complete (retryable=${e.isRetryable}): ${e.message}")
 
-                return
+                return if (e.isRetryable) {
+                    EnrollOutcome.Transient(e.message ?: "retryable error")
+                } else {
+                    EnrollOutcome.Rejected(e.message ?: "refused")
+                }
             } catch (
                 @Suppress("SwallowedException") e: IOException,
             ) {
-                // Any transport failure — DNS, TLS, a blocked cleartext request — must
-                // not escape: this runs inside the foreground service's start path, so
-                // an uncaught exception takes the whole service down and the device
-                // stops answering commands. The socket's reconnect loop retries.
+                // Any transport failure — DNS, TLS, a blocked cleartext request — is
+                // transient: a phone that is offline at boot is the normal case, not
+                // an error. The retry loop waits and tries again, and an uncaught
+                // exception here would take the whole service down.
                 Log.w(TAG, "enroll failed at the transport: ${e.message}")
 
-                return
+                return EnrollOutcome.Transient(e.message ?: "transport failure")
             }
 
         deviceId = response.deviceId
@@ -317,6 +375,8 @@ class CloudConnection(
         // path, but a device whose socket is not up yet would otherwise sit
         // unconfigured after a claim, so the server's cadence is honoured here.
         startConfigPolling()
+
+        return EnrollOutcome.Enrolled
     }
 
     /**
@@ -474,6 +534,13 @@ class CloudConnection(
                 // impossible to diagnose from a device, and a config frame that failed
                 // verification must leave a trace.
                 Log.w(TAG, "dropped a frame: ${handled.reason}")
+            }
+            is CommandDispatcher.Handled.Ignored -> {
+                // A frame that is not a command and not a config: the server's
+                // telemetry `broadcast` echo is the one seen in the field. It is
+                // normal, not a failure, so it is logged at debug rather than as a
+                // dropped frame — a per-tick warning here read as a persistent fault.
+                Log.d(TAG, "ignored a frame: ${handled.reason}")
             }
         }
     }

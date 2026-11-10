@@ -188,6 +188,36 @@ class CommandDispatcherTest {
         assertEquals(document, config.document)
     }
 
+    /**
+     * The server echoes device telemetry back to connected clients as a `broadcast`
+     * frame, which carries no `command`. It is not a command, so it must be ignored,
+     * not verified and reported as a signature failure — which is what produced a
+     * "command frame signature invalid" warning on every telemetry tick.
+     */
+    @Test
+    fun `a telemetry broadcast echo is ignored, not reported as a signature failure`() {
+        val echo =
+            """{"type":"broadcast","args":{"type":"telemetry","deviceId":"dev-1",""" +
+                """"uptime":123}}"""
+
+        val handled = dispatcher().handle(echo)
+
+        assertTrue(handled is CommandDispatcher.Handled.Ignored)
+    }
+
+    /**
+     * An unsigned frame that *does* claim a command is still refused: the ignore path
+     * must not become a way for an attacker to smuggle a command past verification.
+     */
+    @Test
+    fun `a frame with a command but no signature is still dropped`() {
+        val frame = """{"type":"SHELL_EXEC","command":"SHELL_EXEC","dispatchId":"d1"}"""
+
+        val handled = dispatcher().handle(frame)
+
+        assertTrue(handled is CommandDispatcher.Handled.Dropped)
+    }
+
     private fun jsonString(value: String): String {
         val escaped =
             value
