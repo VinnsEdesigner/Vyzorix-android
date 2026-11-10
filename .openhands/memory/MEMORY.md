@@ -2,7 +2,7 @@
 
 ## What this is
 Headless Android agent: a Debian userspace in `proot`, exposed over a cloud
-WebSocket. The server half is `vyzorix-update-server`; this repo is the device
+WebSocket. The server half is `VYZORIX`; this repo is the device
 half. `doc/ANDROID_SERVICE_ARCHITECTURE.md` is the contract; `AGENTS.md` has the
 build/gate details. Read both before structural changes.
 
@@ -81,9 +81,9 @@ embedded loader also used `open(2)`. The guest died with `terminated with signal
   section must be carried forward on any upstream proot bump.
 - **arm64 is unaffected** (glibc uses `openat` there); this is an x86_64-emulator
   issue that nonetheless must be fixed, since the code ships for all ABIs.
-- **Regression tests**: `:app`'s `EngineTerminalE2ETest` (4) and
+- **Regression tests**: `:app`'s `ContainerTerminalE2ETest` (4) and
   `ProotFromAppProcessTest` now pass. `ProotFromAppProcessTest` is flaky when run
-  right after `EngineTerminalE2ETest` (a `libtinfo.so.6 … Operation not
+  right after `ContainerTerminalE2ETest` (a `libtinfo.so.6 … Operation not
   permitted` race); it passes standalone. Not yet diagnosed.
 
 ### Emulator/toolchain notes for this repo
@@ -93,7 +93,7 @@ embedded loader also used `open(2)`. The guest died with `terminated with signal
   Source `/workspace/env.sh`; `GRADLE_USER_HOME=/workspace/gradle-home`.
 - Build the APK for the emulator with `-ProotfsAbi=x86_64` (the bundled rootfs is
   arm64 otherwise). Fetch it from the public `VinnsEdesigner/gz-_ASSETS` release
-  into `debian-engine/rootfs/dist/`; the asset repo is private, so use `$GIT` and
+  into `debian-container/rootfs/dist/`; the asset repo is private, so use `$GIT` and
   the assets API (`Accept: application/octet-stream`) rather than the raw URL.
 - The `emulator` + `adb install` wedge under repeated install/uninstall; `adb emu
   kill` then relaunch (`-wipe-data` if needed). Gradle's device discovery also
@@ -105,7 +105,7 @@ embedded loader also used `open(2)`. The guest died with `terminated with signal
 The container terminal works and Layer 2's missing pieces are built.
 
 - **`android-bin` is C++, not Go** (design change; the repo has two languages:
-  Kotlin/Gradle and C++). `debian-engine/android-bin/` — its own Makefile, built for
+  Kotlin/Gradle and C++). `debian-container/android-bin/` — its own Makefile, built for
   **glibc** with the GNU cross-compilers (`aarch64-linux-gnu-g++`,
   `arm-linux-gnueabihf-g++`), never the NDK. `apis.txt` is the single source: one
   generator pass emits both `api_catalog.cpp` and the symlinks. `ApiCatalogTest`
@@ -405,7 +405,7 @@ of empty input, no APK staged). Both are now real. See `doc/OTA_UPDATE.md`.
   `bin/`, but the server reads `data/version.json` and `bin/` **relative to apps/api**.
   It now writes the paths the server reads. Also: the APK routes registered only GET,
   so HEAD (a client learning the size) got 400 — HEAD is registered now.
-- **The release lives in the PUBLIC `gz-_ASSETS` repo**, not `vyzorix-update-server`:
+- **The release lives in the PUBLIC `gz-_ASSETS` repo**, not `VYZORIX`:
   a private repo's release assets 404 for an unauthenticated device (verified — the
   same trap as the rootfs). `app-v0.1.0` there downloads anonymously (HTTP 200, 64 MB).
 - **`make_latest: false` is load-bearing** on any new `gz-_ASSETS` release: the rootfs
@@ -523,7 +523,7 @@ process stays alive, **0 panics/fatals**; `go vet` and `go test` both pass. Deta
   or keep the session open. That is why the first run showed `DEAD` on the next call.
 
 ## Deploy — device side (Build 1 landed 2026-11-09)
-- **Contract**: `vyzorix-update-server/documents/VYZORIX_DEPLOY_CONTRACT.md`.
+- **Contract**: `VYZORIX/DOCUMENTATION/DEPLOY_PIPELINE.md`.
   The device half (§13.3/§13.4) was entirely unbuilt — the contract's claim that
   `SecretEnvelope.kt` "is already written" is stale; there is no `secret/` package.
 - **Build 1 (this commit) = config foundation**, in `config/`:
@@ -638,3 +638,45 @@ below blocked it and none was covered by a unit test.
   and for a local artifact host `-ProotfsBaseUrl=https://10.0.2.2:8443` with a CA
   installed into `/system/etc/security/cacerts` (needs `emulator -writable-system` +
   `adb remount`). `control_test` fails if anything holds port 3000 (it binds it).
+
+## Release script (2026-11-10, pushed 5d946fb)
+`scripts/release-apk.sh` — one command: toolchain check -> ensure arm64 inputs ->
+gate -> build APK -> sign -> publish a GitHub release (APK + SHA256SUMS).
+- Flags: `--debug` (default release), `--tag`, `--version-code/--version-name`,
+  `--server-key[-file]`, `--cloud-url`, `--repo`, `--dry-run`, `--skip-tests`.
+- **Release-only build trap**: `app/build.gradle.kts` declared the staged-asset
+  dependency only for `merge*Assets`, so `lintVitalRelease` (runs on release, not
+  debug) failed with an undeclared-dependency error. Fixed by also matching Lint/lint
+  task names. If you add a task that reads `app/build/generated/{rootfs,layer3}Assets`,
+  add it to that matcher.
+- An **unsigned release** APK is `app-release-unsigned.apk` (not `app-release.apk`);
+  the script takes whichever exists.
+- **Publishing needs a token that can see the repo**: `GITHUB_TOKEN` here is
+  `quavokheed` and cannot resolve `VinnsEdesigner/Vyzorix-android` (private). `$GIT`
+  works — pass it as `GH_TOKEN="$GIT"`.
+- `--server-key` is a PEM; the script converts newlines to literal `\n` for the
+  Gradle property (the value goes into a Java string literal).
+
+## "engine" -> "container" rename (2026-11-11)
+The device-side concept once called "the engine" is now **"the container"** (proot is a
+userspace container; "engine" was the vague word). Mechanical rename across both repos:
+- Kotlin package `com.vyzorix.engine` -> `com.vyzorix.container`; `EngineConfig` ->
+  `ContainerConfig` (file renamed); `isEngineReady`/`onEngineLost` ->
+  `isContainerReady`/`onContainerLost`; `isEngineZonePath`/`ENGINE_ZONE_DIRS` ->
+  `isSandboxZonePath`/`SANDBOX_ZONE_DIRS`; `EngineTerminalE2ETest` ->
+  `ContainerTerminalE2ETest` (file renamed); `ENGINE_READY_TIMEOUT_MS` ->
+  `CONTAINER_READY_TIMEOUT_MS`. Prose "engine zone" -> "sandbox zone".
+- Dir `debian-engine/` -> `debian-container/` (scripts, README, .clang-tidy,
+  .gitignore, AGENTS.md, docs all updated). `ProotLauncher` kept its name.
+- Server cross-refs updated: `apps/api/internal/domain/permission/scoped.go` comment,
+  `documents/ANDROID_SERVICE_{ARCHITECTURE,BOUNDARY_CONTRACT}.md`,
+  `DOCUMENTATION/DEPLOY_PIPELINE.md`. The `fs` zone name `engine` -> `container`
+  in the boundary contract (prose only; the server never implemented it).
+- **Deliberately NOT renamed**: the deploy-domain *app artifact* named `engine`
+  (a fixture name, e.g. `[[app.artifact]] name = "engine"`, `/home/apps/<app>/engine/`)
+  in cloud-connector tests and server deploy tests/docs; the gin `s.engine` /
+  "permission engine"; "audio engine". Do not "fix" those.
+- Verify recipe that works here: `./gradlew ... -x :app:buildLayer3 -x :app:stageLayer3
+  -x :app:stageRootfs` (the glibc cross-compiler is absent this session, so those native
+  tasks fail for an unrelated reason). `:app:buildLayer3` also needs ktlintFormat run
+  first after a rename (longer identifiers can push a line past 100 chars).

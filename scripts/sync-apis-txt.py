@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes `debian-engine/android-bin/apis.txt` from the bridge's API catalogue.
+"""Writes `debian-container/android-bin/apis.txt` from the bridge's API catalogue.
 
 ## Why this exists
 
@@ -30,7 +30,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOGUE = os.path.join(
     REPO, "android-core/src/main/kotlin/com/vyzorix/bridge/ApiCatalogue.kt"
 )
-APIS_TXT = os.path.join(REPO, "debian-engine/android-bin/apis.txt")
+APIS_TXT = os.path.join(REPO, "debian-container/android-bin/apis.txt")
 
 HEADER = """# The Android APIs exposed to the container as commands.
 #

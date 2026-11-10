@@ -9,7 +9,7 @@ import org.junit.Test
  * `apis.txt` is the container's view of the bridge, and it must match what the
  * router serves.
  *
- * `debian-engine/android-bin/apis.txt` decides which commands exist inside the
+ * `debian-container/android-bin/apis.txt` decides which commands exist inside the
  * container — one symlink per name. The authority is the set of handlers Layer 1
  * registers. The two are separate files in separate languages, so nothing makes
  * them agree except this test.
@@ -40,7 +40,7 @@ class ApiCatalogTest {
     private val registeredApis: Set<String> = ApiCatalogue.names.toSet()
 
     private fun apisTxt(): List<String> {
-        val file = File(repoRoot(), "debian-engine/android-bin/apis.txt")
+        val file = File(repoRoot(), "debian-container/android-bin/apis.txt")
         assertTrue("apis.txt must exist at ${file.absolutePath}", file.isFile)
 
         return file

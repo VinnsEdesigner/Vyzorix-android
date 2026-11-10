@@ -17,7 +17,7 @@
 // rootfs: the registry and the logs must outlive a rootfs replacement, and
 // /home/apps is the one directory that does.
 //
-// It logs to stderr, which the proot PTY captures — the same channel the engine's
+// It logs to stderr, which the proot PTY captures — the same channel the container's
 // own output uses, so `logcat` shows it without a second log path.
 
 #include <csignal>

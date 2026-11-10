@@ -12,7 +12,7 @@ Read it before changing anything structural; it is the contract, and it records
 
 A headless Android agent. It runs a Debian userspace in `proot`, exposes it over
 a cloud WebSocket, and gives operators a terminal and (later) USB and app
-control. The server half already exists in `vyzorix-update-server`; this repo is
+control. The server half already exists in `VYZORIX`; this repo is
 the device half.
 
 ---
@@ -353,14 +353,14 @@ android-core/        the OS-facing library (foreground service, cloud WS,
 cloud-connector/     the cloud client: enroll, device WS, config, commands,
                      telemetry, terminal relay (com.vyzorix.connector)
 app/                 the APK: manifest, permissions, nothing else
-debian-engine/       Layer 2 assets — rootfs tarballs + android-bin (not yet present)
+debian-container/       Layer 2 assets — rootfs tarballs + android-bin (not yet present)
 app-runtime/         Layer 3 — supervisor (C) and app-* CLI wrappers (not yet present)
 doc/                 architecture, the current build contract, spike results
 tests/               all tests, split per module (unit/ and instrumented/)
 ```
 
-`debian-engine/` and `app-runtime/` do not exist yet: they are Layers 2 and 3, and
+`debian-container/` and `app-runtime/` do not exist yet: they are Layers 2 and 3, and
 Layer 2 is blocked on the rootfs asset (see `doc/ANDROID_SERVICE_ARCHITECTURE.md`
 §6.1.1). Note the pty-agent, the proot launcher and first-boot are **not** files in
-`debian-engine/` — they are Kotlin in Layer 1 (`cloud-connector/.../terminal/`,
-`android-core/.../engine/`).
+`debian-container/` — they are Kotlin in Layer 1 (`cloud-connector/.../terminal/`,
+`android-core/.../container/`).

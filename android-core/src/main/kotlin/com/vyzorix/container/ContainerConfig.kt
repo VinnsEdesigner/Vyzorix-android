@@ -1,9 +1,9 @@
-package com.vyzorix.engine
+package com.vyzorix.container
 
 import java.io.InputStream
 
 /**
- * Where the engine's userspace comes from, and how to verify it.
+ * Where the container's userspace comes from, and how to verify it.
  *
  * ## Why this exists rather than reading `BuildConfig`
  *
@@ -21,7 +21,7 @@ import java.io.InputStream
  * [bundledAbi] records which one it is; a device of another ABI fetches its own from
  * [baseUrl], verified against [sha256].
  */
-data class EngineConfig(
+data class ContainerConfig(
     /** The ABI whose rootfs this APK bundles. */
     val bundledAbi: String,
     /** SHA-256 the archive must match. Empty means "nothing to verify against". */
@@ -56,12 +56,12 @@ data class EngineConfig(
          * starts.
          */
         @Volatile
-        private var installed: EngineConfig? = null
+        private var installed: ContainerConfig? = null
 
-        fun install(config: EngineConfig?) {
+        fun install(config: ContainerConfig?) {
             installed = config
         }
 
-        fun get(): EngineConfig? = installed
+        fun get(): ContainerConfig? = installed
     }
 }

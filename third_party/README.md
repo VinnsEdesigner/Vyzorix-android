@@ -6,7 +6,7 @@ the version are all reviewable and pinned.
 
 | Tree | What | Licence | Upstream |
 |:--|:--|:--|:--|
-| `proot/` | The userspace `chroot`/`mount --bind` (the Debian engine's launcher). | GPL-2.0-**or-later** — compatible with this repo's GPL-3.0 | `termux/proot` @ `v5.1.107.102` |
+| `proot/` | The userspace `chroot`/`mount --bind` (the Debian container's launcher). | GPL-2.0-**or-later** — compatible with this repo's GPL-3.0 | `termux/proot` @ `v5.1.107.102` |
 | `talloc/` | proot's allocator. Not in the NDK. | LGPL-3.0-or-later (Samba) | `talloc` 2.4.2 |
 
 ## Why the Termux fork, not upstream proot-me

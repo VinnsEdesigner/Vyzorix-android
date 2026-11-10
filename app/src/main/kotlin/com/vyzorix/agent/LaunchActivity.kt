@@ -19,7 +19,7 @@ import android.util.Log
  * the accessibility service. Neither can be granted by the app itself. Tapping the
  * launcher icon therefore asks for the runtime permissions, then opens the
  * Accessibility settings screen — and nothing else. This activity shows no UI of its
- * own, starts no engine, and finishes immediately.
+ * own, starts no container, and finishes immediately.
  *
  * ## Why the app is un-launchable
  *

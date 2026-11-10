@@ -31,7 +31,7 @@ import com.vyzorix.service.DeviceNotification
  *    here in the first place.
  * 2. Posts the persistent notification in its
  *    [DeviceNotification.needsStart] state: **Start Vyzorix**. Enabling the
- *    service arms the agent; it does not start the engine. The engine starts when the
+ *    service arms the agent; it does not start the container. The container starts when the
  *    operator taps that action, so starting is explicit and visible.
  *
  * Disabling the service reverses the first step — the icon comes back, so a device

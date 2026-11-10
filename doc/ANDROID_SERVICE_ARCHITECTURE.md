@@ -8,7 +8,7 @@ Gateway + Cloud WebSocket; scales to 120+ Android APIs and 100+ devices without
 rearchitecting.
 
 This document is the authoritative design for the Android side. The server side
-(`vyzorix-update-server`) already provides the command plane, signing, audit, and risk
+(`VYZORIX`) already provides the command plane, signing, audit, and risk
 tiers referenced throughout; see `DOCUMENTATION/COMMAND_EXECUTION.md` and
 `DOCUMENTATION/RISK_AND_CONFIRMATION.md`.
 
@@ -149,7 +149,7 @@ do not do it.
   the foreground service itself.
 
 **Mitigations:** `START_STICKY`, battery-optimization exemption request, and a
-watchdog that restarts the engine with crash backoff.
+watchdog that restarts the container with crash backoff.
 
 > **FCM is deferred.** A high-priority FCM wake is *not* part of this build. It is a
 > later-version item (it needs a Firebase project, a `google-services.json`, and a
@@ -189,7 +189,7 @@ Android OS (6 -> 15+; any OEM)
 ├─ Layer 1 — Android Gateway      (Kotlin + NDK)   <- the ONLY layer that touches the OS
 │     FGS owner · boot · watchdog · cloud WS · PTY broker · USB broker · android.sock
 │
-├─ Layer 2 — Debian Engine        (proot, read-only base + writable overlay)
+├─ Layer 2 — Debian Container     (proot, read-only base + writable overlay)
 │     bash · android-* bridge · toolchain
 │     (the pty-agent multiplexer lives in Layer 1, not here — see §3)
 │
@@ -240,7 +240,7 @@ Vyzorix-android/
 │   │   └── OemCompat.kt                 # battery-exemption prompts per vendor
 │   └── permissions/                     # all requests in one place
 │
-├── debian-engine/                       # Layer 2
+├── debian-container/                    # Layer 2
 │   ├── rootfs/
 │   │   ├── debian-core.tar.gz           # minbase + bash,coreutils,socat,curl,ca-certs
 │   │   └── debian-extended.tar.gz       # optional, on-demand extract
@@ -275,13 +275,13 @@ and first-boot are Kotlin classes in Layer 1's process, not separate Go programs
 | Piece | Where it lives now | Why |
 |:--|:--|:--|
 | `pty-agent` multiplexer | **Built** — `cloud-connector/.../terminal/TerminalRelay.kt` + `PtyFrame.kt` | The local multiplexer and binary framing are implemented and instrumented-tested. A Go program inside the image would be a second implementation of the same wire contract. |
-| proot launcher | `android-core/.../engine/ProotLauncher.kt` | Building the `proot` argv in Kotlin keeps it testable (`ProotLauncherTest`) and versioned with the code that depends on it. |
+| proot launcher | `android-core/.../container/ProotLauncher.kt` | Building the `proot` argv in Kotlin keeps it testable (`ProotLauncherTest`) and versioned with the code that depends on it. |
 | first-boot (extract, seed overlay, verify bash) | Layer 1 (Kotlin) | It runs once, from the app, before any userspace exists — so it cannot be a script *inside* that userspace. |
 
 **There is no Go anywhere in this design.** An earlier revision specified the
 `android-bin` generator in Go; it is C++ instead, like every other native piece, so
 the repo has exactly two languages — Kotlin (Gradle) and C++ — and the container's
-tools build with the same cross-compilers as Layer 3. `debian-engine/android-bin/`
+tools build with the same cross-compilers as Layer 3. `debian-container/android-bin/`
 is built.
 
 ---
@@ -331,7 +331,7 @@ The fd route above bypasses the path restriction entirely, which is why it is th
 
 ### 4.4 Execution backends (roadmap)
 
-One engine, three execution backends behind the same `ExecutionBackend` interface.
+One container, three execution backends behind the same `ExecutionBackend` interface.
 Define the interface now; implement only `proot` in v1.
 
 | Backend | Status | Gains | Needs |
@@ -412,7 +412,7 @@ conflict.
 
 ---
 
-## 6. Debian engine
+## 6. Debian container
 
 ### 6.1 Rootfs: read-only base + writable overlay
 
@@ -452,7 +452,7 @@ required.
 
 ### 6.1.1 The rootfs asset — requirements
 
-`debian-engine/rootfs/` does not exist yet. This is the spec for the asset that
+`debian-container/rootfs/` does not exist yet. This is the spec for the asset that
 unblocks §12 step 5, and the two Build 2 items left unproven (`PTY_SPIKE_RESULTS`
 and `BUILD_2_VERIFICATION` both stop at `/system/bin/sh` because there is no rootfs
 to exec). Everything else in Layer 2 is already written; the asset is the gap.
@@ -499,7 +499,7 @@ root/  home/  tmp/  var/  opt/  proc/  sys/  dev/
 
 | Path | Why |
 |:--|:--|
-| `bin/bash` | `ProotLauncher.isReady()` literally checks `File(rootfs, "bin/bash").exists()`. Absent, the engine is "not ready" and the service silently falls back to the uncontained shell. |
+| `bin/bash` | `ProotLauncher.isReady()` literally checks `File(rootfs, "bin/bash").exists()`. Absent, the container is "not ready" and the service silently falls back to the uncontained shell. |
 | `etc/resolv.conf` | The bind in §6.2 replaces it, but the *target* must exist for proot's `-b` to bind onto. An empty file is enough. |
 | `etc/passwd`, `etc/group` | `bash --login` reads them; a missing `passwd` makes the login shell complain on every start. |
 | `etc/ssl/certs/ca-certificates.crt` | `ca-certificates`. Without it, every HTTPS call from inside fails with a certificate error. |
@@ -516,7 +516,7 @@ review. `bin/bash` must be `0755`, not `0644`, or `canExecute()` is false.
 `/var/lib/apt/lists` and the docs, and writes the tarball at a pinned date. Pin
 `bookworm` (Debian 12), not `stable` — a moving target makes two builds differ and
 breaks the "base replaced wholesale" invariant. Record the `debootstrap` version and
-the package list in `debian-engine/rootfs/BUILD.md` so a rebuild is comparable.
+the package list in `debian-container/rootfs/BUILD.md` so a rebuild is comparable.
 
 **Where it lives — decided.** The tarball is a **build artifact, not a repo file**
 (50 MB of binary in git is a permanent cost to every clone), and the split is by
@@ -542,7 +542,7 @@ cannot execute, which reads as a corrupt rootfs rather than a wrong-arch one.
 Building a foreign arch needs `qemu-user-static` **and a registered `binfmt_misc`
 handler** — debootstrap cannot finish its second stage without one, and the failure is
 a bare `Exec format error` that does not name the cause. See
-`debian-engine/rootfs/README.md`.
+`debian-container/rootfs/README.md`.
 
 Extraction is **streaming** (tar entries written straight to `files/rootfs`), never
 "unpack to temp then move": that needs 2× the space transiently and `/data` is often
@@ -559,7 +559,7 @@ ABIs). This is a separate asset from the rootfs and is the other half of the gap
 
 ### 6.2 proot launch
 
-The launcher is **Kotlin**, not a shell script: `android-core/.../engine/ProotLauncher.kt`
+The launcher is **Kotlin**, not a shell script: `android-core/.../container/ProotLauncher.kt`
 builds the argv and execs it through the PTY broker. It is unit-tested
 (`ProotLauncherTest`) for the exact command line, which a `.sh` inside the image
 could not be — the script would not exist until the image it configures did.
@@ -761,7 +761,7 @@ BOOT_COMPLETED -> BootReceiver -> GatewayService.startForeground(specialUse)
                                    ├─ start PTY / USB brokers
                                    ├─ launch proot (Layer 2) + supervisor
                                    ├─ connect cloud WS (keypair handshake)
-                                   └─ start watchdog (restart engine with backoff)
+                                   └─ start watchdog (restart container with backoff)
 ```
 
 The PTY multiplexer is not a separate process to launch: it is Layer 1's own
@@ -853,13 +853,13 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
    handshake; `SHELL_EXEC` end to end (Phase 0 — ships value without PTY). The device
    agent implements the executor; the server only classifies and dispatches it (see
    §5).
-5. **Layer 2 — built.** The Debian engine: rootfs assets (core bundled, extended
+5. **Layer 2 — built.** The Debian container: rootfs assets (core bundled, extended
    fetched on demand, both checksum-verified), the writable overlay, first-boot
    install, `android-bin` (the container-side bridge client), and `tmux` reattach
    (`ProotLauncher.loginShellArgs` wraps the login shell in `tmux new-session -A -s
    vyzorix-<sessionId>` when tmux is present). The `pty-agent` multiplexer and binary
    framing were already built in Layer 1 (`TerminalRelay`/`PtyFrame`). The container
-   terminal is verified end to end by `:app`'s `EngineTerminalE2ETest`.
+   terminal is verified end to end by `:app`'s `ContainerTerminalE2ETest`.
 6. **Layer 3:** supervisor + `app-*` + inotify + PID start-time tokens.
 7. **Last:** public app proxy (wildcard DNS/TLS, streaming).
 
@@ -869,7 +869,7 @@ Two fd-capabilities decide whether the premise holds. **Build these first.**
 
 | Item | Layer | Deferred because |
 |:-----|:------|:-----------------|
-| ~~`android-bin` generator~~ | 2 | **Built** — C++ (`debian-engine/android-bin/`), one binary + N symlinks, cross-compiled for glibc. The name list is `apis.txt`, kept in step with the router by `ApiCatalogTest`. |
+| ~~`android-bin` generator~~ | 2 | **Built** — C++ (`debian-container/android-bin/`), one binary + N symlinks, cross-compiled for glibc. The name list is `apis.txt`, kept in step with the router by `ApiCatalogTest`. |
 | `app_process` supervisor spawn | 3 | Layer 3 sits on Layer 2. Spawning a supervisor before there is a userspace to supervise inverts the build order. |
 | Phantom-process-killer mitigation | 1 | Not a targetSdk-gated behaviour, and there is no `ActivityManager` API for it — `setPhantomProcessList` does not exist. The real lever (`settings_enable_monitor_phantom_procs`) needs shell/root or Shizuku. See the note on `VyzorixForegroundService`. |
 | Shizuku execution backend | — | Documented as post-v1.0. The `ExecutionBackend` interface is the insurance policy; only `proot` is implemented. |
@@ -911,12 +911,12 @@ had drifted from reality, not a design change.
 
 | # | v3 claim | Correction | Why |
 |:--|:---------|:-----------|:----|
-| 1 | `pty-agent/` is a Go program in `debian-engine/`, "to build" (§3, §12 step 5) | **Built, and Kotlin** — `TerminalRelay.kt` + `PtyFrame.kt` in `cloud-connector` | The multiplexer and binary framing exist and are instrumented-tested. A Go program inside the image would be a second implementation of the same wire contract. |
-| 2 | `proot-launcher.sh` (§3, §6.2) | **Kotlin** — `engine/ProotLauncher.kt` | A `.sh` inside the image cannot configure the image that does not yet exist. Kotlin is testable (`ProotLauncherTest`) and versioned with its caller. |
+| 1 | `pty-agent/` is a Go program in `debian-container/`, "to build" (§3, §12 step 5) | **Built, and Kotlin** — `TerminalRelay.kt` + `PtyFrame.kt` in `cloud-connector` | The multiplexer and binary framing exist and are instrumented-tested. A Go program inside the image would be a second implementation of the same wire contract. |
+| 2 | `proot-launcher.sh` (§3, §6.2) | **Kotlin** — `container/ProotLauncher.kt` | A `.sh` inside the image cannot configure the image that does not yet exist. Kotlin is testable (`ProotLauncherTest`) and versioned with its caller. |
 | 3 | `first-boot.sh` (§3) | **Kotlin, Layer 1** | It runs before any userspace exists, so it cannot live inside that userspace. |
 | 4 | Cloud auth is HMAC with a per-device secret (§1.3) | **Device keypair (EC P-256, Keystore)** | The HMAC secret travelled over FCM, an unauthenticated channel. Retired by `REGISTRATION_CONTRACT.md` §5; server has implemented it. |
 | 5 | FCM wake + pending-command drain (§1.4, §5, §8) | **Deferred to a later version** | Needs a Firebase project and `google-services.json` a sideload-only app otherwise does not carry. Delivery is live-socket only until then. |
-| 6 | `debian-engine/` described but no asset spec (§6.1) | **§6.1.1 added** — packages, size budget, structure, required files, modes, build reproducibility, hosting | The rootfs tarball and `libproot.so` are the actual gap; the spec is what makes them buildable. |
+| 6 | `debian-container/` described but no asset spec (§6.1) | **§6.1.1 added** — packages, size budget, structure, required files, modes, build reproducibility, hosting | The rootfs tarball and `libproot.so` are the actual gap; the spec is what makes them buildable. |
 | 7 | `shell.execute` scope, session expiry, PTY audit/recording "not yet implemented" (§6.3) | **All four landed** | The server-side status table in this section already said "Done"; §6.3's paragraph had not been updated. |
 
 ### Decisions taken in the v3 review (previously open questions)
@@ -931,7 +931,7 @@ had drifted from reality, not a design change.
 
 ### Server-side status (what is actually built)
 
-The server half of this design is implemented in `vyzorix-update-server`. This is a
+The server half of this design is implemented in `VYZORIX`. This is a
 snapshot of reality, so the Android work has a fixed target.
 
 | Area | Status | Notes |

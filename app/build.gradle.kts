@@ -113,14 +113,14 @@ fun bundledRootfsAbi(): String =
 /**
  * The bundled rootfs tarball, or null when it has not been built.
  *
- * A missing tarball is not an error: the engine is one feature, and a build without
+ * A missing tarball is not an error: the container is one feature, and a build without
  * it still produces a working app that runs bridge-only until the rootfs is fetched.
  * What is an error is a *present but unverifiable* tarball, which is why the
  * checksum below is read from the same `SHA256SUMS` the release carries.
  */
 fun bundledRootfsFile(): File? =
     rootProject
-        .file("debian-engine/rootfs/dist/debian-core-${bundledRootfsAbi()}.tar.gz")
+        .file("debian-container/rootfs/dist/debian-core-${bundledRootfsAbi()}.tar.gz")
         .takeIf { it.isFile }
 
 /**
@@ -148,7 +148,7 @@ fun extendedRootfsSha256(): String = sha256FromSums("debian-extended-${bundledRo
 
 /** The first field of the SHA256SUMS line for [name], or empty. */
 fun sha256FromSums(name: String): String {
-    val sums = rootProject.file("debian-engine/rootfs/dist/SHA256SUMS")
+    val sums = rootProject.file("debian-container/rootfs/dist/SHA256SUMS")
     if (!sums.isFile) return ""
 
     return sums
@@ -191,7 +191,7 @@ fun rootfsBaseUrl(): String =
         ?: "https://github.com/VinnsEdesigner/gz-_ASSETS/releases/latest/download"
 
 /**
- * Whether the terminal may run a plain device shell when the container engine is
+ * Whether the terminal may run a plain device shell when the container is
  * not installed. Default false: it is a real weakening, since that shell runs as the
  * app's uid. A development build turns it on to exercise the terminal before the
  * Debian rootfs ships.
@@ -244,7 +244,7 @@ android {
         buildConfigField("String", "CLOUD_BASE_URL", "\"${cloudBaseUrl()}\"")
         buildConfigField("String", "SERVER_PUBLIC_KEY", "\"${serverPublicKey()}\"")
 
-        // The container engine's userspace.
+        // The container's userspace.
         //
         // ROOTFS_SHA256 is what the installer verifies the extracted tree against. It
         // is read from the build's own SHA256SUMS rather than recomputed, so the APK
@@ -260,7 +260,7 @@ android {
         // release that carries all three tarballs.
         buildConfigField("String", "ROOTFS_BASE_URL", "\"${rootfsBaseUrl()}\"")
         buildConfigField("boolean", "ROOTFS_BUNDLED", "${bundledRootfsFile() != null}")
-        // Allow the terminal to run a plain device shell when the container engine is
+        // Allow the terminal to run a plain device shell when the container is
         // not installed. Off unless asked for, because that shell runs as the app's
         // uid and can read the app's private files, which the container exists to
         // prevent. Set with -PallowUncontainedShell=true or VYZORIX_ALLOW_UNCONTAINED_SHELL.
@@ -307,7 +307,7 @@ android {
     // module that has the rootfs asset, so it is the only place the container's
     // terminal can be driven end to end. An `:android-core` instrumented test runs in
     // a different APK with no assets, so `ProotLauncher.isReady()` is false there and
-    // the shell falls back to the uncontained one — which is why the engine path had
+    // the shell falls back to the uncontained one — which is why the container path had
     // no test until now.
     sourceSets {
         getByName("test") {
@@ -337,7 +337,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
-    // The engine's end-to-end test lives here because the rootfs asset does. It
+    // The container's end-to-end test lives here because the rootfs asset does. It
     // drives the real service, the real bridge and the real container, so it needs
     // the instrumented runner and nothing to fake with.
     // Robolectric for the shell-selection unit test: `isReady()` is three filesystem
@@ -373,7 +373,7 @@ dependencies {
  * always `rootfs/debian-core.tar.gz`, and `BuildConfig.ROOTFS_ABI` records which
  * architecture's userspace it is. A device of a different ABI downloads its own.
  *
- * A missing tarball is not an error. The engine is one feature; the app still builds
+ * A missing tarball is not an error. The container is one feature; the app still builds
  * and runs bridge-only, which is the state a device is in until the rootfs arrives.
  */
 val stageRootfs by tasks.registering {

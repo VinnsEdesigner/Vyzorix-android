@@ -74,7 +74,7 @@ scoped to the owning session.
 
 **Not proven, and why:** the executable is `/system/bin/sh`, not proot. Neither
 `libproot.so` nor the Debian rootfs exists anywhere in this repository — the
-`debian-engine/{rootfs,overlay,pty-agent,android-bin}` directories are empty. That
+`debian-container/{rootfs,overlay,pty-agent,android-bin}` directories are empty. That
 packaging is Layer 2 work, and the contract's §1 puts "full Debian rootfs
 packaging" explicitly **out** of Build 2's scope. So items 6–7 are blocked on an
 asset that was never in the repo, not on Build 2's logic.

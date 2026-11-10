@@ -4,19 +4,19 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Watches the engine and reports when it is gone.
+ * Watches the container and reports when it is gone.
  *
- * It does not restart the engine itself: restarting means re-exec'ing proot with
+ * It does not restart the container itself: restarting means re-exec'ing proot with
  * a fresh PTY, which only the service can do. The watchdog's job is to notice and
- * to back off, so a permanently broken engine does not spin.
+ * to back off, so a permanently broken container does not spin.
  *
  * Backoff is exponential from [baseDelayMs] up to [maxDelayMs]; a single success
- * resets it, so a flapping engine is retried quickly but a dead one is not
+ * resets it, so a flapping container is retried quickly but a dead one is not
  * hammered.
  */
 class ServiceWatchdog(
-    private val isEngineReady: () -> Boolean,
-    private val onEngineLost: () -> Unit,
+    private val isContainerReady: () -> Boolean,
+    private val onContainerLost: () -> Unit,
     private val baseDelayMs: Long = DEFAULT_BASE_DELAY_MS,
     private val maxDelayMs: Long = DEFAULT_MAX_DELAY_MS,
     private val checkIntervalMs: Long = DEFAULT_CHECK_INTERVAL_MS,
@@ -51,16 +51,16 @@ class ServiceWatchdog(
             try {
                 Thread.sleep(checkIntervalMs)
 
-                if (isEngineReady()) {
+                if (isContainerReady()) {
                     consecutiveFailures = 0
 
                     continue
                 }
 
                 consecutiveFailures++
-                Log.w(TAG, "engine not ready (failure $consecutiveFailures)")
+                Log.w(TAG, "container not ready (failure $consecutiveFailures)")
 
-                onEngineLost()
+                onContainerLost()
                 Thread.sleep(backoffMs(consecutiveFailures))
             } catch (_: InterruptedException) {
                 return

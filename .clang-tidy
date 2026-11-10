@@ -62,4 +62,4 @@ CheckOptions:
   - key: readability-identifier-naming.IgnoreMainLikeFunctions
     value: 1
 
-HeaderFilterRegex: '.*/(android-core|debian-engine|app-runtime)/.*'
+HeaderFilterRegex: '.*/(android-core|debian-container|app-runtime)/.*'

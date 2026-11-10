@@ -12,7 +12,7 @@ import org.json.JSONObject
  * Opens and closes PTY sessions.
  *
  * This is the door the terminal comes through: `session.open` allocates a PTY,
- * launches the engine (proot + a login shell) on it, starts the reader, and
+ * launches the container (proot + a login shell) on it, starts the reader, and
  * returns the channel the client uses on subsequent `pty_input` / `pty_output`
  * frames. `session.close` tears the session down.
  *

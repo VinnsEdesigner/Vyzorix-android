@@ -18,7 +18,7 @@ runs, and the storage that makes an app's state survive a rootfs replacement.
 Layer 2 gave the device a Debian userspace with a shell. Layer 3 turns that
 userspace from "somewhere you can type" into "somewhere things run": an app is
 started, supervised, restarted when it crashes, restarted when the device reboots,
-reachable over the network, and its files persist across engine updates.
+reachable over the network, and its files persist across container updates.
 
 **What it is not.** It is not a second cloud client (§2: layers 2–3 speak local
 unix sockets only), it is not an Android API surface (that is Layer 1), and it does
@@ -32,7 +32,7 @@ not own the container lifecycle (Layer 1 launches proot).
 Layer 1  (Kotlin + NDK)   FGS · PTY broker · android.sock · cloud WS
    │  spawns proot, relays APP_* commands, proxies HTTP
    ▼
-Layer 2  (Debian engine)  bash · android-bin · the userspace
+Layer 2  (Debian container)  bash · android-bin · the userspace
    │  the supervisor lives here, and the apps run under it
    ▼
 Layer 3  (C supervisor)   app lifecycle · inotify · http_proxy · /home/apps
@@ -56,7 +56,7 @@ Two directions of traffic, and they are different:
 
 | Piece | State | Evidence |
 |:--|:--|:--|
-| Container + shell | **built** | `EngineTerminalE2ETest` passes on the emulator |
+| Container + shell | **built** | `ContainerTerminalE2ETest` passes on the emulator |
 | Bridge client in-container (`android-bin`) | **built** | Layer 2, this repo |
 | `SHELL_EXEC` command executor | **built** | `cloud-connector/.../ShellExecExecutor.kt` |
 | `CommandExecutor` seam | **built** | `cloud-connector/.../CommandExecutor.kt` |
@@ -195,7 +195,7 @@ without asking `StatFs`".
 |:--|:--|:--|:--|
 | **D1** | `app-*` CLI language | bash wrappers (as doc says) / C++ / shell over a shared C++ client | **C++**, reusing `android-bin`'s framed-socket code. Bash cannot parse the registry reliably and the repo has no bash test harness. |
 | **D2** | App storage | `overlay/home:/home` / `files/apps:/home/apps` | **`files/apps:/home/apps`** — explicit, and it keeps `/home` (users) distinct from app storage. |
-| **D3** | Who starts the supervisor | Layer 1 spawns it as a PTY session / the login shell starts it / a systemd-less init script in the overlay | **Layer 1 spawns it**, on the same install thread that launches the engine — it must exist before any `APP_*` command arrives, and Layer 1 already owns process launching. |
+| **D3** | Who starts the supervisor | Layer 1 spawns it as a PTY session / the login shell starts it / a systemd-less init script in the overlay | **Layer 1 spawns it**, on the same install thread that launches the container — it must exist before any `APP_*` command arrives, and Layer 1 already owns process launching. |
 | **D4** | Supervisor control protocol | reuse the bridge frame shape (`[4B len][1B type][payload]`) / a new line-based protocol | **Reuse the frame shape.** One wire shape in the repo, and `android-bin`'s client already implements it. |
 | **D5** | App registry | one `apps.json` / per-app manifests / both | **Both, one direction:** `apps.json` is authoritative for what runs; a manifest is how an app is *declared* and gets merged in. |
 | **D6** | `web-ui` in v1? | yes / defer to v1.1 | **Defer.** It is not needed for "apps run and are reachable", and §14.2 already suggests deferring the expose work. |
@@ -249,7 +249,7 @@ Layer 3 is C in a container, so the tiers are:
   no container.
 - **Integration, in a real Debian userspace**: the supervisor started in the
   container, driving a trivial app (`/bin/sleep`), over its control socket. This
-  is the analogue of `EngineTerminalE2ETest` and belongs in `:app`'s instrumented
+  is the analogue of `ContainerTerminalE2ETest` and belongs in `:app`'s instrumented
   suite, because `:app` is the only module with the rootfs asset.
 - **On-device, end to end**: `APP_START` from the cloud reaches the supervisor and
   an app comes up; a crash restarts it; a rootfs replacement leaves app data.

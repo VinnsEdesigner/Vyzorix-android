@@ -37,12 +37,12 @@ class ServicePtySessionPort(
     private val apiAllowlist: () -> Set<String>,
     private val shellRequest: (sessionId: String, token: String) -> PtyRequest,
     /**
-     * Whether the engine can start a shell at all.
+     * Whether the container can start a shell at all.
      *
      * When the Debian rootfs is not installed, the proot login shell exits the
      * instant it starts — it cannot find its own binary. Opening a PTY for it would
      * give the operator an empty terminal that silently does nothing, which is worse
-     * than a refusal: the operator cannot tell a broken engine from a quiet shell.
+     * than a refusal: the operator cannot tell a broken container from a quiet shell.
      * This lets the port refuse with a reason instead.
      */
     private val canOpen: () -> Boolean = { true },
@@ -61,11 +61,11 @@ class ServicePtySessionPort(
         onOutput: (sessionId: String, data: ByteArray) -> Unit,
         onExit: (sessionId: String, exitCode: Int) -> Unit,
     ): Boolean {
-        // Refuse before allocating a pty when the engine cannot run: a shell that
+        // Refuse before allocating a pty when the container cannot run: a shell that
         // exits instantly would look to the operator like a terminal that opened and
         // then died, with no reason given.
         if (!canOpen()) {
-            Log.w(TAG, "terminal $sessionId refused: the engine is not installed")
+            Log.w(TAG, "terminal $sessionId refused: the container is not installed")
 
             return false
         }

@@ -31,8 +31,8 @@ import org.junit.runner.RunWith
  * The executable is `/system/bin/sh`, and that is a choice rather than a limitation:
  * this test is about the *transport* — framing, routing, flow control, session
  * scoping — and using a shell that is always present keeps a transport failure from
- * looking like an engine failure. The container's own shell, and whether the engine
- * picks it, is covered by `EngineTerminalE2ETest` in `:app`, which is the only module
+ * looking like an container failure. The container's own shell, and whether the container
+ * picks it, is covered by `ContainerTerminalE2ETest` in `:app`, which is the only module
  * with the rootfs asset.
  */
 @RunWith(AndroidJUnit4::class)

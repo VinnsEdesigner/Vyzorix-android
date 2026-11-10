@@ -3,7 +3,7 @@ package com.vyzorix.agent
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.service.VyzorixForegroundService
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -54,7 +54,7 @@ class OperatorCommandE2ETest {
         VyzorixForegroundService.start(context)
 
         assertTrue(
-            "the engine must install and report ready",
+            "the container must install and report ready",
             await(READY_TIMEOUT_MS) {
                 ProotLauncher.isReady(context)
             },
@@ -200,7 +200,7 @@ class OperatorCommandE2ETest {
 
     private companion object {
         const val TAG = "VyzorixCmd"
-        const val ENGINE_READY_TIMEOUT_MS = 240_000L
+        const val CONTAINER_READY_TIMEOUT_MS = 240_000L
         const val READY_TIMEOUT_MS = 240_000L
         const val DEFAULT_TIMEOUT_MS = 900_000L
         const val PROBE_TIMEOUT_MS = 25_000L

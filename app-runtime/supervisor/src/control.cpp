@@ -392,7 +392,7 @@ void ControlServer::Run() {
                 continue;
             }
             // A transient failure must not take the supervisor down: it is the only
-            // thing serving the control socket, and the engine, the bridge and the
+            // thing serving the control socket, and the container, the bridge and the
             // terminal all depend on it staying up. Only a closed listener is fatal.
             std::fprintf(stderr, "supervisor: accept failed: %s\n", std::strerror(errno));
             if (errno == EBADF || errno == EINVAL) {

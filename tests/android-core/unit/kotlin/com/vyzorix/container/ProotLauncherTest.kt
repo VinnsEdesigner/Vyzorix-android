@@ -1,4 +1,4 @@
-package com.vyzorix.engine
+package com.vyzorix.container
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -142,41 +142,44 @@ class ProotLauncherTest {
     }
 
     @Test
-    fun `the bind list never crosses the engine zone`() {
+    fun `the bind list never crosses the sandbox zone`() {
         // The closed-world guarantee: the rootfs, secret store and recordings
         // are not bound, so the container cannot reach them by construction.
         for (bind in ProotLauncher.binds(context)) {
             val host = bind.substringBefore(":")
-            assertFalse("bind $bind crosses the engine zone", ProotLauncher.isEngineZonePath(host))
+            assertFalse(
+                "bind $bind crosses the sandbox zone",
+                ProotLauncher.isSandboxZonePath(host),
+            )
         }
     }
 
     @Test
-    fun `the engine zone is recognised in its several shapes`() {
+    fun `the sandbox zone is recognised in its several shapes`() {
         val rootfs = ProotLauncher.rootfs(context).absolutePath
         val secrets = File(context.filesDir, ProotLauncher.SECRETS_DIR).absolutePath
         val recordings = File(context.filesDir, ProotLauncher.RECORDINGS_DIR).absolutePath
 
-        // rootfs is the container's own root, so it is NOT the engine zone: the
+        // rootfs is the container's own root, so it is NOT the sandbox zone: the
         // zone is what holds a secret or a recording.
         assertFalse(
             "rootfs is the container root, not a leak",
-            ProotLauncher.isEngineZonePath(rootfs),
+            ProotLauncher.isSandboxZonePath(rootfs),
         )
-        assertTrue(ProotLauncher.isEngineZonePath(secrets))
-        assertTrue(ProotLauncher.isEngineZonePath(recordings))
+        assertTrue(ProotLauncher.isSandboxZonePath(secrets))
+        assertTrue(ProotLauncher.isSandboxZonePath(recordings))
         assertTrue(
             "a child of the zone must be refused",
-            ProotLauncher.isEngineZonePath("$secrets/token"),
+            ProotLauncher.isSandboxZonePath("$secrets/token"),
         )
-        assertTrue(ProotLauncher.isEngineZonePath("$recordings/session.cast"))
+        assertTrue(ProotLauncher.isSandboxZonePath("$recordings/session.cast"))
     }
 
     @Test
-    fun `a normal path is not in the engine zone`() {
-        assertFalse(ProotLauncher.isEngineZonePath("/sdcard"))
-        assertFalse(ProotLauncher.isEngineZonePath("/tmp"))
-        assertFalse(ProotLauncher.isEngineZonePath(context.filesDir.absolutePath))
+    fun `a normal path is not in the sandbox zone`() {
+        assertFalse(ProotLauncher.isSandboxZonePath("/sdcard"))
+        assertFalse(ProotLauncher.isSandboxZonePath("/tmp"))
+        assertFalse(ProotLauncher.isSandboxZonePath(context.filesDir.absolutePath))
     }
 
     @Test
@@ -211,7 +214,7 @@ class ProotLauncherTest {
         // The private tree holds the rootfs, the overlay, the secret store and the
         // recordings. Only named subdirectories cross (apps, the socket), plus one
         // file out of the rootfs for DNS. What must never cross is the tree itself,
-        // the overlay root, or the engine zone — or the container would hold the
+        // the overlay root, or the sandbox zone — or the container would hold the
         // keys to itself.
         val files = context.filesDir.absolutePath
         val overlay = ProotLauncher.overlay(context).absolutePath
@@ -221,8 +224,8 @@ class ProotLauncherTest {
             assertFalse("filesDir itself must not be bound: $bind", host == files)
             assertFalse("the overlay root must not be bound: $bind", host == overlay)
             assertFalse(
-                "the engine zone must not be bound: $bind",
-                ProotLauncher.isEngineZonePath(host),
+                "the sandbox zone must not be bound: $bind",
+                ProotLauncher.isSandboxZonePath(host),
             )
         }
     }

@@ -1,4 +1,4 @@
-package com.vyzorix.engine
+package com.vyzorix.container
 
 import android.content.Context
 import android.os.Environment
@@ -25,8 +25,8 @@ object ProotLauncher {
      * Bound to `/home/apps` inside the container. It is **app storage, not package
      * storage**, and it is separate from the overlay for one reason that decides it:
      * Layer 2 is disposable and Layer 3's storage is not. The overlay holds
-     * installed packages and is conceptually part of the engine; this holds the
-     * operator's apps and must survive anything the engine does.
+     * installed packages and is conceptually part of the container; this holds the
+     * operator's apps and must survive anything the container does.
      */
     const val APPS_DIR = "apps"
 
@@ -155,7 +155,7 @@ object ProotLauncher {
      * mis-emulates `cvttsd2si(NaN)` (so `Buffer.prototype.toString(enc)` throws, and
      * node cannot load any module from disk) and a proot rename that reports ENOENT
      * after it succeeded (which breaks npm's content store). Both make `npm` and
-     * `vite` unusable without it. The file is `debian-engine/rootfs/node-prelude.mjs`
+     * `vite` unusable without it. The file is `debian-container/rootfs/node-prelude.mjs`
      * and is installed into the rootfs; it is a no-op on a healthy host, so it is
      * loaded unconditionally.
      *
@@ -174,7 +174,7 @@ object ProotLauncher {
     const val BRIDGE_TOKEN_ENV = "VYZORIX_BRIDGE_TOKEN"
 
     /**
-     * The engine zone: app-private directories that must never be bound into the
+     * The sandbox zone: app-private directories that must never be bound into the
      * container. Only the secret store and the recordings qualify.
      *
      * `rootfs` is deliberately NOT here: it is the container's own root (`-r
@@ -187,7 +187,7 @@ object ProotLauncher {
      * closed-world bind list achieves that by naming only what is allowed; this
      * list is the second, independent check.
      */
-    private val ENGINE_ZONE_DIRS = listOf(SECRETS_DIR, RECORDINGS_DIR)
+    private val SANDBOX_ZONE_DIRS = listOf(SECRETS_DIR, RECORDINGS_DIR)
 
     /** Path proot is installed at, once the native library is extracted. */
     fun prootBinary(context: Context): File =
@@ -251,7 +251,7 @@ object ProotLauncher {
      * A getter that *makes* the directory. That is deliberate for the callers that
      * need it to exist (building the environment), but it is why [isReady] must not
      * use it: a readiness check that repairs the thing it is checking can never
-     * report it missing, so it would claim the engine is ready and proot would then
+     * report it missing, so it would claim the container is ready and proot would then
      * fail with "can't create temporary file". [tmpDirPath] is the side-effect-free
      * form, and [isReady] uses that.
      */
@@ -261,7 +261,7 @@ object ProotLauncher {
     fun tmpDirPath(context: Context): File = File(context.filesDir, TMP_DIR)
 
     /**
-     * True when the engine can be started at all.
+     * True when the container can be started at all.
      *
      * Three things, and the third is the one that is easy to miss: the binary must be
      * executable, the rootfs must hold `bin/bash`, and proot's scratch dir must be
@@ -274,17 +274,17 @@ object ProotLauncher {
             tmpDirPath(context).isDirectory
 
     /**
-     * True when [hostPath] is inside the app's engine zone.
+     * True when [hostPath] is inside the app's sandbox zone.
      *
      * The launcher's final assertion: even if a path were
-     * added to the bind list by mistake, an engine-zone path is refused. Two
+     * added to the bind list by mistake, a sandbox-zone path is refused. Two
      * independent guarantees — the closed-world list and this check — so one
      * mistake does not open the zone.
      */
-    fun isEngineZonePath(hostPath: String): Boolean {
+    fun isSandboxZonePath(hostPath: String): Boolean {
         val normalized = File(hostPath).path
 
-        return ENGINE_ZONE_DIRS.any { dir ->
+        return SANDBOX_ZONE_DIRS.any { dir ->
             val marker = File.separator + dir
             normalized.endsWith(marker) || normalized.contains("$marker${File.separator}")
         }
@@ -294,7 +294,7 @@ object ProotLauncher {
      * The `-b host:guest` bind list for the container.
      *
      * This is a closed world: only the paths named here are bound, and
-     * [isEngineZonePath] refuses any engine-zone path before it becomes an
+     * [isSandboxZonePath] refuses any sandbox-zone path before it becomes an
      * argument. The container therefore cannot reach the rootfs, the secret store
      * or the recordings by construction, not by remembering to exclude them.
      */
@@ -340,9 +340,9 @@ object ProotLauncher {
 
         // The app's own private tree (`context.filesDir`, i.e. /data/user/0/<pkg>)
         // is deliberately NOT bound. It holds the rootfs, the overlay, the secret
-        // store and the recordings — the engine zone — so binding it would hand the
+        // store and the recordings — the sandbox zone — so binding it would hand the
         // container the keys to itself. Only named subdirectories cross (apps, the
-        // socket); the tree as a whole never does. `isEngineZonePath` is the second,
+        // socket); the tree as a whole never does. `isSandboxZonePath` is the second,
         // independent check on the same rule.
         //
         // Shared storage is safe to bind wholesale: proot does not change the real
@@ -357,10 +357,10 @@ object ProotLauncher {
         // single place that decision lives.
 
         // Assert the invariant rather than trusting the list above. A path that is
-        // not engine-zone but is also not one of the expected shapes is still
+        // not sandbox-zone but is also not one of the expected shapes is still
         // allowed; what is refused is the zone.
-        val offending = binds.firstOrNull { isEngineZonePath(it.substringBefore(":")) }
-        check(offending == null) { "engine-zone path in bind list: $offending" }
+        val offending = binds.firstOrNull { isSandboxZonePath(it.substringBefore(":")) }
+        check(offending == null) { "sandbox-zone path in bind list: $offending" }
 
         return binds
     }
@@ -371,7 +371,7 @@ object ProotLauncher {
      * `-0` fakes userspace root, which is what makes apt and dpkg behave. The
      * binds come from [binds], which is the closed world: the container gets the
      * kernel interfaces, DNS, the overlay prefix and the socket, and nothing in the
-     * engine zone.
+     * sandbox zone.
      *
      * The bridge token is placed in the **inner** environment — the one
      * `/usr/bin/env -i` builds — not the outer one proot is started with. `env -i`
@@ -575,7 +575,7 @@ object ProotLauncher {
         File(File(overlay(context), OVERLAY_USR_LOCAL), SUPERVISOR_IN_OVERLAY).canExecute()
 
     /**
-     * A plain device shell, for when the container engine is not installed.
+     * A plain device shell, for when the container is not installed.
      *
      * This is **not** the architecture's terminal: it runs as the app's own uid, so
      * it can read the app's private files, which the container exists to prevent. It

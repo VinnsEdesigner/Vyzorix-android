@@ -1,4 +1,4 @@
-# `debian-engine/rootfs/` — the container's Debian userspace
+# `debian-container/rootfs/` — the container's Debian userspace
 
 The tarballs here are **build artifacts, not repo files** (`dist/` is gitignored).
 Build them with `scripts/build-rootfs.sh`.

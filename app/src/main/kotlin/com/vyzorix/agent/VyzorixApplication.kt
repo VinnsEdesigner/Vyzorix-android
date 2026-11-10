@@ -3,7 +3,7 @@ package com.vyzorix.agent
 import android.app.Application
 import android.util.Log
 import com.vyzorix.connector.CloudConnectionFactory
-import com.vyzorix.engine.EngineConfig
+import com.vyzorix.container.ContainerConfig
 import com.vyzorix.service.CloudLinkProvider
 import com.vyzorix.service.TerminalShellPolicy
 
@@ -30,11 +30,11 @@ class VyzorixApplication : Application() {
         // production build: it runs as the app's uid, which the container prevents.
         TerminalShellPolicy.allowUncontainedShell(BuildConfig.ALLOW_UNCONTAINED_SHELL)
 
-        // Park the engine config where the service can read it. BuildConfig lives in
+        // Park the container config where the service can read it. BuildConfig lives in
         // this module and the service is in :android-core, so the values have to be
         // handed across — the same shape as TerminalShellPolicy above.
-        EngineConfig.install(
-            EngineConfig(
+        ContainerConfig.install(
+            ContainerConfig(
                 bundledAbi = BuildConfig.ROOTFS_ABI,
                 sha256 = BuildConfig.ROOTFS_SHA256,
                 extendedSha256 = BuildConfig.ROOTFS_EXTENDED_SHA256,

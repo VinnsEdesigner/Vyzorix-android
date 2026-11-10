@@ -2,7 +2,7 @@
 
 **Status:** proposal, for discussion. Nothing here is built yet.
 **Parent:** `doc/REGISTRATION_CONTRACT.md` (the design), `doc/ANDROID_SERVICE_ARCHITECTURE.md` §2/§5/§9.
-**Server counterpart:** `vyzorix-update-server` @ `a1cc9edb`.
+**Server counterpart:** `VYZORIX` @ `a1cc9edb`.
 
 This lists what the device build needs: packages, files, dependencies, the exact
 wire contracts it must match, and the tests. It ends with the decisions that need

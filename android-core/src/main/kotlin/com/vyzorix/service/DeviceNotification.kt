@@ -15,11 +15,11 @@ import android.os.Build
  * and nothing about the agent is driven by opening the app. One notification, one id,
  * moved through three states:
  *
- *  - [needsStart]  — the accessibility service is on and the engine is not running.
+ *  - [needsStart]  — the accessibility service is on and the container is not running.
  *    The only action is **Start Vyzorix**, a button that starts the foreground
  *    service. Tapping it does *not* open the app; there is no content intent at all,
  *    so the body of the notification is inert.
- *  - [waiting]     — the engine is running and the device is unclaimed. Shows the
+ *  - [waiting]     — the container is running and the device is unclaimed. Shows the
  *    pairing code to type at the web page.
  *  - [running]     — the device is claimed and configured. Shows the device name.
  *
@@ -31,7 +31,7 @@ import android.os.Build
 class DeviceNotification(
     private val context: Context,
 ) {
-    /** The engine is off and waiting for the operator to start it. */
+    /** The container is off and waiting for the operator to start it. */
     fun needsStart() {
         post(
             base()
@@ -46,7 +46,7 @@ class DeviceNotification(
         )
     }
 
-    /** The engine is running and waiting to be claimed; show the pairing code. */
+    /** The container is running and waiting to be claimed; show the pairing code. */
     fun waiting(code: String) {
         post(
             base()

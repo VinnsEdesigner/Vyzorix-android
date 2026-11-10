@@ -1,7 +1,7 @@
 # Filesystem access from the app's own uid
 
 The host filesystem paths this app can reach, measured on the device. This is the
-ceiling the platform imposes on a third-party app, and the reason the engine runs a
+ceiling the platform imposes on a third-party app, and the reason the container runs a
 Debian userspace under `proot` instead of using the host filesystem directly (see
 `ANDROID_SERVICE_ARCHITECTURE.md` §2).
 
@@ -218,7 +218,7 @@ apps' collections stay denied to the container exactly as they are denied to the
 The app's own private tree (`context.filesDir`, `/data/user/0/<pkg>`) is **not** bound
 as a whole. It holds the rootfs, the overlay, the secret store and the recordings, so
 binding it would hand the container the keys to itself. Only named subdirectories cross
-(`apps`, the socket) plus one file out of the rootfs for DNS. `isEngineZonePath` is the
+(`apps`, the socket) plus one file out of the rootfs for DNS. `isSandboxZonePath` is the
 second, independent check on the same rule, asserted in `ProotLauncherTest`.
 
 

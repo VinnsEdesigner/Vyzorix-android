@@ -192,7 +192,7 @@ socket cannot hold a slot.
 com.vyzorix.service/
   VyzorixForegroundService.kt   FGS, START_STICKY, owns every layer
   DeviceBootHook.kt             BOOT_COMPLETED -> start the service
-  ServiceWatchdog.kt            restart the engine with backoff
+  ServiceWatchdog.kt            restart the container with backoff
 
 com.vyzorix.bridge/
   BridgeProtocol.kt             frame encode/decode, the types above
@@ -209,7 +209,7 @@ com.vyzorix.capability/
   PtyReader.kt                  NEW — owns the master fd, pushes output
   PtySession.kt                 MODIFIED — ownership per §2.1
 
-com.vyzorix.engine/
+com.vyzorix.container/
   ProotLauncher.kt              build the proot command line, exec on the slave
 ```
 

@@ -24,7 +24,7 @@ If a document disagrees with it, the architecture doc wins.
 |:--|:--|:--|
 | 1 — Android Gateway | FGS, boot, watchdog, PTY broker, `android.sock` | **Built** (`android-core`) |
 | 4 — Cloud Connector | enroll, device WS, config, commands, telemetry, terminal | **Built** (`cloud-connector`) |
-| 2 — Debian Engine | proot, rootfs, overlay, `android-bin` | **Spec'd** (§6.1.1), pending its rootfs asset |
+| 2 — Debian Container | proot, rootfs, overlay, `android-bin` | **Spec'd** (§6.1.1), pending its rootfs asset |
 | 3 — App Runtime | supervisor, `app-*`, inotify | Pending |
 
 ## The documents
@@ -43,7 +43,7 @@ If a document disagrees with it, the architecture doc wins.
 
 - `AGENTS.md` (repo root) — build commands, the gate, toolchain pins, emulator notes.
   Read it before running anything.
-- `vyzorix-update-server/DOCUMENTATION/` — the server side (`COMMAND_EXECUTION.md`,
+- `VYZORIX/DOCUMENTATION/` — the server side (`COMMAND_EXECUTION.md`,
   `RISK_AND_CONFIRMATION.md`). Separate repository.
-- `vyzorix-update-server/documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md` — what a
+- `VYZORIX/DOCUMENTATION/CONTAINER_ANDROID_APIS.md` — what a
   session may do once registered. Also in the server repository.

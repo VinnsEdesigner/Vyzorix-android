@@ -1,9 +1,9 @@
 package com.vyzorix.service
 
 import android.content.Context
-import com.vyzorix.engine.EngineConfig
-import com.vyzorix.engine.Layer3Installer
-import com.vyzorix.engine.RootfsInstaller
+import com.vyzorix.container.ContainerConfig
+import com.vyzorix.container.Layer3Installer
+import com.vyzorix.container.RootfsInstaller
 
 /**
  * Installs the container's userspace, whoever needs it first.
@@ -11,24 +11,24 @@ import com.vyzorix.engine.RootfsInstaller
  * ## Why this is not just `RootfsInstaller`
  *
  * `RootfsInstaller` needs the build's values — which ABI is bundled, the checksum,
- * where to fetch from — and those arrive through [EngineConfig] because `BuildConfig`
+ * where to fetch from — and those arrive through [ContainerConfig] because `BuildConfig`
  * belongs to `:app` and a library cannot read it. This object is the one place that
  * pairs the two, so a caller does not have to know the pairing.
  *
  * ## Why it exists at all
  *
  * The service used to be the only thing that could install the rootfs, because the
- * installer was a private field on it. That made the engine untestable without
+ * installer was a private field on it. That made the container untestable without
  * service lifecycle timing, and made the install unreachable from anywhere else — a
  * second caller would have had to duplicate the wiring or reach into the service.
  * It is a small, idempotent operation; it belongs somewhere both can call.
  *
  * Idempotent and cheap when already installed: the first thing it does is ask
- * [com.vyzorix.engine.ProotLauncher.isReady], which is three filesystem checks.
+ * [com.vyzorix.container.ProotLauncher.isReady], which is three filesystem checks.
  */
 object RootfsBootstrap {
     /**
-     * Ensures the engine's userspace is installed. Returns whether it is ready
+     * Ensures the container's userspace is installed. Returns whether it is ready
      * afterwards.
      *
      * Safe to call from anywhere, on any thread — it does blocking I/O, so not the
@@ -36,7 +36,7 @@ object RootfsBootstrap {
      * directly.
      */
     fun ensureInstalled(context: Context): Boolean {
-        val config = EngineConfig.get()
+        val config = ContainerConfig.get()
 
         val installer =
             RootfsInstaller(
@@ -57,14 +57,14 @@ object RootfsBootstrap {
      * Ensures the optional extended tier is installed. Returns whether it is present.
      *
      * Separate from [ensureInstalled] because it is optional: the core tier gates the
-     * engine and a failure leaves the device bridge-only, while the extended tier is
+     * container and a failure leaves the device bridge-only, while the extended tier is
      * fetched on demand and a failure is only logged. See
      * [RootfsInstaller.ensureExtended].
      *
      * Blocking I/O, so not the main thread.
      */
     fun ensureExtended(context: Context): Boolean {
-        val config = EngineConfig.get()
+        val config = ContainerConfig.get()
 
         val installer =
             RootfsInstaller(

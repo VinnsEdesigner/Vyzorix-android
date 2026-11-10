@@ -1,4 +1,4 @@
-package com.vyzorix.engine
+package com.vyzorix.container
 
 import android.content.Context
 import android.os.Build
@@ -12,13 +12,13 @@ import java.io.IOException
  *
  * ## Why this is separate from [RootfsInstaller]
  *
- * The rootfs is the engine's userspace — a Debian tree, replaced wholesale. These
+ * The rootfs is the container's userspace — a Debian tree, replaced wholesale. These
  * are *our* binaries, built from this repo for the container's glibc, and they live
  * in the writable overlay's `/usr/local/bin` rather than in the rootfs. That
  * placement is the point: `/usr/local` is a bind target of the overlay, so a
  * rootfs replacement leaves the supervisor and the CLI in place, exactly as it
  * leaves app storage in place. Putting them in the rootfs would delete them on the
- * next engine update.
+ * next container update.
  *
  * ## Where the archive comes from
  *
@@ -53,7 +53,7 @@ class Layer3Installer(
             true
         } catch (e: IOException) {
             // Not fatal: a device without the supervisor runs no apps, but the
-            // engine, the bridge and the terminal all still work. Logged loudly
+            // container, the bridge and the terminal all still work. Logged loudly
             // because it is the difference between "apps run" and "apps silently do
             // not", and the next boot retries.
             Log.e(TAG, "layer 3 binaries failed to install; apps will not run", e)

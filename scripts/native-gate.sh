@@ -62,7 +62,7 @@ echo "native-gate: clang-format"
 # resolve the include paths or the language standard, so it reports
 # "'vyzorix/json.h' file not found" — a diagnostic error that hides the real ones.
 #
-# The container tools (`debian-engine/android-bin`, `app-runtime/*`, `native/lib`)
+# The container tools (`debian-container/android-bin`, `app-runtime/*`, `native/lib`)
 # are not in that database: they are built by their own Makefiles with a GNU cross
 # toolchain, because they run in the Debian userspace (glibc) rather than on Android
 # (bionic). Their correctness is covered by their own `make check` suites and the

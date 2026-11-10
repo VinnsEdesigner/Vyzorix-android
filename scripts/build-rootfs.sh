@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build the Debian rootfs tarballs for the container engine.
+# Build the Debian rootfs tarballs for the container.
 #
 # Produces, in the output directory:
 #   debian-core-<abi>.tar.gz      the floor: shell, userland, TLS trust, socat
@@ -34,7 +34,7 @@
 set -euo pipefail
 
 ARCH="arm64"
-OUT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/debian-engine/rootfs/dist"
+OUT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/debian-container/rootfs/dist"
 SUITE="bookworm"
 MIRROR="http://deb.debian.org/debian"
 SECURITY_MIRROR="http://deb.debian.org/debian-security"
@@ -188,7 +188,7 @@ HOSTS
   # make node unable to load a module from disk and npm unusable; see the file's own
   # header. Installed under /usr/lib so it is not on PATH and cannot be shadowed.
   sudo mkdir -p "${dir}/usr/lib/vyzorix"
-  sudo cp "${ROOT}/debian-engine/rootfs/node-prelude.mjs" \
+  sudo cp "${ROOT}/debian-container/rootfs/node-prelude.mjs" \
           "${dir}/usr/lib/vyzorix/node-prelude.mjs"
   sudo chmod 0644 "${dir}/usr/lib/vyzorix/node-prelude.mjs"
 

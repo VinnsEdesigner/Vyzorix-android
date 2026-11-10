@@ -2,7 +2,7 @@
 
 **Status:** design, agreed in outline. Supersedes the inbox/confirm flow.
 **Parent:** `doc/ANDROID_SERVICE_ARCHITECTURE.md` §5 (cloud connector) and §9 (security).
-**Related:** `vyzorix-update-server/documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md` (what a session may do, once registered — it lives in the server repo).
+**Related:** `VYZORIX/DOCUMENTATION/CONTAINER_ANDROID_APIS.md` (what a session may do, once registered — it lives in the server repo).
 
 This defines one thing: **how a freshly installed device becomes a known, owned,
 configurable device in exactly one account.** It is not about what the device may

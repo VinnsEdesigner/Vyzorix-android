@@ -1,4 +1,4 @@
-package com.vyzorix.engine
+package com.vyzorix.container
 
 import android.util.Log
 import java.io.BufferedInputStream
@@ -307,7 +307,7 @@ object TarGz {
         // `rename` replaces the *directory entry*. A process holding the old inode
         // keeps it, complete and untouched, for as long as it lives; a process that
         // opens the path next gets the new file. That is the property the extended
-        // tier needs: it re-ships every core file, and it installs after the engine
+        // tier needs: it re-ships every core file, and it installs after the container
         // has started.
         val temp = File(target.parentFile, "${target.name}.vyzorix-tmp")
         FileOutputStream(temp).use { out ->

@@ -61,7 +61,7 @@ class UpdateLiveE2ETest {
     @Before
     fun requireServer() {
         assumeTrue(
-            "no OTA server at $baseUrl; start vyzorix-update-server on the host :3000",
+            "no OTA server at $baseUrl; start VYZORIX on the host :3000",
             serverReachable(),
         )
     }

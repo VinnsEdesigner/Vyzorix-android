@@ -2,7 +2,7 @@ package com.vyzorix.agent
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.service.TerminalShellPolicy
 import java.io.File
 import org.junit.After
@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
  * Which shell a terminal gets, and when.
  *
  * This is the most consequential branch in the terminal path and, until now, the only
- * one with no test: the service picks the container's proot shell when the engine is
+ * one with no test: the service picks the container's proot shell when the container is
  * ready and falls back to a plain device shell when it is not. The instrumented PTY
  * tests never reached it — they hand the broker an executable directly — so a change
  * that inverted the branch, or made `isReady()` true too early, would have been
@@ -42,7 +42,7 @@ class TerminalShellSelectionTest {
         rootfs = ProotLauncher.rootfs(context)
         prootBinary = ProotLauncher.prootBinary(context)
 
-        // Start from a clean slate: no engine.
+        // Start from a clean slate: no container.
         rootfs.deleteRecursively()
         prootBinary.delete()
     }
@@ -55,7 +55,7 @@ class TerminalShellSelectionTest {
     }
 
     /** Makes `isReady()` true: an executable proot and a rootfs with bash in it. */
-    private fun installEngine() {
+    private fun installContainer() {
         prootBinary.parentFile?.mkdirs()
         prootBinary.writeText("#!/bin/sh\n")
         prootBinary.setExecutable(true, true)
@@ -68,9 +68,9 @@ class TerminalShellSelectionTest {
     }
 
     @Test
-    fun withoutTheEngineTheShellIsNotTheContainer() {
+    fun withoutTheContainerTheShellIsNotTheContainer() {
         assertFalse(
-            "a fresh context must not report the engine ready",
+            "a fresh context must not report the container ready",
             ProotLauncher.isReady(context),
         )
 
@@ -80,9 +80,9 @@ class TerminalShellSelectionTest {
     }
 
     @Test
-    fun withTheEngineTheShellIsProotInTheContainer() {
-        installEngine()
-        assertTrue("the engine must report ready once staged", ProotLauncher.isReady(context))
+    fun withTheContainerTheShellIsProotInTheContainer() {
+        installContainer()
+        assertTrue("the container must report ready once staged", ProotLauncher.isReady(context))
 
         val request = ProotLauncher.loginShellRequest(context, token = "t")
 
@@ -97,11 +97,11 @@ class TerminalShellSelectionTest {
     }
 
     @Test
-    fun theEngineIsNotReadyWithoutBash() {
-        installEngine()
+    fun theContainerIsNotReadyWithoutBash() {
+        installContainer()
 
         // Remove the one file the launcher checks. A rootfs without bash is not a
-        // rootfs the engine can start, and `isReady()` must say so rather than opening
+        // rootfs the container can start, and `isReady()` must say so rather than opening
         // a container that dies at exec.
         File(rootfs, "bin/bash").delete()
 
@@ -109,11 +109,11 @@ class TerminalShellSelectionTest {
     }
 
     @Test
-    fun theEngineIsNotReadyWithoutTheScratchDir() {
-        installEngine()
+    fun theContainerIsNotReadyWithoutTheScratchDir() {
+        installContainer()
 
         // proot fails with "can't create temporary file" without this, so a ready
-        // engine that cannot start is exactly what isReady() must not report.
+        // container that cannot start is exactly what isReady() must not report.
         //
         // Deleted via tmpDirPath, not tmpDir: tmpDir creates the directory, so using
         // it here would stage the condition and then repair it.

@@ -7,7 +7,7 @@ import com.vyzorix.capability.PtyBroker
 import com.vyzorix.capability.PtyReader
 import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.service.VyzorixForegroundService
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  * It needs the rootfs asset, and only `:app` has it. An `:android-core` instrumented
  * test runs in a different APK with no `assets/`, so `ProotLauncher.isReady()` is
  * false there and the service's `terminalShellRequest` falls back to the uncontained
- * device shell. That is why the engine path had no test: the module that could drive
+ * device shell. That is why the container path had no test: the module that could drive
  * a PTY could not have the userspace, and the module with the userspace had no test
  * source set. This closes that gap.
  *
@@ -48,7 +48,7 @@ import org.junit.runner.RunWith
  * was missing: whether the *request the service builds* produces a Debian shell.
  */
 @RunWith(AndroidJUnit4::class)
-class EngineTerminalE2ETest {
+class ContainerTerminalE2ETest {
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val socketFile = java.io.File(context.filesDir, "android.sock")
@@ -70,7 +70,7 @@ class EngineTerminalE2ETest {
         // any terminal can be opened.
         VyzorixForegroundService.start(context)
 
-        assertTrue("the engine must install and report ready", awaitEngineReady())
+        assertTrue("the container must install and report ready", awaitContainerReady())
         assertTrue("the bridge socket must be bound", awaitSocket())
     }
 
@@ -85,11 +85,11 @@ class EngineTerminalE2ETest {
     }
 
     /**
-     * Waits for the engine's readiness check, which on a cold device means waiting for
+     * Waits for the container's readiness check, which on a cold device means waiting for
      * the rootfs to finish extracting.
      */
-    private fun awaitEngineReady(): Boolean {
-        val deadline = System.currentTimeMillis() + ENGINE_READY_TIMEOUT_MS
+    private fun awaitContainerReady(): Boolean {
+        val deadline = System.currentTimeMillis() + CONTAINER_READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             if (ProotLauncher.isReady(context)) return true
             Thread.sleep(POLL_MS)
@@ -227,7 +227,7 @@ class EngineTerminalE2ETest {
 
     @Test
     fun theLoginShellRunsInsideDebian() {
-        assertTrue("the engine must be installed", ProotLauncher.isReady(context))
+        assertTrue("the container must be installed", ProotLauncher.isReady(context))
 
         val out = runInContainer("cat /etc/debian_version")
 
@@ -239,7 +239,7 @@ class EngineTerminalE2ETest {
 
     @Test
     fun theContainerShellIsRoot() {
-        assertTrue("the engine must be installed", ProotLauncher.isReady(context))
+        assertTrue("the container must be installed", ProotLauncher.isReady(context))
 
         val out = runInContainer("id -u")
 
@@ -253,7 +253,7 @@ class EngineTerminalE2ETest {
 
     @Test
     fun theContainerShellStartsInTheRootfsRoot() {
-        assertTrue("the engine must be installed", ProotLauncher.isReady(context))
+        assertTrue("the container must be installed", ProotLauncher.isReady(context))
 
         val out = runInContainer("pwd")
 
@@ -267,7 +267,7 @@ class EngineTerminalE2ETest {
 
     @Test
     fun aBinaryOnlyTheContainerHasRuns() {
-        assertTrue("the engine must be installed", ProotLauncher.isReady(context))
+        assertTrue("the container must be installed", ProotLauncher.isReady(context))
 
         // `socat` is in the rootfs and not on the device. It is also the container-side
         // bridge transport, so its presence shows the image is the built one.
@@ -281,7 +281,7 @@ class EngineTerminalE2ETest {
 
     private companion object {
         /** First boot extracts ~145 MB, so a cold device needs the room. */
-        const val ENGINE_READY_TIMEOUT_MS = 180_000L
+        const val CONTAINER_READY_TIMEOUT_MS = 180_000L
         const val SOCKET_TIMEOUT_MS = 20_000L
         const val OUTPUT_TIMEOUT_MS = 60_000L
 

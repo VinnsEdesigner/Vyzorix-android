@@ -1,4 +1,4 @@
-package com.vyzorix.engine
+package com.vyzorix.container
 
 import android.content.Context
 import android.util.Log
@@ -11,7 +11,7 @@ import java.io.InputStream
  *
  * ## When this runs
  *
- * Once, before the engine is started. [ProotLauncher.isReady] is the gate — the
+ * Once, before the container is started. [ProotLauncher.isReady] is the gate — the
  * launcher refuses to open a container shell until `rootfs/bin/bash` exists — so this
  * runs at service start and is a no-op on every boot after the first.
  *
@@ -70,7 +70,7 @@ class RootfsInstaller(
     private val extendedSha256: String = "",
 ) {
     /**
-     * Installs the rootfs if it is not already installed. Returns whether the engine
+     * Installs the rootfs if it is not already installed. Returns whether the container
      * is ready afterwards.
      *
      * Safe to call on every boot; the common path is a single `isReady` check.
@@ -85,12 +85,12 @@ class RootfsInstaller(
         } catch (e: IOException) {
             // Not fatal: the device runs bridge-only until this succeeds, and the next
             // boot retries. Logged loudly because it is the difference between a
-            // working container and a device that silently has no engine.
+            // working container and a device that silently has no container.
             //
             // No marker file is needed to make the retry correct: install() clears
             // whatever is at the rootfs path before extracting, so the next attempt
             // never resumes a tree of unknown completeness.
-            Log.e(TAG, "rootfs install failed; engine unavailable this boot", e)
+            Log.e(TAG, "rootfs install failed; container unavailable this boot", e)
 
             false
         }
@@ -107,7 +107,7 @@ class RootfsInstaller(
      *
      * The core tier is the foundation: bundled in the APK, installed before anything
      * can run, and a failure leaves the device bridge-only. The extended tier is
-     * ~108 MB of tooling most devices never need, so it must not gate the engine, and
+     * ~108 MB of tooling most devices never need, so it must not gate the container, and
      * a failure must not look like a broken install. It is fetched on demand — when a
      * terminal opens, which is the first moment `tmux` matters — and a failure is
      * logged and forgotten; the next open retries.
@@ -136,7 +136,7 @@ class RootfsInstaller(
 
             true
         } catch (e: IOException) {
-            Log.w(TAG, "extended tier install failed; core engine is unaffected", e)
+            Log.w(TAG, "extended tier install failed; core container is unaffected", e)
 
             false
         }
@@ -217,7 +217,7 @@ class RootfsInstaller(
             throw IOException("could not create app storage ${apps.absolutePath}")
         }
 
-        // The one thing the engine cannot start without.
+        // The one thing the container cannot start without.
         if (!ProotLauncher.isReady(context)) {
             throw IOException(
                 "rootfs extracted but bin/bash is missing or not executable; " +
@@ -225,7 +225,7 @@ class RootfsInstaller(
             )
         }
 
-        Log.i(TAG, "rootfs installed; engine ready")
+        Log.i(TAG, "rootfs installed; container ready")
     }
 
     /**

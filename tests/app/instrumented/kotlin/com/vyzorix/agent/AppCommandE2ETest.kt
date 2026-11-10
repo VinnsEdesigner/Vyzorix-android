@@ -5,7 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.vyzorix.connector.command.AppCommands
 import com.vyzorix.connector.command.AppControlClient
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.service.VyzorixForegroundService
 import java.io.File
 import org.junit.Assert.assertTrue
@@ -49,12 +49,12 @@ class AppCommandE2ETest {
 
         client = AppControlClient(socket)
 
-        assertTrue("the engine must install and report ready", awaitEngineReady())
+        assertTrue("the container must install and report ready", awaitContainerReady())
         assertTrue("the container binaries must be installed", awaitSupervisor())
         assertTrue("the supervisor must answer on its control socket", awaitSocket())
     }
 
-    private fun awaitEngineReady(): Boolean =
+    private fun awaitContainerReady(): Boolean =
         await(READY_TIMEOUT_MS) {
             ProotLauncher.isReady(context)
         }

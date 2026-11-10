@@ -17,7 +17,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIST="${ROOT}/debian-engine/rootfs/dist"
+DIST="${ROOT}/debian-container/rootfs/dist"
 
 fail=0
 check() { # description, ok(0/1)

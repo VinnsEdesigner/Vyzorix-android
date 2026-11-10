@@ -3,7 +3,7 @@ package com.vyzorix.agent
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.service.RootfsBootstrap
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
  *
  * This is the requirement everything else rests on, and it is easy to test the wrong
  * way: `adb shell run-as ... sh -c 'proot ...'` runs proot as a child of `sh`, which
- * is a plain process. The engine launches it from the app's ART process, which is a
+ * is a plain process. The container launches it from the app's ART process, which is a
  * different environment — a zygote-forked VM with its own fds and SELinux domain —
  * and that is the case that has to work.
  *
@@ -37,7 +37,7 @@ class ProotFromAppProcessTest {
 
     @Test
     fun prootRunsFromTheAppProcess() {
-        assertTrue("the engine must be installed", ProotLauncher.isReady(context))
+        assertTrue("the container must be installed", ProotLauncher.isReady(context))
 
         val rootfs = ProotLauncher.rootfs(context).absolutePath
         val proot = ProotLauncher.prootBinary(context).absolutePath

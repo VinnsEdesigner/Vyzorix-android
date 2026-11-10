@@ -30,7 +30,7 @@ import kotlinx.serialization.json.jsonObject
  * ## Why it returns a failure rather than throwing
  *
  * A missing socket is a normal state, not a fault: the supervisor may not be
- * installed (an APK built without the toolchain), may be restarting, or the engine
+ * installed (an APK built without the toolchain), may be restarting, or the container
  * may be absent. The operator needs to be told which, and `CommandOutcome.failed`
  * carries it. Throwing would be caught by the dispatcher and reported as a crash,
  * which hides the reason.

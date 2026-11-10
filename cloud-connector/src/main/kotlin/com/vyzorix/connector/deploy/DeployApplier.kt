@@ -5,7 +5,7 @@ import com.vyzorix.connector.config.ArtifactConfig
 import com.vyzorix.connector.config.DeviceConfig
 import com.vyzorix.connector.secret.SecretResolution
 import com.vyzorix.connector.secret.SecretStore
-import com.vyzorix.engine.TarGz
+import com.vyzorix.container.TarGz
 import java.io.File
 import java.io.IOException
 

@@ -1,6 +1,6 @@
 # `native/lib` — the C++ the container tools share
 
-The container tools (`debian-engine/android-bin`, `app-runtime/supervisor`,
+The container tools (`debian-container/android-bin`, `app-runtime/supervisor`,
 `app-runtime/cli-wrappers`) run **inside the Debian userspace**, whose libc is glibc
 — not Android's bionic — so this library is built by a GNU cross toolchain, never the
 NDK. Each tool links the translation units it needs rather than a shared object:

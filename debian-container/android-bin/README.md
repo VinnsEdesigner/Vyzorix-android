@@ -9,7 +9,7 @@ it, a process in the Debian userspace has a socket it cannot speak to. It is Lay
 2's last missing piece (architecture doc §3, §12.1).
 
 ```
-debian-engine/android-bin/
+debian-container/android-bin/
 ├── apis.txt          the API names, one per line — the single source of truth
 ├── generator.cpp     host tool: apis.txt -> api_catalog.cpp + the symlinks
 ├── Makefile

@@ -24,7 +24,7 @@ import com.vyzorix.capability.PtyRequest
 import com.vyzorix.capability.PtyResult
 import com.vyzorix.capability.usb.AndroidUsbHost
 import com.vyzorix.capability.usb.UsbBroker
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.permissions.PermissionRequester
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,15 +32,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * The foreground service. It owns every layer: the wake lock that keeps the
  * process schedulable, the bridge socket, the PTY broker and its readers, and the
- * engine.
+ * container.
  *
  * Everything lives here because there is exactly one of each: one socket, one
- * engine, one place that decides when to restart. A second owner would mean two
+ * container, one place that decides when to restart. A second owner would mean two
  * copies of that state.
  *
  * `START_STICKY` so the system restarts it after a kill. Child processes are not
  * phantom processes precisely because they belong to this service, which is why
- * the engine runs under it rather than as a detached daemon.
+ * the container runs under it rather than as a detached daemon.
  *
  * On the phantom-process killer (Android 12+, ~32 concurrent children): it is not
  * a targetSdk-gated behaviour and there is no public or hidden `ActivityManager`
@@ -140,20 +140,20 @@ class VyzorixForegroundService : Service() {
         router = buildRouter()
 
         // Install the container's userspace if it is not already there, before
-        // anything asks whether the engine is ready. Off the main thread: it extracts
+        // anything asks whether the container is ready. Off the main thread: it extracts
         // ~145 MB on first boot, and `start()` runs from `onStartCommand`.
         //
         // A failure is not fatal — the device runs bridge-only — so this does not
         // block the bridge or the cloud connection below. The watchdog's
-        // `isEngineReady` gate then keeps the terminal closed until it succeeds, and
+        // `isContainerReady` gate then keeps the terminal closed until it succeeds, and
         // the next boot retries.
         installThread =
             Thread({
-                // RootfsBootstrap pairs the installer with the build's EngineConfig,
+                // RootfsBootstrap pairs the installer with the build's ContainerConfig,
                 // so the wiring lives in one place rather than here. Idempotent: on a
                 // device that already has the rootfs this is three filesystem checks.
                 val ready = RootfsBootstrap.ensureInstalled(this)
-                Log.i(TAG, "rootfs install finished; engine ready=$ready")
+                Log.i(TAG, "rootfs install finished; container ready=$ready")
 
                 // **Order matters: extended, then layer 3, then the supervisor.**
                 //
@@ -167,7 +167,7 @@ class VyzorixForegroundService : Service() {
                 // The supervisor is started **last** deliberately, because
                 // `ProotLauncher.hasSupervisor()` is the signal everything else uses
                 // to mean "the tree is ready" — the service's own watchdog, and any
-                // caller waiting on the engine. Starting it before the extended
+                // caller waiting on the container. Starting it before the extended
                 // extract would make that signal true while the tree was still being
                 // rewritten.
                 //
@@ -213,8 +213,8 @@ class VyzorixForegroundService : Service() {
 
         watchdog =
             ServiceWatchdog(
-                isEngineReady = { ProotLauncher.isReady(this) },
-                onEngineLost = { Log.w(TAG, "engine unavailable; will retry") },
+                isContainerReady = { ProotLauncher.isReady(this) },
+                onContainerLost = { Log.w(TAG, "container unavailable; will retry") },
             ).also { it.start() }
 
         // The cloud connection, if the app installed one. Started after the bridge so
@@ -226,7 +226,7 @@ class VyzorixForegroundService : Service() {
         // no cloud link, because a safe call short-circuits its arguments. In
         // bridge-only mode — which is how a device runs until it is enrolled, and how
         // the instrumented tests run — the terminal path was therefore unavailable to
-        // any in-process caller, even though the engine, the broker and the bridge were
+        // any in-process caller, even though the container, the broker and the bridge were
         // all up.
         cloudLink = CloudLinkProvider.get()
         cloudLink?.registerApis(router)
@@ -264,7 +264,7 @@ class VyzorixForegroundService : Service() {
     /**
      * The shell a terminal session runs.
      *
-     * The container's login shell when the engine is installed, which is the
+     * The container's login shell when the container is installed, which is the
      * architecture's terminal. When it is not — the rootfs asset has not shipped yet
      * — a plain device shell is used
      * **only** if [TerminalShellPolicy] has explicitly allowed it, because that shell
@@ -305,7 +305,7 @@ class VyzorixForegroundService : Service() {
      * `logcat` shows supervisor output alongside the service's own.
      *
      * A failure is logged, not fatal: a device whose supervisor did not start still
-     * has the engine, the bridge and the terminal. The next boot retries.
+     * has the container, the bridge and the terminal. The next boot retries.
      */
     private fun startSupervisor() {
         if (!ProotLauncher.hasSupervisor(this)) {
@@ -385,7 +385,7 @@ class VyzorixForegroundService : Service() {
 
         supervisorRestarts++
         if (supervisorRestarts > MAX_SUPERVISOR_RESTARTS) {
-            // Give up loudly rather than spin. The engine, the bridge and the
+            // Give up loudly rather than spin. The container, the bridge and the
             // terminal all still work; only apps are unavailable.
             Log.e(TAG, "supervisor exited $supervisorRestarts times; not restarting it")
 
@@ -441,7 +441,7 @@ class VyzorixForegroundService : Service() {
     }
 
     /**
-     * Opens a PTY session, launches the engine on it, and starts its reader.
+     * Opens a PTY session, launches the container on it, and starts its reader.
      * Returns the channel number, which is what the client uses on subsequent
      * frames.
      *
@@ -600,10 +600,10 @@ class VyzorixForegroundService : Service() {
 
         releaseWakeLock()
 
-        // The engine is stopping, so the persistent notification returns to the
+        // The container is stopping, so the persistent notification returns to the
         // "Start Vyzorix" state: the service's foreground notification goes
         // away with it, and this re-posts the one the operator can tap to start
-        // again. Without it, stopping the engine left no way back from the
+        // again. Without it, stopping the container left no way back from the
         // notification.
         DeviceNotification(this).needsStart()
 
@@ -619,7 +619,7 @@ class VyzorixForegroundService : Service() {
         // rather than silenced globally.
         @Suppress("WakelockTimeout")
         wakeLock =
-            manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:engine").apply {
+            manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:container").apply {
                 setReferenceCounted(false)
                 acquire()
             }
@@ -633,7 +633,7 @@ class VyzorixForegroundService : Service() {
     /**
      * The foreground notification, in the shared "running" state.
      *
-     * The engine service only runs once the operator has tapped Start, so by the
+     * The container service only runs once the operator has tapped Start, so by the
      * time this is posted the device is past the "needs start" state; the cloud
      * connection moves it to "waiting" (pairing code) and then "running" (claimed).
      * It shares [DeviceNotification.NOTIFICATION_ID], so the service's notification

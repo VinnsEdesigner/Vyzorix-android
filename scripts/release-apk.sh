@@ -188,7 +188,7 @@ SERVER_KEY_PROP="$(printf '%s' "${SERVER_KEY}" | awk 'BEGIN{ORS=""} NR>1{print "
 # ---------------------------------------------------------------- arm64 inputs
 log "preparing the arm64 build inputs"
 
-DIST="${REPO_ROOT}/debian-engine/rootfs/dist"
+DIST="${REPO_ROOT}/debian-container/rootfs/dist"
 ROOTFS="${DIST}/debian-core-${ROOTFS_ABI}.tar.gz"
 if [[ -s "${ROOTFS}" ]]; then
   info "rootfs present: ${ROOTFS}"

@@ -12,7 +12,7 @@
 #
 #   --prefix DIR        install root (default /workspace/toolchain)
 #   --skip STEP         skip a step; repeatable. Steps: jdk android-sdk emulator
-#                       rootfs engine-build cross-compilers
+#                       rootfs container-build cross-compilers
 #   --rootfs-abi ABI    rootfs tarball to fetch; repeatable (default: x86_64 arm64)
 #   --help
 #
@@ -24,7 +24,7 @@
 #                    AVD  -> runs the instrumented suite (no KVM: x86_64, -accel off)
 #   rootfs           the Debian userspace tarballs, fetched from the public release
 #                    (the APK bundles one ABI's rootfs; the others are fetched)
-#   engine-build     debootstrap + qemu-user-static + binfmt-support, and the binfmt_misc
+#   container-build     debootstrap + qemu-user-static + binfmt-support, and the binfmt_misc
 #                    handlers  -> rebuilds a rootfs for ANY architecture (Layer 2)
 #   cross-compilers  gcc/g++ for aarch64 and armhf  -> builds android-bin (Layer 2)
 #                    and the Layer 3 supervisor / cli-wrappers, which run inside the
@@ -163,7 +163,7 @@ fi
 
 # -------------------------------------------------------------------- rootfs
 if ! skipped rootfs; then
-  DIST="$REPO_ROOT/debian-engine/rootfs/dist"
+  DIST="$REPO_ROOT/debian-container/rootfs/dist"
   mkdir -p "$DIST"
 
   # The assets live in a separate repo. It is public, so no auth is needed; $GIT is
@@ -206,12 +206,12 @@ if ! skipped rootfs; then
   ls -lh "$DIST"/*.tar.gz 2>/dev/null || true
 fi
 
-# --------------------------------------------------------------- engine-build
+# --------------------------------------------------------------- container-build
 # Needed to *rebuild* a rootfs for another architecture, and to run a foreign-arch
 # userspace locally. debootstrap's second stage executes target binaries, so it needs
 # qemu-user-static AND a registered binfmt_misc handler — qemu alone gives a bare
 # "Exec format error".
-if ! skipped engine-build; then
+if ! skipped container-build; then
   if ! have debootstrap; then
     log "debootstrap + qemu-user-static + binfmt-support"
     sudo apt-get install -y debootstrap qemu-user-static binfmt-support
@@ -238,7 +238,7 @@ if ! skipped engine-build; then
 fi
 
 # ------------------------------------------------------------ cross-compilers
-# `debian-engine/android-bin` (Layer 2) and Layer 3's supervisor / cli-wrappers are
+# `debian-container/android-bin` (Layer 2) and Layer 3's supervisor / cli-wrappers are
 # built for the Debian userspace, whose libc is glibc — not Android's bionic — so
 # they need a GNU cross toolchain, not the NDK. C++ for android-bin, C for Layer 3,
 # hence both gcc- and g++- packages.

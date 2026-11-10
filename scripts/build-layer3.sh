@@ -88,15 +88,15 @@ log "building for ${ARCH} with ${CXX}"
 # tarball has the container layout rather than the source layout.
 ( cd "${ROOT}/app-runtime/supervisor" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
 ( cd "${ROOT}/app-runtime/cli-wrappers" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
-( cd "${ROOT}/debian-engine/android-bin" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
+( cd "${ROOT}/debian-container/android-bin" && make clean >/dev/null && make CXX="${CXX}" LDFLAGS="${LDFLAGS_STATIC}" >/dev/null )
 
 cp "${ROOT}/app-runtime/supervisor/build/bin/supervisor" "${STAGE}/bin/"
 cp "${ROOT}"/app-runtime/cli-wrappers/build/bin/app-* "${STAGE}/bin/"
 
 # android-bin is a directory of symlinks beside the binary, so the whole directory
 # is copied: the symlinks are relative to the binary and only resolve together.
-cp "${ROOT}"/debian-engine/android-bin/build/bin/android-bin "${STAGE}/bin/"
-for link in "${ROOT}"/debian-engine/android-bin/build/bin/*; do
+cp "${ROOT}"/debian-container/android-bin/build/bin/android-bin "${STAGE}/bin/"
+for link in "${ROOT}"/debian-container/android-bin/build/bin/*; do
   name="$(basename "${link}")"
   [[ "${name}" == "android-bin" ]] && continue
   ln -sf android-bin "${STAGE}/bin/${name}"

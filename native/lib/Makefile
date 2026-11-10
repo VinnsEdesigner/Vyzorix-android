@@ -9,7 +9,7 @@
 #   make check    build and run the unit tests, on the host
 #   make clean
 #
-# The tools that consume it are debian-engine/android-bin (already) and
+# The tools that consume it are debian-container/android-bin (already) and
 # app-runtime/ (Layer 3).
 
 CXX ?= g++

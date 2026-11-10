@@ -15,7 +15,7 @@ kotlin-test = "1.9.23"
 #
 # targetSdk is pinned at 28 deliberately and must not be raised. Android 10
 # denies execve() on files inside an app's home directory for any app targeting
-# API 29+, and the Debian engine execs binaries from app storage. The kernel
+# API 29+, and the Debian container execs binaries from app storage. The kernel
 # enforces this through SELinux (seapp_contexts maps targetSdk >= 29 to
 # untrusted_app_29, which lacks the exec rule untrusted_app_27 has), so there is
 # no userspace workaround. Termux pins 28 for the same reason.

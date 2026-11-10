@@ -26,7 +26,7 @@ interface PtySessionPort {
      * [onExit] is called once when the shell's process ends, with its exit code.
      *
      * Returns true when the session opened. A false return means the session could
-     * not start (the engine is missing, the session cap is reached) and the relay
+     * not start (the container is missing, the session cap is reached) and the relay
      * reports the failure to the server.
      */
     fun open(

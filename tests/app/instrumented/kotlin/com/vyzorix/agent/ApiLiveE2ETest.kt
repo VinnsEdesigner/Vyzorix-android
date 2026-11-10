@@ -3,7 +3,7 @@ package com.vyzorix.agent
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.vyzorix.engine.ProotLauncher
+import com.vyzorix.container.ProotLauncher
 import com.vyzorix.service.VyzorixForegroundService
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -56,7 +56,7 @@ class ApiLiveE2ETest {
         VyzorixForegroundService.start(context)
 
         assertTrue(
-            "the engine must install and report ready",
+            "the container must install and report ready",
             await(READY_TIMEOUT_MS) { ProotLauncher.isReady(context) },
         )
         assertTrue(

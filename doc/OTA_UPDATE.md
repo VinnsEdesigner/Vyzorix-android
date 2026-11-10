@@ -109,7 +109,7 @@ https://github.com/VinnsEdesigner/gz-_ASSETS/releases/download/app-v0.1.0/vyzori
 ```
 
 That download is **anonymous** (verified: HTTP 200, 64 MB, no token). It has to be:
-the app repo `vyzorix-update-server` is **private**, and GitHub serves a private
+the app repo `VYZORIX` is **private**, and GitHub serves a private
 repo's release assets only to authenticated callers, so a device — which has no
 token — gets a 404 from it. This is the same trap the rootfs assets hit (see
 `ANDROID_SERVICE_ARCHITECTURE.md` §6.1.1). A release *was* created on the private
@@ -117,12 +117,12 @@ repo too, as a distribution record, but it is not the delivery path.
 
 ### The `make_latest: false` trap
 
-The engine rootfs is fetched via `releases/latest/download/...` (see
+The container rootfs is fetched via `releases/latest/download/...` (see
 `rootfsBaseUrl()` in `app/build.gradle.kts`). So a new release in `gz-_ASSETS`
 must **not** become "latest" — if it did, `releases/latest/download/debian-core-*.tar.gz`
 would 404 and every fresh install would fail to fetch its userspace. The APK
 release is therefore created with `"make_latest": "false"`, and `latest` still
-resolves to `v1.0.0` (the engine assets). Verified after publishing.
+resolves to `v1.0.0` (the container assets). Verified after publishing.
 
 A device is still not wired to GitHub: it downloads from the **server's**
 `/v1/apk/<name>` route. The public release is for the case where a device (or an

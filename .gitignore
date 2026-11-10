@@ -37,7 +37,7 @@ __pycache__/
 # every clone, and it would go stale the moment Debian updates. Rebuilt by
 # scripts/build-rootfs.sh, which records the exact package versions in BUILD.md so a
 # rebuild is comparable. The device verifies SHA256SUMS before extracting.
-/debian-engine/rootfs/dist/
+/debian-container/rootfs/dist/
 
 # The Layer 3 container binaries. Same reasoning as the rootfs tarballs: a build
 # artifact, rebuilt by scripts/build-layer3.sh, not a repo file.

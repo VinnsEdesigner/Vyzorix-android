@@ -3,7 +3,7 @@
 A headless Android agent. It runs a Debian userspace inside `proot`, exposes it
 over a cloud WebSocket, and gives an operator a terminal (and, later, USB and app
 control). This repository is the **device half**; the server half lives in
-`vyzorix-update-server`.
+`VYZORIX`.
 
 > **Read `doc/ANDROID_SERVICE_ARCHITECTURE.md` first.** It is the authority for
 > everything structural, and it records *why* the awkward constraints below exist.
@@ -60,7 +60,7 @@ scripts/install-toolchain.sh [--prefix DIR] [--skip STEP]... [--rootfs-abi ABI].
 | `android-sdk` | cmdline-tools, platform 34, build-tools 34.0.0, NDK 26.3.11579264, CMake 3.22.1, platform-tools | Compiles `:android-core` (NDK/CMake) and `:app` (Kotlin). |
 | `emulator` | the emulator, `system-images;android-28;default;x86_64`, and the `x86test` AVD | Runs the instrumented suite. The image and AVD are the ones `AGENTS.md` prescribes. |
 | `rootfs` | the Debian userspace tarballs, from the public release | The container's userspace. Verified against the release's own `SHA256SUMS`. |
-| `engine-build` | `debootstrap`, `qemu-user-static`, `binfmt-support`, and the `binfmt_misc` handlers | Rebuilds a rootfs for **any** architecture (`scripts/build-rootfs.sh`). Cross-arch needs a registered `binfmt_misc` handler, not just qemu. |
+| `container-build` | `debootstrap`, `qemu-user-static`, `binfmt-support`, and the `binfmt_misc` handlers | Rebuilds a rootfs for **any** architecture (`scripts/build-rootfs.sh`). Cross-arch needs a registered `binfmt_misc` handler, not just qemu. |
 | `cross-compilers` | `gcc-aarch64-linux-gnu`, `gcc-arm-linux-gnueabihf` | Builds the Layer 3 supervisor / CLI wrappers for the Debian userspace. |
 
 Options: `--prefix DIR` changes the install root (default `/workspace/toolchain`);
@@ -105,7 +105,7 @@ Stop the emulator with `adb emu kill`.
 
 Rebuilds the Debian rootfs tarballs (one per architecture) from `debootstrap`.
 This is the Layer 2 asset pipeline; the released tarballs are what
-`install-toolchain.sh` fetches. See `debian-engine/rootfs/README.md`.
+`install-toolchain.sh` fetches. See `debian-container/rootfs/README.md`.
 
 ```bash
 scripts/build-rootfs.sh --arch arm64        # most current devices
@@ -113,19 +113,19 @@ scripts/build-rootfs.sh --arch armeabi-v7a  # older 32-bit devices
 scripts/build-rootfs.sh --arch x86_64       # emulators, x86 tablets
 ```
 
-### `debian-engine/android-bin/` (its own Makefile)
+### `debian-container/android-bin/` (its own Makefile)
 
 The container-side bridge client — one binary, one symlink per API name — is built
 by its own `Makefile`, not Gradle, because it runs *inside* the Debian userspace
 (glibc, not Android's bionic):
 
 ```bash
-cd debian-engine/android-bin
+cd debian-container/android-bin
 make check                         # JSON unit tests, on the host
 make CXX=aarch64-linux-gnu-g++     # build for arm64
 ```
 
-See `debian-engine/android-bin/README.md`.
+See `debian-container/android-bin/README.md`.
 
 ---
 
@@ -163,8 +163,8 @@ android-core/     Layer 1 — the OS-facing library: foreground service, the uni
                   proot launcher. The only module that touches Android APIs.
 cloud-connector/  Layer 4 — the cloud client: enroll, device WebSocket, config,
                   commands, telemetry, the terminal relay.
-app/              the APK: manifest, permissions, and the engine's end-to-end test.
-debian-engine/    Layer 2 assets — the rootfs tarballs and android-bin.
+app/              the APK: manifest, permissions, and the container's end-to-end test.
+debian-container/    Layer 2 assets — the rootfs tarballs and android-bin.
 doc/              the architecture, the build contracts, and the spike results.
 tests/            all tests, split per module (unit/ and instrumented/).
 third_party/      vendored native deps (proot, talloc), built by our own CMake.
@@ -179,7 +179,7 @@ The four-layer design, the fd-capability model, and the PTY wire contract are in
 
 `targetSdk` is pinned at **28** and must not be raised. Android 10 denies
 `execve()` on files inside an app's home directory for any app targeting API 29+,
-and the engine execs binaries from app storage. There is no userspace workaround.
+and the container execs binaries from app storage. There is no userspace workaround.
 The consequence is that the app is **sideload-only** — Play requires a recent API
 level. See `doc/ANDROID_SERVICE_ARCHITECTURE.md` §1.1 before touching it.
 

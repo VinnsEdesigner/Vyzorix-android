@@ -8,7 +8,7 @@ from the outside.
 
 ## The prelude
 
-`debian-engine/rootfs/node-prelude.mjs` is installed to
+`debian-container/rootfs/node-prelude.mjs` is installed to
 `/usr/lib/vyzorix/node-prelude.mjs` in the rootfs, and the container's shell is given
 `NODE_OPTIONS=--import /usr/lib/vyzorix/node-prelude.mjs` (`ProotLauncher`). Because
 `NODE_OPTIONS` propagates to child processes, **every** node process — npm, and the

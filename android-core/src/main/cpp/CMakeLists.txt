@@ -44,6 +44,6 @@ target_link_libraries(vyzorix_core ${log-lib})
 # libproot.so is a *separate* .so that Android packages as a native library, so it is
 # built but not linked into vyzorix_core. The dependency is declared so a build of
 # this module produces it — otherwise `:android-core:assembleDebug` would leave the
-# engine binary absent, and ProotLauncher.isReady() would silently report "not
+# container binary absent, and ProotLauncher.isReady() would silently report "not
 # installed".
 add_dependencies(vyzorix_core proot)

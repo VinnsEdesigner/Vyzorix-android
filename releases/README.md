@@ -1,4 +1,4 @@
-# `releases/` — published engine assets
+# `releases/` — published container assets
 
 The rootfs tarballs are built here and published to a GitHub release **in a different,
 public repository**: [`VinnsEdesigner/gz-_ASSETS`](https://github.com/VinnsEdesigner/gz-_ASSETS).
@@ -15,7 +15,7 @@ and are gitignored, so what lives in git is this README and the manifest.
 
 ## What is published
 
-`scripts/build-rootfs.sh` writes the tarballs to `debian-engine/rootfs/dist/`. Run it
+`scripts/build-rootfs.sh` writes the tarballs to `debian-container/rootfs/dist/`. Run it
 once per shipped ABI:
 
 ```bash
@@ -39,11 +39,11 @@ That produces, per ABI:
 VERSION=v1.0.0
 gh release create "$VERSION" \
   --repo VinnsEdesigner/gz-_ASSETS \
-  --title "Engine assets $VERSION" \
+  --title "Container assets $VERSION" \
   --notes "Rootfs tarballs for arm64, armeabi-v7a and x86_64." \
-  debian-engine/rootfs/dist/*.tar.gz \
-  debian-engine/rootfs/dist/SHA256SUMS \
-  debian-engine/rootfs/dist/BUILD-*.md
+  debian-container/rootfs/dist/*.tar.gz \
+  debian-container/rootfs/dist/SHA256SUMS \
+  debian-container/rootfs/dist/BUILD-*.md
 ```
 
 Note the `--repo`: the **public assets repository**, not this one.

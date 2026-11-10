@@ -1,4 +1,4 @@
-# Engine asset manifest
+# Container asset manifest
 
 SHA-256 of every tarball in the current release. The authoritative copy is the
 `SHA256SUMS` release asset; this is a readable record in git.
@@ -15,10 +15,10 @@ f02a0bed0b8960a16abed532a80d7e00d5ae9cced8c4944e6eb896b26c9f803d  debian-extende
 Sizes:
 
 ```
-debian-engine/rootfs/dist/debian-core-arm64.tar.gz         47403545
-debian-engine/rootfs/dist/debian-core-armeabi-v7a.tar.gz   42361903
-debian-engine/rootfs/dist/debian-core-x86_64.tar.gz        47993617
-debian-engine/rootfs/dist/debian-extended-arm64.tar.gz     112656394
-debian-engine/rootfs/dist/debian-extended-armeabi-v7a.tar.gz 102267662
-debian-engine/rootfs/dist/debian-extended-x86_64.tar.gz    113820933
+debian-container/rootfs/dist/debian-core-arm64.tar.gz         47403545
+debian-container/rootfs/dist/debian-core-armeabi-v7a.tar.gz   42361903
+debian-container/rootfs/dist/debian-core-x86_64.tar.gz        47993617
+debian-container/rootfs/dist/debian-extended-arm64.tar.gz     112656394
+debian-container/rootfs/dist/debian-extended-armeabi-v7a.tar.gz 102267662
+debian-container/rootfs/dist/debian-extended-x86_64.tar.gz    113820933
 ```
