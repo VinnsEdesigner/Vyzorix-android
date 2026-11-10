@@ -278,9 +278,15 @@ Built from $(git rev-parse --short HEAD) by scripts/release-apk.sh."
 
 if command -v gh >/dev/null 2>&1; then
   log "publishing with gh"
+  # --latest=false is load-bearing. The container rootfs is fetched by devices
+  # from releases/latest/download/debian-core-*.tar.gz, so if this APK release
+  # became "latest" every fresh install would 404 fetching its userspace.
+  # GitHub only moves the "latest" pointer when a release is created; the assets
+  # repo is shared with the rootfs releases, so the APK must never claim it.
   gh release create "${TAG}" "${APK}" "${STAGE}/SHA256SUMS" \
     --title "Vyzorix agent v${VERSION_NAME}" \
     --notes "${NOTES}" \
+    --latest=false \
     ${REPO:+--repo "${REPO}"}
 else
   log "publishing with the GitHub API (gh not installed)"
@@ -292,7 +298,8 @@ else
     -H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github+json" \
     -d "$(python3 - "${TAG}" "${NOTES}" <<'PY'
 import json, sys
-print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[1], "body": sys.argv[2]}))
+print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[1],
+                  "body": sys.argv[2], "make_latest": "false"}))
 PY
 )")"
   upload_url="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["upload_url"].split("{")[0])' "${release_json}")"
