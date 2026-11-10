@@ -680,3 +680,26 @@ userspace container; "engine" was the vague word). Mechanical rename across both
   -x :app:stageRootfs` (the glibc cross-compiler is absent this session, so those native
   tasks fail for an unrelated reason). `:app:buildLayer3` also needs ktlintFormat run
   first after a rename (longer identifiers can push a line past 100 chars).
+
+## APK release (2026-11-10) — app-v0.1.3 published
+Published to `VinnsEdesigner/gz-_ASSETS` (public, so a device fetches it
+anonymously): tag `app-v0.1.3`, asset `vyzorix-app-v0.1.3-release-arm64.apk`
+(70 MB, sha256 `923bba79c61b65431ee267915f426d0e31e4d8299bfa2ffadb880873401224d1`).
+Built by `scripts/release-apk.sh` with the pinned server key
+`/workspace/.vyzorix-secrets/server.pub.pem` and `--cloud-url https://vyzorix.fly.dev`.
+
+- **Keystore**: `/workspace/.vyzorix-secrets/vyzorix-release.jks` (PKCS12, alias
+  `vyzorix`, RSA-4096, 10000d). Passwords in `/workspace/.vyzorix-secrets/keystore.env`.
+  Cert SHA-256 `8851e9ff…d0779`. **Back this up** — losing it means no future update can
+  install over an existing install.
+- **`buildLayer3` needs a glibc cross-compiler.** Not present by default; install with
+  `sudo apt-get install -y g++-aarch64-linux-gnu`. Without it the task is skipped and
+  the APK is bridge-only (no supervisor).
+- **THE `latest` TRAP (hit live, now fixed in the script).** The rootfs is fetched by
+  devices from `releases/latest/download/debian-core-*.tar.gz`, and the assets repo is
+  shared with the rootfs releases. A plain `gh release create` moves GitHub's "latest"
+  pointer, so publishing the APK made the rootfs 404 — breaking every fresh install.
+  `app-v0.2.0` did exactly this. Both publish paths now pass `make_latest=false`.
+  Note: the REST PATCH of `make_latest` silently does nothing; `gh release edit <tag>
+  --latest` works, and the `releases/latest` redirect is cached for ~1 minute.
+- Version naming: the user wanted `v0.1.3` (app-v0.2.0 was deleted).
