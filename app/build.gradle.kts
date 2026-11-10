@@ -292,6 +292,31 @@ android {
         }
     }
 
+    // Two flavors, differing only in the permissions they declare.
+    //
+    // `full` keeps every permission and is the default, so `assembleRelease`,
+    // `assembleDebug`, the gate and the instrumented tests are unchanged.
+    //
+    // `sideload` drops the permissions that make up Play Protect's SMS-fraud /
+    // banking-trojan verdict, because that verdict is a hard, non-overridable
+    // block: an app that reads SMS, reads logs, installs APKs and runs an
+    // accessibility service cannot be installed from a file manager at all. The
+    // overlay and the exact cost of each removal are in app/src/sideload/.
+    //
+    // A device that installs the `sideload` build still works: the terminal, the
+    // container, deploys, telemetry and the rest of the bridge are untouched, and
+    // the removed APIs fail closed with a bridge error rather than crashing.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("full") {
+            dimension = "distribution"
+            isDefault = true
+        }
+        create("sideload") {
+            dimension = "distribution"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
