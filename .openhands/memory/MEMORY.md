@@ -795,3 +795,15 @@ an Android 13 emulator. Pairing code shown in the notification. Key facts:
 - Claimed the real Nokia C22 (`c48108aa…`): server `device claimed`, DB org+operator set,
   `online=1`, and its config polls stopped (config received). No server errors.
 - `device_ready` is **not logged** by the server, so that step is unverifiable from logs.
+- **Pairing-code refresh FIXED (84e87ca).** The device enrolled once and never refreshed a
+  lapsed code. `CloudConnection.fetchConfigOnce` now calls `refreshPairingCodeIfExpired()`
+  (re-enroll when `PairingCode.needsRefresh`, i.e. 30s before expiry) on the config-poll
+  cadence, and clears the code once a config arrives. `Deps.clock` is injectable for tests.
+- **Sending a command (operator path)**: `POST /v1/device/{deviceId}/command` with the
+  session cookie + `X-CSRF-Token` + `X-Organization-ID` and body
+  `{"deviceId":"<uuid>","command":"SHELL_EXEC","args":{"cmd":"id"}}` -> 202 `status:sent`.
+  A **GET** (e.g. `/v1/command/{dispatchId}/status`) DOES need `X-Vyzorix-*` session-HMAC
+  headers ("Missing required signature headers"); a cookie POST does not. Verify the
+  outcome in the `commands` table (Turso): `status=completed`, `result=<output>`.
+- The device's `SHELL_EXEC` result comes back over the WS as a `command_result` frame; the
+  server records it and the command row moves to `completed`.

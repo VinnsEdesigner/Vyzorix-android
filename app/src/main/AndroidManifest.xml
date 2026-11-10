@@ -90,6 +90,10 @@
          can send cannot necessarily receive. Both dangerous. -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <!-- Reading the stored inbox is its own dangerous permission, separate from the
+         pair above: neither sending nor receiving grants it. SmsReadApi needs it to
+         return the messages already on the device. -->
+    <uses-permission android:name="android.permission.READ_SMS" />
 
     <!-- StorageAllFilesApi reports and requests all-files access. A Play-restricted
          permission, granted only through a Settings screen rather than a dialog, so

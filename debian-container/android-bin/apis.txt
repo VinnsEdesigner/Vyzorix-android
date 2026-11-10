@@ -68,6 +68,7 @@ security_patch
 sensor_list
 session
 sms_capability
+sms_read
 sms_received
 storage
 storage_all_files

@@ -102,6 +102,10 @@ object PermissionRegistry {
             // that can send cannot necessarily receive.
             "sms_received" to
                 PermissionDef("android.permission.RECEIVE_SMS", 1, Protection.DANGEROUS),
+            // READ_SMS reads the stored inbox, which neither sending nor receiving
+            // grants: it is its own dangerous permission on every API level.
+            "sms_read" to
+                PermissionDef("android.permission.READ_SMS", 1, Protection.DANGEROUS),
             "location" to
                 PermissionDef("android.permission.ACCESS_FINE_LOCATION", 1, Protection.DANGEROUS),
             "notification" to
@@ -132,6 +136,39 @@ object PermissionRegistry {
 
     /** The requirement for [api], or null when the API is unknown. */
     fun forApi(api: String): PermissionDef? = defs[api]
+
+    /**
+     * Every dangerous permission that a runtime dialog can grant, for a device
+     * running [sdkInt].
+     *
+     * This is the set the setup Activity requests. It exists so the requested set is
+     * **derived** from the registry rather than hand-listed beside it: a dangerous
+     * permission that is declared but never requested is granted to nobody, so every
+     * API gated on it returns `FORBIDDEN` forever — which is exactly what happened
+     * to `camera`, `location`, `call_capability`, `phone_state_detailed`,
+     * `sms_capability`, `sms_received` and `sms_read` while the Activity asked for
+     * four permissions by hand.
+     *
+     * Settings-only permissions ([PermissionDef.settingsAction] set, e.g. all-files
+     * access) are excluded: `requestPermissions` cannot grant them, so listing them
+     * would show a dialog that does nothing. The API's own handler opens the Settings
+     * screen when it is needed.
+     *
+     * Distinct and sorted, so the dialog order is stable and one permission declared
+     * by two APIs is requested once.
+     */
+    fun dialogGrantablePermissions(sdkInt: Int): List<String> =
+        defs
+            .values
+            .asSequence()
+            .filter { it.protection == Protection.DANGEROUS }
+            .filter { it.androidPermission.isNotEmpty() }
+            .filter { it.settingsAction == null }
+            .filter { sdkInt >= it.minSdk }
+            .map { it.androidPermission }
+            .distinct()
+            .sorted()
+            .toList()
 
     /** Every API this registry knows, sorted. Used by tests and introspection. */
     fun names(): List<String> = defs.keys.sorted()

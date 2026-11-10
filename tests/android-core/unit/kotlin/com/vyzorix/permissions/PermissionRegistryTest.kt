@@ -116,4 +116,71 @@ class PermissionRegistryTest {
         assertFalse(PermissionRegistry.needsNoPermission("camera"))
         assertTrue(PermissionRegistry.needsNoPermission("battery"))
     }
+
+    @Test
+    fun `dialog grantable permissions include the api gated dangerous ones`() {
+        // The bug this guards: a dangerous permission declared in the manifest but
+        // absent from the requested set is granted to nobody, so every API gated on
+        // it returns FORBIDDEN forever. `call_capability` is deliberately NOT here —
+        // it reports CALL_PHONE's state rather than dialing, so it needs no grant and
+        // is not gated (see its handler).
+        val requested = PermissionRegistry.dialogGrantablePermissions(33)
+
+        for (api in listOf("camera", "location", "phone_state_detailed", "sms_read")) {
+            val permission = PermissionRegistry.forApi(api)?.androidPermission
+            assertTrue(
+                "$api is dangerous, so $permission must be requested",
+                permission != null && permission in requested,
+            )
+        }
+    }
+
+    @Test
+    fun `dialog grantable permissions exclude settings only grants`() {
+        // requestPermissions cannot grant these; listing them would show a dialog
+        // that does nothing. Their handlers open the Settings screen instead.
+        val requested = PermissionRegistry.dialogGrantablePermissions(33)
+
+        assertFalse(
+            "all-files access is Settings-only",
+            "android.permission.MANAGE_EXTERNAL_STORAGE" in requested,
+        )
+        assertFalse(
+            "battery exemption is Settings-only",
+            "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" in requested,
+        )
+    }
+
+    @Test
+    fun `dialog grantable permissions respect minSdk`() {
+        // POST_NOTIFICATIONS exists from 33; requesting it below would be silently
+        // ignored and read as a denial.
+        val at32 = PermissionRegistry.dialogGrantablePermissions(32)
+        val at33 = PermissionRegistry.dialogGrantablePermissions(33)
+
+        assertFalse(
+            "POST_NOTIFICATIONS must not be requested below 33",
+            "android.permission.POST_NOTIFICATIONS" in at32,
+        )
+        assertTrue(
+            "POST_NOTIFICATIONS must be requested at 33",
+            "android.permission.POST_NOTIFICATIONS" in at33,
+        )
+    }
+
+    @Test
+    fun `dialog grantable permissions are distinct and sorted`() {
+        val requested = PermissionRegistry.dialogGrantablePermissions(33)
+
+        assertEquals(
+            "the set must not repeat a permission",
+            requested.size,
+            requested.toSet().size,
+        )
+        assertEquals(
+            "the set must be sorted for a stable dialog order",
+            requested.sorted(),
+            requested,
+        )
+    }
 }

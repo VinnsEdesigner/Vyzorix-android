@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.vyzorix.R
 
 /**
  * The device's single persistent notification, and the state it shows.
@@ -119,7 +120,7 @@ class DeviceNotification(
             }
 
         return builder
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(R.drawable.vyzorix_notification_icon)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
     }

@@ -51,6 +51,7 @@ import com.vyzorix.bridge.apis.ScreenTimeoutApi
 import com.vyzorix.bridge.apis.SecurityPatchApi
 import com.vyzorix.bridge.apis.SensorListApi
 import com.vyzorix.bridge.apis.SmsCapabilityApi
+import com.vyzorix.bridge.apis.SmsReadApi
 import com.vyzorix.bridge.apis.SmsReceivedApi
 import com.vyzorix.bridge.apis.StorageAllFilesApi
 import com.vyzorix.bridge.apis.StorageApi
@@ -151,6 +152,7 @@ object ApiCatalogue {
             RotationStateApi.NAME to RotationStateApi,
             ScreenStateApi.NAME to ScreenStateApi,
             SmsCapabilityApi.NAME to SmsCapabilityApi,
+            SmsReadApi.NAME to SmsReadApi,
             ScreenTimeoutApi.NAME to ScreenTimeoutApi,
             SecurityPatchApi.NAME to SecurityPatchApi,
             SensorListApi.NAME to SensorListApi,

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import com.vyzorix.permissions.PermissionRegistry
 
 /**
  * The launcher is a one-time setup hop, not a screen.
@@ -86,28 +87,46 @@ class LaunchActivity : Activity() {
     /**
      * The runtime permissions the agent needs, minus any already granted.
      *
-     * POST_NOTIFICATIONS (API 33+): needed to show the notification at all.
-     * READ/WRITE_EXTERNAL_STORAGE: the container's view of shared storage; scoped
-     * storage gates the shared tree on the grant even at targetSdk 28.
-     * BLUETOOTH_CONNECT (API 31+): `BluetoothAdapter.isEnabled` needs it.
+     * Two sources, and the split is deliberate:
+     *
+     *  1. **The API-gated dangerous permissions**, derived from [PermissionRegistry].
+     *     A dangerous permission declared in the manifest but never requested is
+     *     granted to nobody, so every API gated on it returns `FORBIDDEN` forever.
+     *     That is what happened to `camera`, `location`, `call_capability`,
+     *     `phone_state_detailed`, `sms_capability`, `sms_received` and `sms_read`
+     *     while this list named four permissions by hand and the registry grew past
+     *     them. Deriving this half means adding a dangerous API cannot silently ship
+     *     an unusable one. Settings-only permissions are excluded by the registry —
+     *     `requestPermissions` cannot grant them; their handlers open Settings.
+     *
+     *  2. **App-level permissions that no bridge API gates.** The container's view of
+     *     shared storage is the container's need, not a bridge API's, so it is not in
+     *     the registry; the Bluetooth adapter check degrades to "unknown" without
+     *     `BLUETOOTH_CONNECT`, so it is a nicety rather than a gate. These are listed
+     *     here because there is nowhere else they belong.
      */
     private fun missingRuntimePermissions(): List<String> {
         val needed = mutableListOf<String>()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            needed += Manifest.permission.POST_NOTIFICATIONS
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            needed += Manifest.permission.BLUETOOTH_CONNECT
-        }
+        needed += PermissionRegistry.dialogGrantablePermissions(Build.VERSION.SDK_INT)
+
+        // The container's view of /sdcard. Scoped storage gates the shared tree on
+        // the grant even at targetSdk 28; WRITE is a no-op from API 30 but keeps the
+        // API 26-29 range working.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             needed += Manifest.permission.READ_EXTERNAL_STORAGE
         }
         if (Build.VERSION.SDK_INT in Build.VERSION_CODES.M..Build.VERSION_CODES.Q) {
             needed += Manifest.permission.WRITE_EXTERNAL_STORAGE
         }
+        // `BluetoothAdapter.isEnabled` needs BLUETOOTH_CONNECT from API 31.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            needed += Manifest.permission.BLUETOOTH_CONNECT
+        }
 
-        return needed.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        return needed
+            .distinct()
+            .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
     }
 
     private companion object {

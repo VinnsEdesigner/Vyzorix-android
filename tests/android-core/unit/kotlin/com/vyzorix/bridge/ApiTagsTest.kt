@@ -4,6 +4,7 @@ import com.vyzorix.bridge.apis.BatteryApi
 import com.vyzorix.bridge.apis.DeviceInfoApi
 import com.vyzorix.bridge.apis.LogcatApi
 import com.vyzorix.bridge.apis.NetworkApi
+import com.vyzorix.bridge.apis.SmsReadApi
 import com.vyzorix.bridge.apis.StorageApi
 import com.vyzorix.bridge.apis.UsbAttachApi
 import com.vyzorix.bridge.apis.UsbDetachApi
@@ -30,6 +31,7 @@ class ApiTagsTest {
             StorageApi::class.java,
             NetworkApi::class.java,
             LogcatApi::class.java,
+            SmsReadApi::class.java,
             UsbStateApi::class.java,
             UsbAttachApi::class.java,
             UsbDetachApi::class.java,
@@ -62,6 +64,7 @@ class ApiTagsTest {
                 ApiTags.OP_READ,
                 ApiTags.OP_WRITE,
                 ApiTags.PROTECTION_NORMAL,
+                ApiTags.PROTECTION_DANGEROUS,
                 ApiTags.PROTECTION_SIGNATURE,
                 ApiTags.VISIBILITY_PUBLIC,
                 ApiTags.VISIBILITY_PRIVATE,
@@ -94,6 +97,7 @@ class ApiTagsTest {
                 ApiTags.OP_READ,
                 ApiTags.OP_WRITE,
                 ApiTags.PROTECTION_NORMAL,
+                ApiTags.PROTECTION_DANGEROUS,
                 ApiTags.PROTECTION_SIGNATURE,
                 ApiTags.VISIBILITY_PUBLIC,
                 ApiTags.VISIBILITY_PRIVATE,

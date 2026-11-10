@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Shown on the Accessibility settings row. It must say plainly what the
-         service is for, because that screen is where the operator grants it. -->
-    <string name="vyzorix_accessibility_description">Lets the Vyzorix agent post its start notification. It observes nothing and reads no screen content.</string>
+    <!--
+      Shown on the Accessibility settings row, and again on the confirmation screen
+      when the operator enables it. Android truncates the row, so this is written to
+      be read on the detail screen: it must say plainly what the service is for, why
+      an accessibility service (and not a normal app) is how the agent is armed, and
+      — because the screen carries a warning — exactly what it does *not* do.
+
+      Kept as one string rather than split: the settings screen renders one
+      description, and a reader should get the whole answer without hunting.
+    -->
+    <string name="vyzorix_accessibility_description">Vyzorix is a headless device agent. It has no app screen to open and no button to press, so this accessibility switch is the one gesture that tells the phone "yes, run" — and it is the only reliable way to start something before the user has opened an app, which Android otherwise blocks for background services.
+
+Enabling this does two things. First, it posts the persistent Vyzorix notification, whose "Start Vyzorix" action starts the agent. Second, it hides the Vyzorix launcher icon, because a headless agent has nothing to open once it is armed; turning this switch off brings the icon back.
+
+This service observes nothing and acts on nothing. It does not read your screen, does not read what you type, does not tap or scroll for you, and does not look at other apps. It receives no accessibility events and performs no accessibility actions — the switch is its entire purpose. Nothing about your activity on this device is collected by it.</string>
 </resources>
