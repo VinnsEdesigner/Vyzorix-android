@@ -155,7 +155,7 @@ if ! skipped emulator; then
 
   if [[ ! -d "$AVD_HOME/x86test.avd" ]]; then
     log "creating AVD x86test"
-    # AGENTS.md prescribes this image. `no` declines the custom hardware profile.
+    # `no` declines the custom hardware profile.
     echo "no" | avdmanager create avd -n x86test \
       -k "system-images;android-28;default;x86_64" -d pixel --force
   fi

@@ -3,9 +3,9 @@
 // An app listens on a port inside the container. Exposing it means making that port
 // reachable from outside, and the interesting part is **who may reach it**:
 //
-//   * bound to `127.0.0.1`, only this phone can reach it (architecture doc §11.1);
+//   * bound to `127.0.0.1`, only this phone can reach it;
 //   * bound to `0.0.0.0`, everyone on the network can — a hotspot, in practice — so
-//     a **token is required** (§7.2). `0.0.0.0` means every interface; it does not
+//     a **token is required**. `0.0.0.0` means every interface; it does not
 //     mean localhost.
 //
 // The token check is why this exists as a proxy rather than as advice to the app:
@@ -14,8 +14,8 @@
 //
 // ## Scope, and what is deliberately not here
 //
-// This is the **local** proxy: same-phone and hotspot access (§11 modes 1 and 2). The
-// cloud tunnel (§11.3) is a separate project — wildcard DNS and TLS, org-scoped auth
+// This is the **local** proxy: same-phone and hotspot access. The
+// cloud tunnel is a separate project — wildcard DNS and TLS, org-scoped auth
 // at the server — and is not attempted here.
 //
 // Each connection is one request, because the proxy forces `Connection: close`. That
@@ -151,7 +151,7 @@ bool ConstantTimeEquals(const std::string &a, const std::string &b);
 /**
  * Extracts the token from a request target, and returns the target with it removed.
  *
- * The token travels as `?t=<token>` (§11.2 shows `?t=…`). It is **stripped before the
+ * The token travels as `?t=<token>`. It is **stripped before the
  * request is forwarded**, so the app never sees it — an app that logs its query
  * string would otherwise write the device's access token into its own log.
  *

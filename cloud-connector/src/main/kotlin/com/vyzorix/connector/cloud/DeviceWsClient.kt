@@ -14,7 +14,7 @@ import okio.ByteString.Companion.toByteString
 
 /**
  * The device's WebSocket to the server. **The single cloud WS owner** (architecture
- * §5): the supervisor and the PTY agent never dial the cloud; they go through this.
+ * The supervisor and the PTY agent never dial the cloud; they go through this.
  *
  * Responsibilities:
  *  - connect with a signed handshake, retrying with exponential backoff;

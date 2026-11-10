@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  * the app can read and list it perfectly well. Only the app's real process sees the
  * app's real mounts, so only an instrumented test measures the truth.
  *
- * See `doc/DEVICE_FILESYSTEM_ACCESS.md` for the findings and how to read the output.
+ * The findings and how to read the output are recorded on the device.
  */
 @RunWith(AndroidJUnit4::class)
 class FsAccessProbeTest {

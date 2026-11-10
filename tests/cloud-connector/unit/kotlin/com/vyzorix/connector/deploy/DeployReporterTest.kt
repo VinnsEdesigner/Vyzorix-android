@@ -6,8 +6,7 @@ import org.junit.Test
 
 /**
  * The report frame: the server routes on `type` and records the version, so the
- * discriminator and the field names are the contract (VYZORIX_DEPLOY_CONTRACT.md
- * §9.1 step 8).
+ * discriminator and the field names are the contract.
  */
 class DeployReporterTest {
     @Test

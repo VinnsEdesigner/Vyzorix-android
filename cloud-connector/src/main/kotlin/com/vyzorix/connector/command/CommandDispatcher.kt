@@ -25,7 +25,7 @@ import kotlinx.serialization.json.jsonObject
  * Two things are deliberately explicit:
  *
  *  - An **unknown command type reports failed**, never silence. The architecture
- *    requires it (§5): a device that drops a command it does not implement leaves
+ *    requires it: a device that drops a command it does not implement leaves
  *    the operator watching it sit `delivered` forever, with no signal that nothing
  *    ran. Reporting failed is what makes the gap visible.
  *  - A **bad signature is refused without executing**, and the result is not

@@ -15,7 +15,7 @@ import java.util.UUID
  * `READ_PRIVILEGED_PHONE_STATE`, which is system-only; a normal app gets null or an
  * exception, on any device. The stable identity is the device-generated
  * UUID, and the IMEI — where it exists at all — is a best-effort attribute the
- * server does not require. See doc/REGISTRATION_CONTRACT.md §9.
+ * server does not require.
  */
 data class DeviceFacts(
     val deviceUuid: String,
@@ -48,7 +48,6 @@ data class DeviceFacts(
  * The tier hint is the device's self-report (unrooted / rooted / advanced). The
  * server uses it only to *cap* what it grants, never to grant more than policy
  * allows, because it cannot be verified — the honest framing from
- * REGISTRATION_CONTRACT.md §9.
  */
 object DeviceFactsCollector {
     /** Tier hint values, matching the server's `TierFromInt`. */

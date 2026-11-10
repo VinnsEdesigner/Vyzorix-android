@@ -15,7 +15,7 @@ import java.io.IOException
  * The rootfs is the engine's userspace — a Debian tree, replaced wholesale. These
  * are *our* binaries, built from this repo for the container's glibc, and they live
  * in the writable overlay's `/usr/local/bin` rather than in the rootfs. That
- * placement is the point: `/usr/local` is a bind target of the overlay (§6.1), so a
+ * placement is the point: `/usr/local` is a bind target of the overlay, so a
  * rootfs replacement leaves the supervisor and the CLI in place, exactly as it
  * leaves app storage in place. Putting them in the rootfs would delete them on the
  * next engine update.

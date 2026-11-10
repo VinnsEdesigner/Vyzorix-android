@@ -329,7 +329,7 @@ class RootfsInstaller(
          * The bind targets `ProotLauncher.binds` expects under the overlay.
          *
          * `usr-local` and `opt` bind over the rootfs's `/usr/local` and `/opt`;
-         * `etc` binds to the container's `/etc/vyzorix` (architecture doc §6.1), the
+         * `etc` binds to the container's `/etc/vyzorix`, the
          * config area that survives a rootfs replacement. All three must exist as
          * directories or proot fails the bind.
          */

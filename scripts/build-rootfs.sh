@@ -10,7 +10,6 @@
 # The ABI is in the filename because there is one tarball per architecture and three
 # architectures ship: a name without it would overwrite itself on the second build.
 #
-# See doc/ANDROID_SERVICE_ARCHITECTURE.md §6.1.1 for what goes in each and why.
 #
 # Usage:
 #   scripts/build-rootfs.sh [--arch arm64|armeabi-v7a|x86_64] [--out DIR]
@@ -24,7 +23,7 @@
 # `bin/bash` that exists and cannot execute.
 #
 # Building a foreign arch needs qemu-user-static *and* a registered binfmt_misc
-# handler; see debian-engine/rootfs/README.md for why, and for the check that proves
+# handler; for why, and for the check that proves
 # it before a long build.
 #
 # Reproducibility: the suite is pinned to bookworm (Debian 12), not `stable`, and
@@ -61,7 +60,7 @@ esac
 # The package sets. Kept here rather than inline so the two tarballs read as a pair
 # and a reviewer can see exactly what is in each.
 #
-# Rationale for every entry is in §6.1.1. The short version: `ca-certificates` is
+# Rationale for every entry: `ca-certificates` is
 # not optional (no TLS trust means no HTTPS), `socat` is the container-side bridge
 # transport, and `tmux` is what makes a dropped WebSocket reattach rather than lose
 # the session. No init system (proot execs bash directly, there is no PID 1), no
@@ -126,7 +125,7 @@ build_tarball() {
     "${dir}/usr/share/lintian"/*
 
   # /opt and /usr/local must exist but be EMPTY: the writable overlay binds over
-  # them (§6.1). Shipping content there would be shadowed and look like a bug.
+  # them. Shipping content there would be shadowed and look like a bug.
   sudo mkdir -p "${dir}/opt" "${dir}/usr/local"
   sudo find "${dir}/opt" "${dir}/usr/local" -mindepth 1 -delete 2>/dev/null || true
 
@@ -157,7 +156,7 @@ build_tarball() {
   # cannot write its temp files, then refuses the repository as unsigned.
   log "fixing /tmp in ${name}"
 
-  # /etc/resolv.conf must exist as a *bind target* for proot's -b (§6.2). Its contents are
+  # /etc/resolv.conf must exist as a *bind target* for proot's -b. Its contents are
   # replaced by the bind, so an empty file is enough — but it must be present.
   sudo mkdir -p "${dir}/etc"
   sudo touch "${dir}/etc/resolv.conf"
@@ -264,7 +263,7 @@ log "checksums"
   cat SHA256SUMS
 )
 
-# The record that makes a rebuild comparable (§6.1.1).
+# The record that makes a rebuild comparable.
 log "writing BUILD.md"
 {
   echo "# Rootfs build record"

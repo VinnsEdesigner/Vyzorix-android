@@ -1,6 +1,6 @@
 // Spawning a process on the slave end of a PTY.
 //
-// This is the exec half of doc/ANDROID_SERVICE_ARCHITECTURE.md §4.1. The child
+// This is the exec half. The child
 // becomes a session leader and takes the PTY slave as its controlling terminal,
 // so the process it execs sees a normal tty on fd 0/1/2.
 //

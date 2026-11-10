@@ -4,7 +4,7 @@ package com.vyzorix.bridge
  * Declares an API's capability tags.
  *
  * The tag vocabulary is shared with the server's capability catalog
- * (`documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md`), so the device and the server
+ * so the device and the server
  * classify the same API with the same words. The annotation is **documentation**:
  * the server's catalog is the authority, and the device never evaluates tags. It
  * exists so a reader sees an API's capability next to its code, and so a test can

@@ -126,7 +126,7 @@ internal object NativePty {
      * Creates, binds and listens on an AF_UNIX stream socket in the **filesystem**
      * namespace at [path], returning the listening fd in
      * [NativePtyResult.fds][0]. Used by the bridge, which needs a filesystem path
-     * so proot can bind the socket into the container (contract §2.2); Android's
+     * so proot can bind the socket into the container; Android's
      * `LocalServerSocket(String)` can only bind the abstract namespace.
      *
      * A stale node at [path] is removed first.

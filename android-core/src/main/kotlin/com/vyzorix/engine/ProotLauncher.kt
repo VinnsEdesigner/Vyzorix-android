@@ -24,7 +24,7 @@ object ProotLauncher {
      *
      * Bound to `/home/apps` inside the container. It is **app storage, not package
      * storage**, and it is separate from the overlay for one reason that decides it:
-     * §2 says Layer 2 is disposable and Layer 3's storage is not. The overlay holds
+     * Layer 2 is disposable and Layer 3's storage is not. The overlay holds
      * installed packages and is conceptually part of the engine; this holds the
      * operator's apps and must survive anything the engine does.
      */
@@ -37,7 +37,7 @@ object ProotLauncher {
     /**
      * Shared storage, bound for a stock (tier 1) device.
      *
-     * `DEVICE_FILESYSTEM_ACCESS.md` records what an unrooted app can reach once the
+     * The device filesystem access notes record what an unrooted app can reach once the
      * storage permission is granted: the shared-storage root and the public
      * collections beneath it (Download, DCIM, Pictures, Music, Movies, Documents).
      * Binding the root exposes them all, so the collections are not named one by one.
@@ -47,7 +47,7 @@ object ProotLauncher {
      * own uid, in the app's SELinux domain, under the same Unix permissions. The
      * bind changes what the container can *see*, never what the app may *touch*.
      *
-     * This reverses §6.1's "optional export target, never a dependency" default: the
+     * This reverses the "optional export target, never a dependency" default: the
      * shared-storage tree is now bound on every start. It is one named constant so
      * the decision is visible and reversible in one place.
      *
@@ -66,7 +66,7 @@ object ProotLauncher {
      * `/` is the Debian rootfs, which has its own `/bin`, `/usr`, `/lib`, `/etc`;
      * binding a host tree at `/system` would be harmless only by luck, and anything
      * landing on a shared top-level name silently shadows the Debian filesystem —
-     * the exact failure §6.1 warns about ("content [in a bind target] would be
+     * the exact failure the architecture warns about ("content [in a bind target] would be
      * shadowed and look like a bug"). A prefix makes the boundary explicit: these
      * are the device's files, read-only, over there.
      *
@@ -119,7 +119,7 @@ object ProotLauncher {
      * It is gated to API <= 28 on purpose. On API 33 the acceleration is the working
      * path and this variable must NOT be set: with it, proot mishandles its own
      * syscall rewrites and `rename(2)` fails with ENOSYS (a measured upstream
-     * defect, see `third_party/README.md`). The two kernels need opposite settings,
+     * defect). The two kernels need opposite settings,
      * so the setting is chosen by API level rather than fixed.
      */
     const val NO_SECCOMP_ENV = "PROOT_NO_SECCOMP"
@@ -179,7 +179,7 @@ object ProotLauncher {
      *
      * `rootfs` is deliberately NOT here: it is the container's own root (`-r
      * rootfs`), so binding a file out of it is how proot presents the root, not a
-     * leak. `android.sock` is not here either — it is the door, and §2.2 exists so
+     * leak. `android.sock` is not here either — it is the door, and the rule exists so
      * the container can reach it. The overlay is the writable prefix the container
      * is supposed to write to.
      *
@@ -276,7 +276,7 @@ object ProotLauncher {
     /**
      * True when [hostPath] is inside the app's engine zone.
      *
-     * The launcher's final assertion (boundary contract §10): even if a path were
+     * The launcher's final assertion: even if a path were
      * added to the bind list by mistake, an engine-zone path is refused. Two
      * independent guarantees — the closed-world list and this check — so one
      * mistake does not open the zone.
@@ -315,12 +315,12 @@ object ProotLauncher {
                 // root and never files/.
                 add("$overlay/usr-local:/usr/local")
                 add("$overlay/opt:/opt")
-                // The config area that survives a rootfs replacement (§6.1). The
+                // The config area that survives a rootfs replacement. The
                 // target is /etc/vyzorix, a directory the rootfs does not ship, so
                 // the overlay is the only thing there — which is the point: an
                 // update swaps files/rootfs and leaves on-device config alone.
                 add("$overlay/etc:/etc/vyzorix")
-                // App storage (§2: Layer 2 is disposable, Layer 3's storage is not).
+                // App storage: Layer 2 is disposable, Layer 3's storage is not.
                 // The supervisor's registry, its logs and the apps' files live here,
                 // so a rootfs replacement leaves every app and its data alone.
                 add("${appsDir(context).absolutePath}:$APPS_IN_CONTAINER")
@@ -352,7 +352,7 @@ object ProotLauncher {
         // and other apps' collections stay denied to the container exactly as they
         // are denied to the app.
         //
-        // This reverses §6.1's "optional export target, never a dependency": shared
+        // This reverses the "optional export target, never a dependency": shared
         // storage is now bound on every start. `SHARED_STORAGE_IN_CONTAINER` is the
         // single place that decision lives.
 
@@ -564,7 +564,7 @@ object ProotLauncher {
      * True when the supervisor binary is installed.
      *
      * It lives in the **overlay**, not the rootfs: `/usr/local` is a bind target of
-     * the overlay (§6.1), so `overlay/usr-local/bin/supervisor` is what the container
+     * the overlay, so `overlay/usr-local/bin/supervisor` is what the container
      * sees at `/usr/local/bin/supervisor`. Checking under the rootfs would look
      * plausible and always be false.
      *

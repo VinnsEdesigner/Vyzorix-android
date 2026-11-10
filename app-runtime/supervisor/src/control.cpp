@@ -247,7 +247,7 @@ std::string HandleRequest(Manager *manager, const std::string &request_json) {
             const std::string tokenValue =
                 token != nullptr && token->IsString() ? token->string : "";
 
-            // The refusal that matters (§7.2) lives in the manager, which is where
+            // The refusal that matters lives in the manager, which is where
             // the proxy is started: checking it here as well would be two places to
             // keep the rule, and the one that matters is the one that binds.
             std::string error;

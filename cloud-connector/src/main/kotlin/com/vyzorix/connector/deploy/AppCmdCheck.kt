@@ -5,12 +5,10 @@ import java.io.File
 
 /**
  * The `cmd` rule, re-checked on the device after the artifacts are installed
- * (VYZORIX_DEPLOY_CONTRACT.md §8, §13.4).
- *
  * The server checks `cmd` lexically at compile time, but it cannot check the two
  * things that need the files: that the path, **after resolving symlinks**, is still
- * inside the app's own directory (§8 rule 3), and that it exists and is executable
- * (§8 rule 4). A symlink inside a fetched artifact pointing outside the app directory
+ * inside the app's own directory, and that it exists and is executable
+ * A symlink inside a fetched artifact pointing outside the app directory
  * is the escape this catches.
  *
  * The check is the device's because the device is the thing that runs the command, and

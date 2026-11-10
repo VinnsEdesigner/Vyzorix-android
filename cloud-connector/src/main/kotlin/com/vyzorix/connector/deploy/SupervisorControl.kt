@@ -16,7 +16,7 @@ interface SupervisorControl {
 
     /**
      * Exposes [name] on [bind]. A non-loopback bind requires [token]; the supervisor
-     * refuses `0.0.0.0` without one (Layer 3 §4.4 P2, fail closed).
+     * refuses `0.0.0.0` without one, fail closed.
      */
     fun expose(
         name: String,

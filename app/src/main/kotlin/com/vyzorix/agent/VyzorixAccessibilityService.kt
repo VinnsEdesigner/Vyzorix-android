@@ -30,7 +30,7 @@ import com.vyzorix.service.DeviceNotification
  *    it is armed there is nothing to open; the icon only exists to get the operator
  *    here in the first place.
  * 2. Posts the persistent notification in its
- *    [DeviceNotification.needsStart] state: **Start the Vyzorix**. Enabling the
+ *    [DeviceNotification.needsStart] state: **Start Vyzorix**. Enabling the
  *    service arms the agent; it does not start the engine. The engine starts when the
  *    operator taps that action, so starting is explicit and visible.
  *

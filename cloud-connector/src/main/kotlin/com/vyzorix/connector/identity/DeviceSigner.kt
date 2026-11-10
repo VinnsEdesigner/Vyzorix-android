@@ -17,7 +17,7 @@ import java.util.Base64
  *
  * This is the device's whole authority. It signs the enroll request, the connect
  * handshake and every request; the server holds only the public half, and nothing
- * secret is ever transmitted. See doc/REGISTRATION_CONTRACT.md §5.
+ * secret is ever transmitted.
  */
 interface DeviceSigner {
     /** The public half as PEM SubjectPublicKeyInfo, the shape enroll sends. */

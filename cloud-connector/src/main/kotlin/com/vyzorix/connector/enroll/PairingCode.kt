@@ -6,7 +6,7 @@ package com.vyzorix.connector.enroll
  * The code is server-issued: the server owns the entropy, the TTL and the
  * single-use rule, and the device only displays it. This type models what the
  * device needs — the code, how it groups for reading, and when it expires — not
- * how it is generated. See doc/REGISTRATION_CONTRACT.md §4.
+ * how it is generated.
  *
  * The alphabet is Crockford base32 (`0-9A-Z` minus `I L O U`), so a code read off a
  * notification cannot be mistyped for a different valid code.

@@ -1,6 +1,6 @@
 // The app registry: what runs, and how to tell whether it still does.
 //
-// `apps.json` (architecture doc §3) is the supervisor's source of truth. Its shape:
+// `apps.json` is the supervisor's source of truth. Its shape:
 //
 //   {
 //     "apps": [
@@ -18,7 +18,7 @@
 //   }
 //
 // `pid` and `pidStartTicks` are written by the supervisor and are **only
-// meaningful together** (§7.1): a PID is reused after a reboot, so a bare pid
+// meaningful together**: a PID is reused after a reboot, so a bare pid
 // would let the supervisor signal a process that is not ours. `pidStartTicks` is
 // field 22 of `/proc/<pid>/stat`, which does not repeat for a recycled pid within
 // a boot.
@@ -137,7 +137,7 @@ std::uint64_t StartTicksOf(int pid);
 /**
  * True when `pid` is still the process whose start time was `startTicks`.
  *
- * This is the §7.1 check, and it is the only safe way to act on a recorded pid.
+ * This is the safe way to act on a recorded pid.
  */
 bool IsSameProcess(int pid, std::uint64_t startTicks);
 

@@ -8,7 +8,7 @@ import java.nio.ByteOrder
  *
  * Terminal traffic is binary, not JSON: base64 and escaping on every keystroke and
  * every byte of output would be wasteful, and a `cat` of a binary file would not
- * survive a JSON string. See doc/ANDROID_SERVICE_ARCHITECTURE.md §6.3.
+ * survive a JSON string.
  *
  * Wire format, big-endian:
  *

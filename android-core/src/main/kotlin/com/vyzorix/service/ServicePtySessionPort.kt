@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap
  * The seam is given the **session id** as well as the token because the shell it
  * builds is named after the session: production wraps the login shell in `tmux
  * new-session -A -s vyzorix-<id>` so a dropped WebSocket reattaches to the same
- * shell (§6.3). A shell request that could not see the session id could not do that.
+ * shell. A shell request that could not see the session id could not do that.
  */
 class ServicePtySessionPort(
     private val broker: PtyBroker,
@@ -72,7 +72,7 @@ class ServicePtySessionPort(
 
         // The token is what lets the shell reach the bridge and be identified. It is
         // scoped to the local API set, stated explicitly: an empty allowlist permits
-        // nothing (boundary contract §7).
+        // nothing.
         val token =
             tokens.issue(
                 sessionId = sessionId,

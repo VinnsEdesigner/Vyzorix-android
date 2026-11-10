@@ -143,7 +143,7 @@ class ProotLauncherTest {
 
     @Test
     fun `the bind list never crosses the engine zone`() {
-        // The closed-world guarantee (§10): the rootfs, secret store and recordings
+        // The closed-world guarantee: the rootfs, secret store and recordings
         // are not bound, so the container cannot reach them by construction.
         for (bind in ProotLauncher.binds(context)) {
             val host = bind.substringBefore(":")

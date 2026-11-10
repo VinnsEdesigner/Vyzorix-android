@@ -404,7 +404,7 @@ void TestRecycledPidIsNotMistakenForOurs() {
     const int pid = f.host.lastPid();
 
     // The process is alive as far as waitpid is concerned, but the start token has
-    // changed — which is what PID reuse looks like. §7.1 says this is not our
+    // changed — which is what PID reuse looks like. This is not our
     // process, so it must not be reported as running and must not be signalled.
     f.host.Recycle(pid);
 

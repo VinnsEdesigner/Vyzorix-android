@@ -6,7 +6,7 @@
 // [Host], so a test drives a fake host and the backoff/lifecycle logic is exercised
 // without forking anything.
 //
-// The rules it implements are architecture doc §7: fork/exec, autostart, crash
+// The rules it implements: fork/exec, autostart, crash
 // restart with backoff, and PID validation by start-time token.
 
 #ifndef VYZORIX_SUPERVISOR_H

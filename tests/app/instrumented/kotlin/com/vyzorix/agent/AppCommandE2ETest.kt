@@ -167,7 +167,7 @@ class AppCommandE2ETest {
 
     @Test
     fun anUnknownAppIsReportedAsAFailure() {
-        // The requirement from §5: a command that could not be carried out must be
+        // A command that could not be carried out must be
         // reported failed, so the operator learns it did not run.
         val outcome = AppCommands.Start(client).execute("{\"app\":\"definitely-not-an-app\"}")
 
@@ -194,7 +194,7 @@ class AppCommandE2ETest {
      *
      * Parsed rather than substring-matched: a name that is a prefix of another app's
      * would match the wrong entry, and the pid must be non-zero *and* paired with a
-     * token — a pid alone is the thing §7.1 says must never be trusted.
+     * token — a pid alone is the thing that must never be trusted.
      */
     private fun registryHasLivePid(
         registry: String,

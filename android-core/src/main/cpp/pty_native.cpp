@@ -1,6 +1,6 @@
 // PTY allocation and I/O.
 //
-// Implements the syscall sequence from doc/ANDROID_SERVICE_ARCHITECTURE.md §4.1.
+// Implements the syscall sequence.
 // Nothing here throws; every path returns a Status and fills `detail`.
 //
 // The important property of this file: the PTY is allocated by *this* process

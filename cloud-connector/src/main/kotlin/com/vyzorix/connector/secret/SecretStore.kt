@@ -50,7 +50,7 @@ sealed interface SecretResolution {
 
 /**
  * Fetches and decrypts an app's secrets, and writes them where the supervisor reads
- * them (VYZORIX_DEPLOY_CONTRACT.md §9b.2, §9b.4, FR-26).
+ * them.
  *
  * Resolution and writing are separate so the applier can validate every secret
  * **before** it touches the live tree: a secret that will not open aborts with the
@@ -60,7 +60,7 @@ sealed interface SecretResolution {
  * put in `apps.json`: the registry is inside `/home/apps`, which every app in the
  * container can read, so a secret there would hand one app another's credential.
  *
- * A secret that will not decrypt is a refusal, not a silent skip (§9b.5): starting
+ * A secret that will not decrypt is a refusal, not a silent skip: starting
  * the app with the variable absent produces an app that looks up but talks to the
  * wrong thing.
  */

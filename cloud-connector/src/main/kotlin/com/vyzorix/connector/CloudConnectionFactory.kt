@@ -72,7 +72,7 @@ object CloudConnectionFactory {
         val signer: DeviceSigner =
             KeystoreDeviceIdentity(KeyStore.getInstance(KeystoreDeviceIdentity.ANDROID_KEYSTORE))
         // The second Keystore key, for decrypting an app secret. Separate from the
-        // identity key and never exposed over the bridge (VYZORIX_DEPLOY_CONTRACT.md §9b.3).
+        // identity key and never exposed over the bridge.
         val secretKey = SecretKey(KeyStore.getInstance(SecretKey.ANDROID_KEYSTORE))
         val uuid = DeviceUuidStore(FileUuidStorage(context)).uuid()
         // One client for both HTTP and the WebSocket, with the WebSocket heartbeat
@@ -225,7 +225,7 @@ object CloudConnectionFactory {
 
     /**
      * File-backed config storage: the current document and the previous known-good
-     * one, both kept verbatim (`keep_last = 2`, FR-21). Two files rather than a
+     * one, both kept verbatim (`keep_last = 2`). Two files rather than a
      * directory of versions: the recovery path that matters is "put back what worked",
      * one prior version answers it, and disk is the scarce resource on a phone.
      */

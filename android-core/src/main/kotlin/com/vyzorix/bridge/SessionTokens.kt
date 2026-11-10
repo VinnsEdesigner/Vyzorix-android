@@ -35,14 +35,14 @@ class SessionToken internal constructor(
      * This is deliberately not "empty means every API". The allowlist is resolved
      * on the server, so an empty one is either a resolution that granted nothing
      * or a token that was built wrong; treating it as a master key turns either
-     * case into full access. See documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md §7.
+     * case into full access.
      */
     fun permits(api: String): Boolean = api in apiAllowlist
 
     /**
      * True when this token may act on [channel].
      *
-     * The device's binding check (boundary contract §9): the token's session must
+     * The device's binding check: the token's session must
      * own the channel, and the channel must exist. [owns] is the device's own
      * channel→session fact, so this is set membership against what the device
      * minted, not a scope the server sent. A token with no session owns nothing.
@@ -64,7 +64,7 @@ class SessionToken internal constructor(
 /**
  * Issues and validates session tokens.
  *
- * A token is presented once per connection (contract §2.5); after that the
+ * A token is presented once per connection; after that the
  * connection carries the capability. It is reusable across connections for the
  * lifetime of the session, because a shell that runs `android-battery` twice
  * opens two connections and should not need two tokens.

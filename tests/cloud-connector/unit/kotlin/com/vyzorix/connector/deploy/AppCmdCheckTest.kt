@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * The device-side `cmd` re-check (VYZORIX_DEPLOY_CONTRACT.md §8 rules 3-4). The case
+ * The device-side `cmd` re-check. The case
  * that matters is a symlink inside the app directory that points out of it: the server
  * cannot see it, so the device is the only place it can be caught.
  */

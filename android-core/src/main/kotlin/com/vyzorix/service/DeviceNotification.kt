@@ -16,7 +16,7 @@ import android.os.Build
  * moved through three states:
  *
  *  - [needsStart]  — the accessibility service is on and the engine is not running.
- *    The only action is **Start the Vyzorix**, a button that starts the foreground
+ *    The only action is **Start Vyzorix**, a button that starts the foreground
  *    service. Tapping it does *not* open the app; there is no content intent at all,
  *    so the body of the notification is inert.
  *  - [waiting]     — the engine is running and the device is unclaimed. Shows the
@@ -36,11 +36,11 @@ class DeviceNotification(
         post(
             base()
                 .setContentTitle("Vyzorix")
-                .setContentText("Not running. Tap Start the Vyzorix to begin.")
+                .setContentText("Not running. Tap Start Vyzorix to begin.")
                 .setStyle(
                     Notification
                         .BigTextStyle()
-                        .bigText("Not running. Tap Start the Vyzorix to begin."),
+                        .bigText("Not running. Tap Start Vyzorix to begin."),
                 ).addAction(startAction())
                 .build(),
         )
@@ -106,7 +106,7 @@ class DeviceNotification(
             .setOnlyAlertOnce(true)
     }
 
-    /** The "Start the Vyzorix" action: a foreground-service start, never an activity. */
+    /** The "Start Vyzorix" action: a foreground-service start, never an activity. */
     private fun startAction(): Notification.Action {
         val intent =
             Intent(context, VyzorixForegroundService::class.java)
@@ -121,10 +121,10 @@ class DeviceNotification(
 
         val builder =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                Notification.Action.Builder(null, "Start the Vyzorix", pending)
+                Notification.Action.Builder(null, "Start Vyzorix", pending)
             } else {
                 @Suppress("DEPRECATION")
-                Notification.Action.Builder(0, "Start the Vyzorix", pending)
+                Notification.Action.Builder(0, "Start Vyzorix", pending)
             }
 
         return builder.build()

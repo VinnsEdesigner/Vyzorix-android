@@ -22,7 +22,7 @@ import org.junit.rules.TemporaryFolder
 /**
  * The apply path: verify, fetch, install atomically, write the registry. The
  * load-bearing cases are that a refused artifact changes nothing and that the
- * registry carries the supervisor's shape — not the config's (contract §9.1, §13.3).
+ * registry carries the supervisor's shape — not the config's.
  */
 class DeployApplierTest {
     @get:Rule

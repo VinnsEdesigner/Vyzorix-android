@@ -9,7 +9,7 @@ import java.util.concurrent.locks.ReentrantLock
 /**
  * The reader for one PTY session.
  *
- * Contract §2.1: exactly one thread reads a master fd, and that thread closes it.
+ * Exactly one thread reads a master fd, and that thread closes it.
  * This is that thread. Closing an fd another thread is blocked on does not fail
  * cleanly — the number is released and can be handed to an unrelated file — so
  * [PtySession.close] only signals, and this loop performs the close once it has

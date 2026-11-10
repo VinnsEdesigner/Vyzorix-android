@@ -18,7 +18,7 @@ import org.junit.rules.TemporaryFolder
 /**
  * The fetcher is where a bad response would become installed code, so the digest is
  * the point: a mismatch must refuse the file, and a resume must verify the whole
- * file, not just the tail it downloaded (FR-13).
+ * file, not just the tail it downloaded.
  */
 class ArtifactFetcherTest {
     @get:Rule

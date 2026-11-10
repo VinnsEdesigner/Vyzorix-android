@@ -11,7 +11,6 @@
 // the JNI boundary into the JVM (that is undefined behaviour), so the JNI layer
 // translates these statuses into a Kotlin sealed type rather than throwing.
 //
-// See doc/ANDROID_SERVICE_ARCHITECTURE.md §4.1 for the sequence this implements.
 
 #ifndef VYZORIX_PTY_BROKER_H
 #define VYZORIX_PTY_BROKER_H

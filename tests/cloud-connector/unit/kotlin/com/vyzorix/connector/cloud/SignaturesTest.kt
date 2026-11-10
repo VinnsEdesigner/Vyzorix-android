@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The spike (REGISTRATION_CONTRACT.md §12): the canonical strings the device builds
+ * The spike: the canonical strings the device builds
  * must equal the server's, byte for byte.
  *
  * Each expected value here was produced by the Go implementation — the same

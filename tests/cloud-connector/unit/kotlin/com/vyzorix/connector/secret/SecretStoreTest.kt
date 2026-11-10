@@ -10,8 +10,7 @@ import org.junit.rules.TemporaryFolder
 
 /**
  * The secret store: resolve and decrypt, write a private `.env`, and report a secret
- * that will not open rather than skipping it (VYZORIX_DEPLOY_CONTRACT.md
- * §9b.4–§9b.5, FR-26).
+ * that will not open rather than skipping it.
  */
 class SecretStoreTest {
     @get:Rule

@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * architecture requires. Everything below it is a pure component with its own
  * tests; this wires them and holds the lifecycle.
  *
- * The flow, from REGISTRATION_CONTRACT.md §3:
+ * The flow:
  *  1. On first run, generate the keypair (in the signer) and enroll. The server
  *     returns a pairing code; show it in a notification.
  *  2. Hold the WebSocket open. The operator claims the code at the web page; the
@@ -61,7 +61,7 @@ class CloudConnection(
         val signer: DeviceSigner,
         /**
          * The public half of the secret-decryption key, for enroll, or empty when the
-         * build has no secret key (VYZORIX_DEPLOY_CONTRACT.md §9b.3).
+         * build has no secret key.
          */
         val secretKeyPem: String = "",
         val uuid: String,
@@ -513,7 +513,7 @@ class CloudConnection(
      *
      * A refusal is reported, not thrown: the config is verified and stored, so the
      * device stays configured with what it had, and the operator gets the reason
-     * (FR-16). This runs off the frame-handling path — the fetch is a blocking
+     * This runs off the frame-handling path — the fetch is a blocking
      * download — so it does not stall the socket.
      */
     private fun applyApps(config: com.vyzorix.connector.config.DeviceConfig) {
@@ -539,7 +539,7 @@ class CloudConnection(
                 Log.w(TAG, "deploy refused: ${result.reason} (${result.detail})")
                 // The applier changed nothing, so restore the config the device is
                 // actually running. The version then differs from the server's, so the
-                // next reconnect re-fetches and retries (FR-21).
+                // next reconnect re-fetches and retries.
                 configStore.rollback()
             }
             sendText(DeployReporter.frame(result).toJson())

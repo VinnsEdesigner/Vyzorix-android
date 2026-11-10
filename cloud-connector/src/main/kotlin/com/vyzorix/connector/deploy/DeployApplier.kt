@@ -12,17 +12,15 @@ import java.io.IOException
 /**
  * Applies a verified config: fetch each artifact, verify its digest, install it
  * atomically, write secrets and the supervisor's registry
- * (VYZORIX_DEPLOY_CONTRACT.md §9.1).
- *
  * A failed apply changes nothing. Every artifact is fetched and unpacked into
  * staging before any live directory is touched, so a bad artifact leaves the
  * previous copies running. Installation is a per-artifact rename — the staged
  * directory over `<app>/<artifact>` — which keeps the app's other files (its data,
  * its `.env`) intact: replacing the whole app directory would delete exactly the
- * state §9.3 says is retained.
+ * state is retained.
  *
  * The supervisor is pinged first: a config that lands without a running supervisor
- * would leave every app silently stopped (§13.6).
+ * would leave every app silently stopped.
  *
  * @param stagingDir scratch space for downloads and unpacking. Its parent is the
  *   app-storage directory — `files/apps` on the host, bound to `/home/apps` in the
@@ -158,7 +156,7 @@ class DeployApplier(
         }
     }
 
-    /** Deletes the data of an app that declares `purge` (§9.3, FR-20). */
+    /** Deletes the data of an app that declares `purge`. */
     private fun purge(apps: List<AppConfig>) {
         for (app in apps) {
             if (app.purge) {
@@ -183,7 +181,7 @@ class DeployApplier(
         }
     }
 
-    /** Writes each app's PWA manifest, when it declares one (§6). */
+    /** Writes each app's PWA manifest, when it declares one. */
     private fun writePwaManifests(config: DeviceConfig) {
         for (app in config.apps) {
             pwa.write(app, File(appsRoot(), app.name))
@@ -206,7 +204,7 @@ class DeployApplier(
         }
     }
 
-    /** Re-checks each app's `cmd` after install (§8 rules 3-4), or returns a refusal. */
+    /** Re-checks each app's `cmd` after install, or returns a refusal. */
     private fun verifyCmds(
         apps: List<AppConfig>,
         version: Int,

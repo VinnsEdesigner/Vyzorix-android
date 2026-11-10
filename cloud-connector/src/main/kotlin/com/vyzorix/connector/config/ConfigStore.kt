@@ -9,7 +9,7 @@ package com.vyzorix.connector.config
  *
  * Two slots are kept — the current config and the previous known-good one — because a
  * device that has just applied a config whose apps will not start must be able to put
- * back what worked (`keep_last = 2`, VYZORIX_DEPLOY_CONTRACT.md §9.2, FR-21).
+ * back what worked (`keep_last = 2`).
  */
 interface ConfigStorage {
     fun read(): String?
@@ -33,7 +33,7 @@ interface ConfigStorage {
  * once, at claim time; a device that was offline then has none, and a device whose
  * config the operator later changed has a stale one. In both cases the device asks
  * the server for the config by version and applies what comes back if the version
- * differs. See doc/REGISTRATION_CONTRACT.md §7.
+ * differs.
  */
 class ConfigStore(
     private val storage: ConfigStorage,
@@ -85,7 +85,7 @@ class ConfigStore(
 
     /**
      * Restores the previous known-good config as current after a failed apply
-     * (FR-21, §9.2: "a failed apply changes nothing").
+     * ("a failed apply changes nothing").
      *
      * The applier leaves the artifacts untouched on a refusal, so the last-good
      * config still describes what is installed. Because the version then differs from

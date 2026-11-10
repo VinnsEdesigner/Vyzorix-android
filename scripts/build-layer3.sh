@@ -27,7 +27,7 @@
 #   bin/android-bin         the bridge client, and its per-API symlinks
 #
 # That location is deliberate: /usr/local is a bind target of the writable overlay
-# (§6.1), so these survive a rootfs replacement the same way app storage does.
+# so these survive a rootfs replacement the same way app storage does.
 
 set -euo pipefail
 

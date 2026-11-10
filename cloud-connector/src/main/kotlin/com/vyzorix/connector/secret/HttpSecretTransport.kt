@@ -10,7 +10,7 @@ import okhttp3.Request
 
 /**
  * The device-signed fetch of a secret's ciphertext: `GET /v1/device/{imei}/secrets/{app}/{key}`
- * (VYZORIX_DEPLOY_CONTRACT.md §9b.6). The server answers only for a key the current
+ * The server answers only for a key the current
  * signed config names, so a device cannot ask for a secret it was not given.
  *
  * The response carries the wrapped value and the envelope algorithm; the plaintext
@@ -70,7 +70,7 @@ class HttpSecretTransport(
     private companion object {
         const val HTTP_NOT_FOUND = 404
 
-        /** The only envelope the device's Keystore key can open (§9b.3). */
+        /** The only envelope the device's Keystore key can open. */
         const val EXPECTED_ENVELOPE = "RSA-OAEP-SHA1"
     }
 }

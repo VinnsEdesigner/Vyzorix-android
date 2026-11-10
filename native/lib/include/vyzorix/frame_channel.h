@@ -1,6 +1,6 @@
 // Framed messages over a unix socket.
 //
-// One wire shape for the whole repo, from the architecture doc §2.3:
+// One wire shape for the whole repo:
 //
 //     [4B length][1B type][payload]
 //

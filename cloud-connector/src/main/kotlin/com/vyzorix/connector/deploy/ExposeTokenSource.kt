@@ -4,10 +4,10 @@ import java.io.File
 import java.security.SecureRandom
 
 /**
- * The LAN expose token for an app (Layer 3 §4.4 P2).
+ * The LAN expose token for an app.
  *
  * The token is **device-generated, not carried in the config**: a config may not
- * carry a secret (VYZORIX_DEPLOY_CONTRACT.md §2), and the supervisor's own meta store
+ * carry a secret, and the supervisor's own meta store
  * is where an expose token lives. It must be stable across redeploys, or a device
  * that redeploys silently changes the URL a client was given.
  *

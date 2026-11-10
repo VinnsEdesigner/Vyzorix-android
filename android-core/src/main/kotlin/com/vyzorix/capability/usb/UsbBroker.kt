@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * This is the USB twin of `PtyBroker`: it owns the one resource that matters — the
  * fd `UsbManager.openDevice()` returns — and hands a duplicate to a session, which
- * is the capability model's "the fd is the grant" (architecture §9.1). A session
+ * is the capability model's "the fd is the grant". A session
  * that does not hold the device's channel cannot write to it, and closing the
  * channel is what revokes access: the device's fd is closed, so nothing downstream
  * can use it.

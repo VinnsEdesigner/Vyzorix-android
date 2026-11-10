@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * for it would throw and silently do nothing. The lever is the global setting
  * `settings_enable_monitor_phantom_procs`, writable only from shell/root or via
  * Shizuku (documented future work). Until then the bound is respected by keeping
- * the PTY session cap low, and the architecture doc's §1.4 stands: the OEM killer,
+ * the PTY session cap low, and the rule stands: the OEM killer,
  * not the phantom killer, is the survival risk.
  */
 class VyzorixForegroundService : Service() {
@@ -104,7 +104,7 @@ class VyzorixForegroundService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
-        // The notification's "Start the Vyzorix" button sends this action. It arrives
+        // The notification's "Start Vyzorix" button sends this action. It arrives
         // as a foreground-service start, so the service is already being promoted; the
         // action itself needs no special handling — the fact that onStartCommand ran is
         // the start. It is logged so the path is visible.
@@ -200,7 +200,7 @@ class VyzorixForegroundService : Service() {
                 onPtyInput = ::onPtyInput,
                 onPtyCredit = ::onPtyCredit,
                 channelOwnedBy = broker::channelBelongsToSession,
-                // The §9 binding: a token must be for this device. A provider, not a
+                // The binding: a token must be for this device. A provider, not a
                 // value, because enrollment finishes after this server is built — the
                 // device id is empty until then, and the server binds it from the
                 // moment it arrives. Same shape as buildTerminalPort's deviceId.
@@ -243,7 +243,7 @@ class VyzorixForegroundService : Service() {
      * The shell is the same proot login shell the bridge's terminal uses, so an
      * operator's cloud terminal and a local one are the same environment. The
      * allowlist is the full local API set, stated explicitly rather than left empty,
-     * because an empty allowlist permits nothing (boundary contract §7).
+     * because an empty allowlist permits nothing.
      */
     private fun buildTerminalPort(): PtySessionPort =
         ServicePtySessionPort(
@@ -266,7 +266,7 @@ class VyzorixForegroundService : Service() {
      *
      * The container's login shell when the engine is installed, which is the
      * architecture's terminal. When it is not — the rootfs asset has not shipped yet
-     * (see `ANDROID_SERVICE_ARCHITECTURE.md` §6.1.1) — a plain device shell is used
+     * — a plain device shell is used
      * **only** if [TerminalShellPolicy] has explicitly allowed it, because that shell
      * runs as the app's uid and can read the app's private files, which the container
      * exists to prevent.
@@ -277,7 +277,7 @@ class VyzorixForegroundService : Service() {
     ): PtyRequest =
         if (ProotLauncher.isReady(this)) {
             // Wrap in tmux when it is available so a dropped WebSocket reattaches to
-            // the same shell instead of losing it (§6.3). The session name is the
+            // the same shell instead of losing it. The session name is the
             // terminal's own id, so a reconnect with the same id attaches and a second
             // terminal gets its own.
             //
@@ -452,7 +452,7 @@ class VyzorixForegroundService : Service() {
      * The session's allowlist is the full local API set, stated explicitly: a shell
      * session is an operator's terminal and may call every bridge API. It is spelled
      * out rather than left empty because an empty allowlist permits nothing — the
-     * fail-closed rule from the boundary contract (§7). The server does not resolve a
+     * fail-closed rule. The server does not resolve a
      * per-session allowlist yet; when it does, it replaces this set.
      */
     fun openSession(
@@ -601,7 +601,7 @@ class VyzorixForegroundService : Service() {
         releaseWakeLock()
 
         // The engine is stopping, so the persistent notification returns to the
-        // "Start the Vyzorix" state: the service's foreground notification goes
+        // "Start Vyzorix" state: the service's foreground notification goes
         // away with it, and this re-posts the one the operator can tap to start
         // again. Without it, stopping the engine left no way back from the
         // notification.
@@ -671,7 +671,7 @@ class VyzorixForegroundService : Service() {
         /**
          * Whether a terminal's shell is wrapped in tmux for reattach. **Off.**
          *
-         * §6.3 wants a dropped WebSocket to reattach to the same shell, and
+         * A dropped WebSocket should reattach to the same shell, and
          * `tmux new-session -A` is how. It does not work on a device, and it fails in
          * a way that takes the whole terminal with it, so it is disabled here rather
          * than deleted — the fix has a place to land.
@@ -710,7 +710,7 @@ class VyzorixForegroundService : Service() {
         private const val SUPERVISOR_BACKOFF_MAX_MS = 30_000L
 
         /**
-         * The action the "Start the Vyzorix" notification button sends.
+         * The action the "Start Vyzorix" notification button sends.
          *
          * The button starts *this service*, never an activity: the agent has no UI
          * and must never be opened as an app.

@@ -92,7 +92,7 @@ bool Manager::IsRunning(const std::string &name) {
     }
 
     // The process is alive — but is it still *ours*? A pid can be recycled, and
-    // §7.1 is explicit that a bare pid must not be trusted.
+    // A bare pid must not be trusted.
     return host_->StartTicks(it->second.pid) == it->second.startTicks;
 }
 
@@ -152,7 +152,7 @@ bool Manager::Start(const std::string &name) {
 
 void Manager::AdoptRunning() {
     // A process the previous supervisor started is still alive and still ours if its
-    // start ticks match the recorded value (§7.1). Adopt it so this supervisor reaps
+    // start ticks match the recorded value. Adopt it so this supervisor reaps
     // it, restarts it on a crash, and does not spawn a duplicate on StartAutostart.
     // A record whose ticks no longer match is stale: clear it so the next start is a
     // fresh spawn rather than a signal to a recycled pid.
@@ -183,7 +183,7 @@ bool Manager::Stop(const std::string &name) {
         // unknown here even though its process is still alive. The registry keeps the
         // pid record, so adopt it rather than leaving the process orphaned — a
         // removed app whose process is never killed keeps its port bound and its
-        // data dir in use, which is exactly the failure §9.3 exists to avoid.
+        // data dir in use, which is exactly the failure this exists to avoid.
         const vapps::App *recorded = registry_.Find(name);
         if (recorded != nullptr && recorded->HasPidRecord()) {
             Running adopted;
@@ -207,7 +207,7 @@ bool Manager::Stop(const std::string &name) {
     const std::uint64_t ticks = it->second.startTicks;
 
     // Only signal it if it is still the process we started. Signalling a recycled
-    // pid would hit an unrelated process, which is the failure §7.1 exists to stop.
+    // pid would hit an unrelated process, which is the failure this exists to stop.
     if (host_->StartTicks(pid) == ticks) {
         host_->Terminate(pid);
 

@@ -15,11 +15,11 @@ import okhttp3.ResponseBody
  *
  * A reference is `{url, sha256}` and the signature covers the digest, so the
  * transport is untrusted: the bytes may arrive from anywhere and are trusted only
- * because they hash to what was signed (VYZORIX_DEPLOY_CONTRACT.md §2, §5.3).
+ * because they hash to what was signed.
  *
  * A partial download resumes with a Range request, and the digest is then computed
  * over the **whole** file — not just the new tail. A resumed transfer whose prefix
- * was tampered with must still fail (FR-13).
+ * was tampered with must still fail.
  */
 class ArtifactFetcher(
     private val http: OkHttpClient,

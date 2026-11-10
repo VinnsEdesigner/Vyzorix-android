@@ -3,7 +3,7 @@ package com.vyzorix.connector.config
 import java.nio.file.Paths
 
 /**
- * A refusal with a distinct, machine-readable reason (FR-16). [detail] names the
+ * A refusal with a distinct, machine-readable reason. [detail] names the
  * offending app or artifact.
  */
 data class Refusal(
@@ -13,8 +13,8 @@ data class Refusal(
 
 /**
  * The static rules the device re-checks on a verified config: every artifact
- * reference carries a digest (§5.3), and every `cmd` stays inside its app's own
- * directory (§8). The server refuses these at compile time too; the device
+ * reference carries a digest, and every `cmd` stays inside its app's own
+ * directory. The server refuses these at compile time too; the device
  * re-checks because it is the thing that runs the command.
  *
  * The `cmd` existence check is not here — it needs the artifact fetched, so it
@@ -32,7 +32,7 @@ class ConfigValidator {
         return null
     }
 
-    /** §6: an invalid `display` is a hard error — it would silently degrade to `browser`. */
+    /** An invalid `display` is a hard error — it would silently degrade to `browser`. */
     private fun validatePwa(app: AppConfig): Refusal? {
         val display = app.pwaOverrides["display"] ?: return null
         if (display !in PWA_DISPLAY_VALUES) {
@@ -93,7 +93,7 @@ class ConfigValidator {
         /** The shell characters the `cmd` rule refuses. `cmd` runs with no shell. */
         val METACHARACTERS = ";|&$`><(){}*?~!\n\r".toSet()
 
-        /** The valid PWA `display` values (§6); anything else degrades silently. */
+        /** The valid PWA `display` values; anything else degrades silently. */
         val PWA_DISPLAY_VALUES = setOf("standalone", "fullscreen", "minimal-ui", "browser")
     }
 }

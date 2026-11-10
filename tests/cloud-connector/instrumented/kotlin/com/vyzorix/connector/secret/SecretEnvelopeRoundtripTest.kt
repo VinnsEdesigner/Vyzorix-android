@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
  * the interop that the contract's spike warned about: the Android Keystore accepts
  * only `MGF1-SHA1`, so a "hardened to SHA-256" envelope would fail here and nowhere
  * else. It also proves the negative: a ciphertext wrapped to a different key does
- * not open (VYZORIX_DEPLOY_CONTRACT.md §9b.3, §13.7 item 9).
+ * not open.
  *
  * ## Running it
  *

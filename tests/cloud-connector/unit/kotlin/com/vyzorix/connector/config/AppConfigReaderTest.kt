@@ -8,13 +8,12 @@ import org.junit.Test
  * The apps reader is the piece an earlier draft could not pass: the document is a
  * strict depth tree with no list syntax, so apps are a repeated node and a reader
  * that flattens the tree by absolute path mixes them up. These tests pin the
- * per-app reading against a two-app document (VYZORIX_DEPLOY_CONTRACT.md §5.1,
- * §13.7 item 7).
+ * per-app reading against a two-app document.
  */
 class AppConfigReaderTest {
     private val reader = AppConfigReader()
 
-    /** The §5.1 example: two apps, each with its own fields. */
+    /** The example: two apps, each with its own fields. */
     private fun twoAppDocument(): String =
         """
         ' vyzorix.v — device configuration

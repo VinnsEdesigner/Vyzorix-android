@@ -34,7 +34,7 @@ class SessionApi(
     private val resizeSession: (channel: Int, rows: Int, cols: Int) -> PtyResult<Unit>,
     /**
      * True when [channel] belongs to [sessionId]. This is the device's binding
-     * check (boundary contract §9): a connection may only act on the channels its
+     * check: a connection may only act on the channels its
      * own session opened, so one operator cannot close or resize another's
      * terminal.
      */

@@ -15,8 +15,6 @@ import javax.crypto.spec.PSource
 /**
  * The device's secret-decryption key: an RSA-3072 keypair in the Android Keystore
  * with `PURPOSE_DECRYPT`, generated on first run and never exported
- * (VYZORIX_DEPLOY_CONTRACT.md §9b.3).
- *
  * It is deliberately separate from the identity key. The identity key signs and is
  * generated `PURPOSE_SIGN` only; its public half is handed to the container, so it
  * is not a key a secret's confidentiality should rest on. This key is never exposed
@@ -42,7 +40,7 @@ class SecretKey(
      *
      * A null return is a refusal, not an error to retry: a ciphertext wrapped to a
      * different key never opens, and the caller reports `secret_undecryptable`
-     * rather than starting an app with the variable absent (§9b.5).
+     * rather than starting an app with the variable absent.
      */
     @Suppress("SwallowedException")
     override fun decrypt(ciphertextBase64: String): ByteArray? =

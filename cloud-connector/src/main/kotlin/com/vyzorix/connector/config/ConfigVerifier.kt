@@ -43,7 +43,7 @@ sealed class ConfigError(
     ) : ConfigError("config must not carry a secret: $detail")
 
     /**
-     * A static rule refused the config (VYZORIX_DEPLOY_CONTRACT.md §5.3, §8). The
+     * A static rule refused the config. The
      * [reason] is the machine-readable code the server and console key off.
      */
     class Refused(
@@ -81,8 +81,6 @@ data class DeviceConfig(
  * The signature is checked with the format's own verifier against the server's
  * public key, pinned in the app. That is the only trust anchor: the server signs
  * with a private key the device never sees, and the device holds the public half.
- * See doc/REGISTRATION_CONTRACT.md §5 and §6.
- *
  * A verification failure is a refusal, never a warning: an unverified config is an
  * attacker's config, and applying it would hand the device's policy to whoever
  * produced it.
@@ -156,7 +154,7 @@ class ConfigVerifier(
     }
 
     /**
-     * Refuses a document that carries a secret, and names the offending key (§5.2).
+     * Refuses a document that carries a secret, and names the offending key.
      * The walk lives in [ConfigSecretScan], matching the server's `configscan`.
      */
     private fun assertNoSecrets(root: VNode) {

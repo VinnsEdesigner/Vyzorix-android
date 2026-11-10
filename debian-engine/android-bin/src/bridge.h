@@ -1,7 +1,6 @@
 // The android.sock client.
 //
 // One connection to Layer 1's bridge, with the frame shape from the architecture
-// doc §2.3:
 //
 //     [4B length][1B type][payload]
 //
@@ -46,7 +45,7 @@ struct BridgeConfig {
 /**
  * Reads the bridge configuration from the environment.
  *
- * Both variables are set by the proot launcher at exec (architecture doc §9.2:
+ * Both variables are set by the proot launcher at exec:
  * the token travels in the environment, never on disk or in argv). A missing one
  * is a hard error rather than a default: connecting without a token cannot
  * authenticate, and a wrong socket path is a silent hang.

@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * The static rules the device re-checks on a verified config
- * (VYZORIX_DEPLOY_CONTRACT.md §5.3, §8). The cases mirror the server's own refusal
+ * The cases mirror the server's own refusal
  * tests, because the two checks are the same rule and must agree.
  */
 class ConfigValidatorTest {

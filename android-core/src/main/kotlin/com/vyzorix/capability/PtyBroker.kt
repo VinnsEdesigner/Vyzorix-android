@@ -111,7 +111,7 @@ class PtyBroker(
     /**
      * True when [channel] belongs to [sessionId].
      *
-     * This is the device's real resource axis (boundary contract §9): the device
+     * This is the device's real resource axis: the device
      * holds one resource — itself — so its binding check is not a scope evaluation
      * but set membership against a fact it minted. A connection may only act on
      * the channels its own session opened.

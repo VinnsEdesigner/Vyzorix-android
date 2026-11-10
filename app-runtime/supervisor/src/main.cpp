@@ -7,14 +7,14 @@
 // Usage:
 //   supervisor [--apps PATH] [--logs DIR] [--socket PATH]
 //
-// Defaults are the layout the architecture fixes (§6.1, §3):
+// Defaults are the layout the architecture fixes:
 //
 //   --apps    /home/apps/apps.json        the registry
 //   --logs    /home/apps/logs             one log per app
 //   --socket  /home/apps/supervisor.sock  the control socket
 //
 // The defaults are the reason /home/apps is bound from app storage rather than the
-// rootfs: the registry and the logs must outlive a rootfs replacement (§2), and
+// rootfs: the registry and the logs must outlive a rootfs replacement, and
 // /home/apps is the one directory that does.
 //
 // It logs to stderr, which the proot PTY captures — the same channel the engine's

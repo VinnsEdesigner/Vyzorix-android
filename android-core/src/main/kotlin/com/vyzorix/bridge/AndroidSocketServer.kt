@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * bounded pool for API dispatch so a slow handler cannot stall framing. Bounds on
  * connections and dispatch threads exist so a client cannot exhaust the process.
  *
- * The socket lives in the **filesystem** namespace (contract §2.2), because the
+ * The socket lives in the **filesystem** namespace, because the
  * Debian side must be able to bind it into the container's tree; an abstract name
  * is invisible to the filesystem and so cannot be bound into proot. Android has no
  * public Java API that binds a *listening* socket in the filesystem namespace —
@@ -41,8 +41,8 @@ class AndroidSocketServer(
     private val onPtyInput: (channel: Int, bytes: ByteArray) -> Unit,
     private val onPtyCredit: (channel: Int, bytes: Int) -> Unit,
     /**
-     * True when [channel] belongs to [sessionId]. The device's binding check
-     * (boundary contract §9): a connection may only drive the channels its own
+     * True when [channel] belongs to [sessionId]: a connection may only drive the
+     * channels its own
      * session opened, so one operator cannot type into or credit another's
      * terminal. Defaulted to deny so a caller that forgets it fails closed.
      */
@@ -55,7 +55,7 @@ class AndroidSocketServer(
      * and again on each authentication, so a device that enrolls while the bridge is
      * already up still gets the binding.
      *
-     * The contract's §9 clause `token.deviceId == self`: without an id there is
+     * The clause `token.deviceId == self`: without an id there is
      * nothing to compare, and the token is accepted on the strength of the token
      * alone. `start()` logs that state once so it is visible rather than assumed.
      */
@@ -124,7 +124,7 @@ class AndroidSocketServer(
 
             Log.i(TAG, "bridge listening on ${socketPath.absolutePath}")
             if (selfDeviceId() == null) {
-                // Stated once, loudly: the §9 device-identity clause is not enforced
+                // Stated once, loudly: the device-identity clause is not enforced
                 // because the device has not enrolled yet. Silence here would read as
                 // "enforced". See selfDeviceId.
                 Log.w(
@@ -307,7 +307,7 @@ class AndroidSocketServer(
             val presented = request.args[ARG_TOKEN_NAME] ?: return false
             val validated = tokens.validate(presented) ?: return false
 
-            // §9 binding: the token must be for THIS device. The id is read here, not
+            // binding: the token must be for THIS device. The id is read here, not
             // captured at start(), so a device that enrolls while the bridge is already
             // up is bound from that moment. While unprovisioned there is no self ID to
             // compare, and the token is accepted on the strength of the token alone;
@@ -356,7 +356,7 @@ class AndroidSocketServer(
                 FrameType.PtyInput -> {
                     val decoded = PtyFrame.decode(frame.payload) ?: return
                     val active = token ?: return
-                    // Binding check (§9): only the session that opened the channel
+                    // Binding check: only the session that opened the channel
                     // may type into it.
                     if (!active.permitsChannel(decoded.first, channelOwnedBy)) return
                     onPtyInput(decoded.first, decoded.second)

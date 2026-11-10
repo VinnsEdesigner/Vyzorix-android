@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * The PWA rule (VYZORIX_DEPLOY_CONTRACT.md §6). The negative case is the load-bearing
+ * The PWA rule. The negative case is the load-bearing
  * one: an app that is not a PWA must be handed no manifest at all.
  */
 class PwaManifestTest {

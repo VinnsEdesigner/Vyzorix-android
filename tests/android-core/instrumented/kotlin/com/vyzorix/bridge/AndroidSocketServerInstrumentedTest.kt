@@ -153,7 +153,7 @@ class AndroidSocketServerInstrumentedTest {
 
     @Test
     fun aTokenForAnotherDeviceIsRefused() {
-        // §9: the token must be for THIS device. A valid, correctly-scoped token
+        // The token must be for THIS device. A valid, correctly-scoped token
         // minted for a different device must not authenticate — otherwise a token
         // leaked from another device opens this one.
         val foreign =

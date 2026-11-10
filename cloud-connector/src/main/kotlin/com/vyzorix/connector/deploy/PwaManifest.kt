@@ -8,8 +8,6 @@ import kotlinx.serialization.json.Json
 
 /**
  * The `site.webmanifest` a webroot gets when it declares `pwa = true`
- * (VYZORIX_DEPLOY_CONTRACT.md §6).
- *
  * A webroot is **not** a PWA unless it says so: `pwa` absent or `false` generates
  * nothing. A manifest changes how a browser presents and installs a page, so an app
  * that is not a PWA must not be handed one by accident, and the default is `false`.

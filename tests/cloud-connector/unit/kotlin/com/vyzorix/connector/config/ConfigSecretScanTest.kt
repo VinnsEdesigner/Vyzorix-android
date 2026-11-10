@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * The structural no-secret rule (VYZORIX_DEPLOY_CONTRACT.md §5.2). The load-bearing
+ * The structural no-secret rule. The load-bearing
  * pair is the last two tests: a config that *names* a secret must be accepted, and
  * one that *carries* a value must be refused. The old line scanner failed the first
  * half — it refused its own schema field — so both halves are asserted.

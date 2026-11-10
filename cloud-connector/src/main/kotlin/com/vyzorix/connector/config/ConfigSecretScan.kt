@@ -3,7 +3,7 @@ package com.vyzorix.connector.config
 import com.vyzorix.libv.VNode
 
 /**
- * The structural no-secret check (VYZORIX_DEPLOY_CONTRACT.md §5.2). A config may
+ * The structural no-secret check. A config may
  * name a secret (`secret NAME`); it may never carry a value. Ported from the
  * server's `internal/infrastructure/configscan`, which the device must agree with.
  */

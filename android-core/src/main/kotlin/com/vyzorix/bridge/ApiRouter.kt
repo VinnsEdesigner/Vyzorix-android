@@ -82,7 +82,7 @@ class ApiRouter(
      * Used to mint a session's allowlist on the device: a shell session may call
      * every API the bridge serves, and the set is stated explicitly rather than
      * left empty, because an empty allowlist permits nothing (boundary contract
-     * §7). When the server resolves a per-session allowlist, that replaces this.
+     * When the server resolves a per-session allowlist, that replaces this.
      */
     fun names(): List<String> = handlers.keys.sorted()
 

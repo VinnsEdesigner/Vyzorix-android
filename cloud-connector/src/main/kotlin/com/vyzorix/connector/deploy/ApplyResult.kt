@@ -3,7 +3,7 @@ package com.vyzorix.connector.deploy
 import java.io.IOException
 
 /**
- * The outcome of an apply. [reason] is a machine-readable refusal code (FR-16) when
+ * The outcome of an apply. [reason] is a machine-readable refusal code when
  * [success] is false; [detail] names the app or artifact.
  */
 data class ApplyResult(
@@ -23,7 +23,7 @@ data class ApplyResult(
     }
 }
 
-/** An artifact whose bytes did not hash to its signed digest (FR-13, §9.2). */
+/** An artifact whose bytes did not hash to its signed digest. */
 class DigestMismatch(
     message: String,
 ) : IOException(message)

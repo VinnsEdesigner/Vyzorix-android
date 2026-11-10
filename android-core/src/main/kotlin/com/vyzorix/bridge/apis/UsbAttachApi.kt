@@ -16,7 +16,7 @@ import org.json.JSONObject
  *
  * This is the write half of USB: it claims a hardware device, so it carries
  * `op:write` — the first API in the catalogue to do so. The fd it opens is the
- * capability the container later receives (architecture §4.2, §9.1): the
+ * capability the container later receives: the
  * Debian-side tool drives the device through that descriptor, and `usb_detach`
  * revoking it by closing is what revokes access.
  *

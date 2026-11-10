@@ -2,7 +2,7 @@ package com.vyzorix.connector.config
 
 import com.vyzorix.libv.VNode
 
-/** Reads the `apps` section out of a verified config. See VYZORIX_DEPLOY_CONTRACT.md §5.1. */
+/** Reads the `apps` section out of a verified config. */
 class AppConfigReader {
     /** The apps declared in [root], in document order. Empty when there is no apps section. */
     fun read(root: VNode): List<AppConfig> =

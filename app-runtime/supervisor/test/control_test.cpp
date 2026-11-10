@@ -238,7 +238,7 @@ void TestCreatePersists() {
 void TestExposeRefusesNonLoopbackWithoutToken() {
     Fixture f;
 
-    // The security requirement (§7.2). 0.0.0.0 is every interface, so this must be a
+    // The security requirement. 0.0.0.0 is every interface, so this must be a
     // refusal, not a warning.
     const std::string reply =
         f.Request("{\"op\":\"expose\",\"name\":\"flasher\",\"bind\":\"0.0.0.0\"}");

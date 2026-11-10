@@ -60,7 +60,7 @@ class ApiRouterTest {
         // Supersedes the earlier "empty means every API" reading of contract 2.5.
         // The allowlist is resolved on the server, so empty is deny-by-default; a
         // master-key reading turns a resolution that granted nothing into full
-        // access. See documents/ANDROID_SERVICE_BOUNDARY_CONTRACT.md §7.
+        // access.
         val router = ApiRouter().register("battery") { ApiOutcome.ok(JSONObject()) }
 
         val outcome = router.dispatch(context, token(emptySet()), "battery", emptyMap())
