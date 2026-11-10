@@ -484,3 +484,13 @@ val stageLayer3 by tasks.registering {
 tasks
     .matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
     .configureEach { dependsOn(stageRootfs, stageLayer3) }
+
+// Every other task that reads the staged assets needs the same dependency. The
+// `merge*Assets` matcher above covers the packaging path; the lint path
+// (`generate*LintVitalReportModel`, `lintVital*`) reads the same directories and
+// Gradle fails the build for an undeclared dependency when a *release* build runs
+// lint, which it does and a debug build does not. Matching on the two prefixes keeps
+// this off the many unrelated tasks.
+tasks
+    .matching { it.name.contains("Lint") || it.name.contains("lint") }
+    .configureEach { dependsOn(stageRootfs, stageLayer3) }
