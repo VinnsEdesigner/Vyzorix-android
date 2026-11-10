@@ -703,3 +703,37 @@ Built by `scripts/release-apk.sh` with the pinned server key
   Note: the REST PATCH of `make_latest` silently does nothing; `gh release edit <tag>
   --latest` works, and the `releases/latest` redirect is cached for ~1 minute.
 - Version naming: the user wanted `v0.1.3` (app-v0.2.0 was deleted).
+
+## Play Protect block, and the `sideload` flavor (2026-11-10)
+On a Nokia C22 (API 33, Go edition), Play Protect refused the install with
+**"this app is blocked from installing, it's malicious and could cause a financial
+fraud"** — a HARD, non-overridable verdict (no "install anyway"), so turning the
+Play Protect toggle off does not help: the verdict is fetched from Google's cloud.
+`adb install` bypasses Play Protect entirely, but tapping an APK in a file manager
+does not.
+
+The verdict is the SMS-fraud/banking-trojan signature. The permissions that make it
+up, all of which the app genuinely used: `SEND_SMS`+`RECEIVE_SMS` (fraud marker),
+`READ_LOGS` (credential scraping), `REQUEST_INSTALL_PACKAGES` (dropper),
+accessibility service (overlay), `QUERY_ALL_PACKAGES`, `MANAGE_EXTERNAL_STORAGE`,
+`CALL_PHONE`.
+
+**Fix**: a `distribution` flavor dimension in `app/build.gradle.kts`. `full`
+(default, unchanged) keeps everything; `sideload` removes those seven via
+`app/src/sideload/AndroidManifest.xml` (`tools:node="remove"`). Removed APIs fail
+closed, not fatally — `ApiRouter.dispatch` catches `Throwable`, handlers catch
+`SecurityException`. `scripts/release-apk.sh --flavor sideload` builds it; the APK
+name carries the flavor.
+
+- **`isDefault = true` on the `full` flavor is load-bearing**: it keeps
+  `assembleRelease`/`assembleDebug`/`gate`/instrumented tests resolving without a
+  flavor prefix, so adding flavors did not break CI or the gate.
+- Build it by hand with: `./gradlew :app:assembleSideloadRelease -ProotfsAbi=arm64
+  -PcloudBaseUrl=... -PserverPublicKey="<escaped PEM>"`. The PEM must have literal
+  `\n` (the release script does this); a raw multi-line PEM fails
+  `compileSideloadReleaseJavaWithJavac` with "unclosed string literal".
+- Published `app-v0.1.4` (sha256 `95b905b8…`), baked into the server image, live at
+  `https://vyzorix.fly.dev/v1/apk/vyzorix-app-v0.1.4-sideload-release-arm64.apk`.
+- **Do not pass commit messages containing backticks through a double-quoted
+  `git commit -m`** — the shell runs them as command substitution and mangles the
+  message. Use `git commit -F -` with a quoted heredoc.
