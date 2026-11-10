@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The accessibility service's configuration.
+
+  Every observation is switched off. This service exists only to be a switch the
+  operator flips; it reads no screen content and performs no actions. Declaring the
+  capabilities explicitly (rather than relying on defaults) makes the intent
+  reviewable: a service that cannot observe anything cannot leak what it observes.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="false"
+    android:notificationTimeout="100"
+    android:description="@string/vyzorix_accessibility_description" />

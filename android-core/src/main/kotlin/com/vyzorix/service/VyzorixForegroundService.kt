@@ -1,8 +1,6 @@
 package com.vyzorix.service
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -97,7 +95,7 @@ class VyzorixForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForeground(DeviceNotification.NOTIFICATION_ID, buildNotification())
         acquireWakeLock()
     }
 
@@ -106,13 +104,21 @@ class VyzorixForegroundService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
+        // The notification's "Start the Vyzorix" button sends this action. It arrives
+        // as a foreground-service start, so the service is already being promoted; the
+        // action itself needs no special handling — the fact that onStartCommand ran is
+        // the start. It is logged so the path is visible.
+        if (intent?.action == ACTION_START) {
+            Log.i(TAG, "start requested from the notification")
+        }
+
         // Re-post the foreground notification on every start, not just in onCreate.
         // The system requires every startForegroundService() to be answered by a
         // startForeground() call, and onCreate runs only once per service lifetime:
         // a second start (a boot receiver racing the app, or a caller starting an
         // already-running service) was therefore never answered, and the process was
         // killed with "did not then call Service.startForeground()".
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForeground(DeviceNotification.NOTIFICATION_ID, buildNotification())
 
         if (running.compareAndSet(false, true)) {
             instance = this
@@ -593,6 +599,14 @@ class VyzorixForegroundService : Service() {
         instance = null
 
         releaseWakeLock()
+
+        // The engine is stopping, so the persistent notification returns to the
+        // "Start the Vyzorix" state: the service's foreground notification goes
+        // away with it, and this re-posts the one the operator can tap to start
+        // again. Without it, stopping the engine left no way back from the
+        // notification.
+        DeviceNotification(this).needsStart()
+
         super.onDestroy()
     }
 
@@ -616,33 +630,16 @@ class VyzorixForegroundService : Service() {
         wakeLock = null
     }
 
-    private fun buildNotification(): Notification {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel =
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "Vyzorix engine",
-                    NotificationManager.IMPORTANCE_LOW,
-                )
-            (getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
-                ?.createNotificationChannel(channel)
-        }
-
-        val builder =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Notification.Builder(this, CHANNEL_ID)
-            } else {
-                @Suppress("DEPRECATION")
-                Notification.Builder(this)
-            }
-
-        return builder
-            .setContentTitle("Vyzorix")
-            .setContentText("Device engine running")
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setOngoing(true)
-            .build()
-    }
+    /**
+     * The foreground notification, in the shared "running" state.
+     *
+     * The engine service only runs once the operator has tapped Start, so by the
+     * time this is posted the device is past the "needs start" state; the cloud
+     * connection moves it to "waiting" (pairing code) and then "running" (claimed).
+     * It shares [DeviceNotification.NOTIFICATION_ID], so the service's notification
+     * and the state machine's are the same object — one Vyzorix notification.
+     */
+    private fun buildNotification(): Notification = DeviceNotification(this).runningNotification()
 
     companion object {
         private const val TAG = "VyzorixService"
@@ -711,8 +708,14 @@ class VyzorixForegroundService : Service() {
         /** The supervisor restart backoff: linear, from one step up to a ceiling. */
         private const val SUPERVISOR_BACKOFF_STEP_MS = 1000L
         private const val SUPERVISOR_BACKOFF_MAX_MS = 30_000L
-        private const val CHANNEL_ID = "vyzorix-engine"
-        private const val NOTIFICATION_ID = 1
+
+        /**
+         * The action the "Start the Vyzorix" notification button sends.
+         *
+         * The button starts *this service*, never an activity: the agent has no UI
+         * and must never be opened as an app.
+         */
+        const val ACTION_START = "com.vyzorix.service.action.START"
         private const val SHUTDOWN_TIMEOUT_MS = 3000L
 
         /**

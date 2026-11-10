@@ -19,13 +19,13 @@ import com.vyzorix.connector.deploy.ApplyResult
 import com.vyzorix.connector.deploy.DeployApplier
 import com.vyzorix.connector.deploy.DeployReporter
 import com.vyzorix.connector.enroll.PairingCode
-import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceFactsCollector
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.telemetry.TelemetryReporter
 import com.vyzorix.connector.terminal.TerminalRelay
 import com.vyzorix.connector.update.UpdateChecker
 import com.vyzorix.service.CloudLink
+import com.vyzorix.service.DeviceNotification
 import com.vyzorix.service.PtySessionPort
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -70,7 +70,7 @@ class CloudConnection(
         val configStore: ConfigStore,
         val wsClientFactory: (DeviceWsClient.Listener) -> DeviceWsClient,
         val dispatcherFactory: (deviceId: String) -> CommandDispatcher,
-        val notification: PairingNotification,
+        val notification: DeviceNotification,
         // Supplies the telemetry readings. Built by the factory because it needs the
         // platform, but the cadence and the frame live here.
         val telemetrySource: TelemetryReporter.TelemetrySource,
@@ -303,13 +303,14 @@ class CloudConnection(
 
         deviceId = response.deviceId
         pollIntervalSeconds = response.pollIntervalSeconds
-        notification.show(
-            PairingCode.from(
-                code = response.pairingCode,
-                display = response.pairingDisplay,
-                expiresAt = response.expiresAt,
-                expiresInSeconds = response.expiresInSeconds,
-            ),
+        notification.waiting(
+            PairingCode
+                .from(
+                    code = response.pairingCode,
+                    display = response.pairingDisplay,
+                    expiresAt = response.expiresAt,
+                    expiresInSeconds = response.expiresInSeconds,
+                ).display,
         )
 
         // The code is shown; now wait to be claimed. The socket push is the primary
@@ -487,7 +488,7 @@ class CloudConnection(
     ) {
         try {
             val config = configStore.apply(document)
-            notification.showConfigured(config.name)
+            notification.running(config.name)
             // A config has arrived, so the waiting is over: the socket push and the
             // reconnect-time version check own it from here.
             configPoller?.stop()

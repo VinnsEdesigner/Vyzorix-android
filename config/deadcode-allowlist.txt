@@ -71,3 +71,9 @@ kotlin-unused-decl:encodeAck            # PTY credit frame; the relay's flow con
 # registry — a token minted elsewhere is one the bridge has never seen. No
 # production caller exists yet; the cloud relay attaches the port directly.
 kotlin-test-only-decl:terminalPortOrNull  # test seam to the service's own terminal port
+
+# The accessibility service is the enable-gate (see VyzorixAccessibilityService).
+# onAccessibilityEvent is a required override with an intentionally empty body: the
+# service observes nothing. The gate reports it as unused because nothing calls it.
+kotlin-unused-decl:onAccessibilityEvent   # required override; the service observes nothing
+kotlin-unused-decl:onInterrupt   # required override; the service performs no feedback

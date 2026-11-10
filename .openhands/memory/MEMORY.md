@@ -606,3 +606,35 @@ process stays alive, **0 panics/fatals**; `go vet` and `go test` both pass. Deta
   is not resolvable in unit tests — use `java.nio.file.Files.createSymbolicLink`.
 - Pushed: `ae3baf0` (B4) → `c9df268` (B5) → `0ab86eb` (B6). Device-side deploy is
   now feature-complete per §13.3/§13.4.
+
+## Live E2E (2026-11-09) — 6 real bugs, all fixed
+Ran the full loop: provision -> boot server -> build+install APK -> enroll ->
+claim -> CLI login -> deploy -> app serves HTTP 200 from the host. Every bug
+below blocked it and none was covered by a unit test.
+- **Server: every login 500'd.** `RefreshTokenRepository.Create` passed
+  `ReplacedByID` (Go zero = "") into a self-referencing FK -> "FOREIGN KEY
+  constraint failed". Fixed with `nullString`. (server `50069afe`)
+- **Server: every config/command push failed the device signature.** `json.Marshal`
+  HTML-escapes `<`/`>`/`&` to `\u003e`, but the signature covers `args` verbatim, so
+  sent bytes != signed bytes. A `backoff 1s>30s` node was enough. Fixed with
+  `SetEscapeHTML(false)` + writing the exact signed bytes. (server `50069afe`)
+- **Device: no compressed frame could be read.** The server gzips frames >1 KiB into
+  `{type,data,compressed:true}`; the dispatcher only read `args`. Added
+  `FrameCompression`. (device `ea9f852`)
+- **proot aborted the tracer** on a mis-timed seccomp event (Android 9 delivers at
+  sysexit; `event.c` asserted IS_IN_SYSENTER -> abort -> supervisor SIGABRT on every
+  fork). (device `ea9f852`)
+- **proot's seccomp acceleration segfaults the guest on API 28.** `PROOT_NO_SECCOMP=1`
+  fixes it; gated to API <= 28 (on API 33 it breaks `rename(2)`). `ProotLauncher.prootEnv`.
+- **Layer 3: a stop did not stick.** The supervisor's own `apps.json` write triggered
+  its inotify reload + `StartAutostart`, restarting the app just stopped. Fixed with
+  `Manager::RegistryOnDiskDiffers`. Also `AdoptRunning` reclaims live processes after a
+  restart (they were otherwise orphaned and unstoppable). (device `a6ad9e0`,`002c24a`)
+- **`Layer3Installer` marker was ABI-only**, so a rebuilt supervisor never reached a
+  device that already had one — cost a cycle. Now `abi:assetLength`. (`8147bd2`)
+- **Also:** python3 is now in CORE_PACKAGES (first boot), not just extended.
+- **Test-harness gotchas:** the APK must be built with `-PserverPublicKey` (PEM with
+  literal `\n`), `-PcloudBaseUrl=http://10.0.2.2:3000` (10.0.2.2 is cleartext-allowed),
+  and for a local artifact host `-ProotfsBaseUrl=https://10.0.2.2:8443` with a CA
+  installed into `/system/etc/security/cacerts` (needs `emulator -writable-system` +
+  `adb remount`). `control_test` fails if anything holds port 3000 (it binds it).

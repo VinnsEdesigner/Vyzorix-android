@@ -17,7 +17,6 @@ import com.vyzorix.connector.deploy.ArtifactFetcher
 import com.vyzorix.connector.deploy.ControlSocketSupervisor
 import com.vyzorix.connector.deploy.DeployApplier
 import com.vyzorix.connector.deploy.FileExposeTokens
-import com.vyzorix.connector.enroll.PairingNotification
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
 import com.vyzorix.connector.identity.KeystoreDeviceIdentity
@@ -28,6 +27,7 @@ import com.vyzorix.connector.telemetry.DeviceTelemetrySource
 import com.vyzorix.connector.update.ApkInstaller
 import com.vyzorix.connector.update.UpdateChecker
 import com.vyzorix.connector.update.UpdateClient
+import com.vyzorix.service.DeviceNotification
 import java.io.File
 import java.security.KeyStore
 import okhttp3.OkHttpClient
@@ -122,7 +122,7 @@ object CloudConnectionFactory {
                             ),
                     )
                 },
-                notification = PairingNotification(context),
+                notification = DeviceNotification(context),
                 // Telemetry needs the platform (battery, uptime), so the source is built
                 // here; the cadence and the frame live in the connection.
                 telemetrySource = DeviceTelemetrySource(context),

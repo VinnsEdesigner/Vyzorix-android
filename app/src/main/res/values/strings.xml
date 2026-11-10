@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown on the Accessibility settings row. It must say plainly what the
+         service is for, because that screen is where the operator grants it. -->
+    <string name="vyzorix_accessibility_description">Lets the Vyzorix agent post its start notification. It observes nothing and reads no screen content.</string>
+</resources>

