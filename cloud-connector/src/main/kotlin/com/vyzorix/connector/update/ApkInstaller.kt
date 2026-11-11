@@ -17,12 +17,19 @@ import java.io.File
  */
 interface ApkInstaller {
     /**
-     * Asks the platform to install [apk].
+     * Asks the platform to install [apk], which is version [version] of the app.
      *
-     * Returns true when the installer was launched (the user still has to confirm),
-     * false when it could not be — for example on a device where the app may not
-     * request package installs. A false return is not an exception: a device that
-     * cannot self-update still runs, it just needs the APK sideloaded.
+     * Returns true when an install path was offered to the user: either the installer
+     * was launched directly, or a notification was posted whose tap opens it. False
+     * when neither was possible — for example the user has not allowed this app to
+     * install unknown apps. A false return is not an exception: a device that cannot
+     * self-update still runs, it just needs the APK sideloaded.
+     *
+     * The version is passed rather than read from the APK because the notification
+     * names it, and parsing an APK's manifest for a label is not worth the code.
      */
-    fun install(apk: File): Boolean
+    fun install(
+        apk: File,
+        version: String,
+    ): Boolean
 }

@@ -69,9 +69,14 @@ class UpdateLiveE2ETest {
     /** Records that the verified APK reached the install step, without installing. */
     private class RecordingInstaller : ApkInstaller {
         var installed: File? = null
+        var version: String? = null
 
-        override fun install(apk: File): Boolean {
+        override fun install(
+            apk: File,
+            version: String,
+        ): Boolean {
             installed = apk
+            this.version = version
 
             return true
         }

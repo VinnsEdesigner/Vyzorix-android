@@ -37,6 +37,19 @@ class UpdateChecker(
     private val onInstalling: (UpdateCheck) -> Unit = {},
 ) {
     /**
+     * The version code of the last build for which the install was offered.
+     *
+     * `runOnce` fires on **every** WebSocket reconnect. Without this, a device whose
+     * install cannot complete — the common case on Android 10+, where the install
+     * waits for a user tap that never comes — re-downloaded the whole APK on every
+     * reconnect. On a flaky link that is the reconnect cadence times ~73 MB: a real
+     * device pulled a gigabyte in under two hours this way. The same version is never
+     * offered twice.
+     */
+    @Volatile
+    private var offeredVersionCode: Int = 0
+
+    /**
      * One full pass: check, and if there is a newer build, download and install it.
      *
      * Never throws: an update failure must not take the connection down. Every
@@ -57,30 +70,55 @@ class UpdateChecker(
             return
         }
 
-        onUpdateFound(check)
-        Log.i(TAG, "update available: ${check.version} (code ${check.versionCode})")
-
-        val apk = File(stagingDir, check.apkFilename)
-        try {
-            client.download(check, apk) { percent -> onProgress(check, percent) }
-        } catch (t: Throwable) {
-            // A failed or unverified download is not fatal; the next connect retries.
-            Log.w(TAG, "update download failed: ${t.message}")
+        // Already offered this exact build and the install did not happen (the user
+        // has not tapped yet, or declined). Re-offering means re-downloading tens of
+        // megabytes on every reconnect, which is the data leak this guards. The staged
+        // APK is still on disk; the operator installs it when they are ready.
+        if (check.versionCode == offeredVersionCode) {
+            Log.d(TAG, "update ${check.version} already offered; not re-downloading")
 
             return
         }
 
+        onUpdateFound(check)
+        Log.i(TAG, "update available: ${check.version} (code ${check.versionCode})")
+
+        val apk = File(stagingDir, check.apkFilename)
+
+        // Reuse the staged APK when it is already there and still matches the
+        // manifest's hash: a download that completed on an earlier connect must not be
+        // paid for again. `download` verifies the checksum, so a stale or corrupt file
+        // is caught there and re-fetched.
+        val alreadyStaged = apk.isFile && client.matches(check, apk)
+        if (!alreadyStaged) {
+            try {
+                client.download(check, apk) { percent -> onProgress(check, percent) }
+            } catch (t: Throwable) {
+                // A failed or unverified download is not fatal; the next connect retries.
+                Log.w(TAG, "update download failed: ${t.message}")
+
+                return
+            }
+        } else {
+            Log.i(TAG, "update ${check.version} already staged; skipping the download")
+        }
+
         onDownloaded(check)
 
-        val launched = installer.install(apk)
-        if (launched) {
-            Log.i(TAG, "installer launched for ${check.version}")
+        // Record the offer *before* the install attempt: whatever the outcome — the
+        // installer opened, a notification was posted, or the grant is missing — this
+        // build has been presented, and re-presenting it means re-downloading.
+        offeredVersionCode = check.versionCode
+
+        val offered = installer.install(apk, check.version)
+        if (offered) {
+            Log.i(TAG, "install offered for ${check.version}")
             onInstalling(check)
         } else {
-            // The device cannot install packages itself (no installer permission, or
-            // the user declined). The verified APK is staged; an operator can install
-            // it, and the device keeps running its current build.
-            Log.w(TAG, "could not launch the installer; apk staged at ${apk.absolutePath}")
+            // The device cannot install packages itself (the user has not allowed this
+            // app to install unknown apps). The verified APK is staged; an operator can
+            // install it, and the device keeps running its current build.
+            Log.w(TAG, "could not offer the install; apk staged at ${apk.absolutePath}")
         }
     }
 

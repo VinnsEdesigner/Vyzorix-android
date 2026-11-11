@@ -144,6 +144,55 @@ class DeviceNotification(
         )
     }
 
+    /**
+     * Builds the "update ready to install" notification.
+     *
+     * This is the headless app's one route to an install: Android 10+ blocks a
+     * background service from starting the installer directly, so the launch has to
+     * come from the user tapping this. [tapIntent] opens the installer.
+     *
+     * It is deliberately *not* `setOngoing(true)` — unlike the status notification, the
+     * user may dismiss it — and it uses the same burgundy accent and icon. It is a
+     * *second* notification id so it does not replace the persistent status one, and a
+     * distinct channel at DEFAULT importance, because a prompt the user must tap must
+     * be visible and must not be silenced by the status channel's low importance.
+     */
+    fun installReady(
+        version: String,
+        tapIntent: PendingIntent,
+    ): Notification {
+        ensureInstallChannel()
+
+        return Notification
+            .Builder(context, INSTALL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.vyzorix_notification_icon)
+            .setColor(BURGUNDY)
+            .setContentTitle("Vyzorix — update ready to install")
+            .setContentText("Tap to install version $version")
+            .setStyle(
+                Notification.BigTextStyle().bigText(
+                    "Version $version is downloaded and verified. Tap to install.",
+                ),
+            ).setContentIntent(tapIntent)
+            .setAutoCancel(true)
+            .build()
+    }
+
+    private fun ensureInstallChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+        val manager = notificationManager() ?: return
+        if (manager.getNotificationChannel(INSTALL_CHANNEL_ID) != null) return
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                INSTALL_CHANNEL_ID,
+                "Vyzorix updates",
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
+    }
+
     /** Installed; the app is coming back up and reconnecting. */
     fun applyingUpdate(version: String) {
         post(applyingUpdateNotification(version))
@@ -264,6 +313,15 @@ class DeviceNotification(
         /** The one channel and the one notification id this device ever shows. */
         const val CHANNEL_ID = "vyzorix"
         const val NOTIFICATION_ID = 1
+
+        /**
+         * The "tap to install" notification, a second id so it does not replace the
+         * persistent status notification.
+         */
+        const val INSTALL_NOTIFICATION_ID = 2
+
+        /** The install notification's channel, created on demand. */
+        const val INSTALL_CHANNEL_ID = "vyzorix-install"
 
         /** The brand accent. `setColor` tints the icon, app name and emphasis text. */
         val BURGUNDY: Int = Color.rgb(128, 0, 32)

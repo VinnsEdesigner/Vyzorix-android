@@ -836,3 +836,28 @@ an Android 13 emulator. Pairing code shown in the notification. Key facts:
   pending a reconnect. Note: app 0.1.5 is the *full* build (not the sideload flavor), so
   OTA works; the agent checks `/v1/check-update` on WS connect and hands the APK to the
   package installer (the last tap is the user's — a third-party app cannot silently install).
+
+## Notification states, burgundy theme, icon-hide fix, OTA 0.1.7 (2026-11-11)
+- **Launcher icon never hiding** — the hidden state was asserted once, from
+  `VyzorixAccessibilityService.onServiceConnected`. It is a package property that any
+  reinstall/update resets, and the service is not re-bound on every process start. Fixed
+  with `LauncherIcon.reconcile(context)` called from `VyzorixApplication.onCreate` AND the
+  service's onCreate/onServiceConnected. `isArmed` reads `Settings.Secure.
+  ENABLED_ACCESSIBILITY_SERVICES`. Verified on API 33 emulator (icon hides on enable,
+  restores on disable). Device commit `f17e9ef`.
+- **`DeviceNotification` states + burgundy**: `setColor(0x800020)` on every state tints the
+  icon/app-name/emphasis. States: needsStart, starting, waiting, running(networkUp),
+  downloadingUpdate(version,percent), updateDownloaded, applyingUpdate. `NetworkMonitor`
+  (validated-internet NetworkCallback) re-posts running on connectivity change;
+  `UpdateMarker` file carries "installed" across the update's process restart so the new
+  process shows "reconnecting".
+- **`UpdateChecker`** gained `onProgress`/`onDownloaded`/`onInstalling`; `UpdateClient.download`
+  takes an `onProgress` and reports locally as well as to the server.
+- **deadcode gate gotcha**: platform-invoked overrides (`NetworkCallback.onAvailable/onLost/
+  onCapabilitiesChanged`) read as unused; allowlist them in `config/deadcode-allowlist.txt`.
+  An unused private/public decl must be removed or allowlisted — the gate fails otherwise.
+- **OTA 0.1.7**: built+signed arm64 release, staged into `apps/api/bin/` + version.json,
+  deployed (server `4fe0c04a`). The Nokia C22 downloaded it to 100% (server logged
+  `download progress` up to percent 100) but the **install is the user's tap** — until it
+  is tapped the device still runs 0.1.5, so `sms_read`/READ_SMS is absent and the inbox
+  query returns 0 rows. Publishing an APK is a redeploy; it is gitignored, not dockerignored.

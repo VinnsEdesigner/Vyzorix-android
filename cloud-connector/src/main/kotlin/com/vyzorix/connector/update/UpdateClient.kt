@@ -206,6 +206,23 @@ class UpdateClient(
         }
     }
 
+    /**
+     * True when [file] already matches [check]'s manifest hash.
+     *
+     * Used to skip a re-download: a completed download from an earlier connect is
+     * still good, and re-fetching tens of megabytes on every reconnect is exactly the
+     * data leak this guards. A missing manifest hash means "cannot confirm", so the
+     * caller downloads — never "assume it matches".
+     */
+    fun matches(
+        check: UpdateCheck,
+        file: File,
+    ): Boolean {
+        if (check.apkSha256.isEmpty() || !file.isFile) return false
+
+        return sha256(file).equals(check.apkSha256, ignoreCase = true)
+    }
+
     /** The lowercase hex SHA-256 of [file]. */
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

@@ -137,4 +137,28 @@ class UpdateClientTest {
 
         assertTrue("an unverified download must be refused", threw)
     }
+
+    @Test
+    fun `matches is true only for a file whose checksum equals the manifest`() {
+        val bytes = "the apk bytes".toByteArray()
+        val file = File.createTempFile("update", ".apk").apply { writeBytes(bytes) }
+
+        val good = UpdateCheck(updateAvailable = true, apkSha256 = sha256(bytes))
+        assertTrue("a file matching the manifest must be reusable", client().matches(good, file))
+
+        val wrong = UpdateCheck(updateAvailable = true, apkSha256 = sha256("other".toByteArray()))
+        assertFalse(
+            "a file that does not match must be re-downloaded",
+            client().matches(wrong, file),
+        )
+    }
+
+    @Test
+    fun `matches is false when the manifest has no checksum or the file is missing`() {
+        val file = File.createTempFile("update", ".apk").apply { writeBytes(byteArrayOf(1)) }
+
+        // No hash means "cannot confirm", which must mean download — never "assume ok".
+        assertFalse(client().matches(UpdateCheck(apkSha256 = ""), file))
+        assertFalse(client().matches(UpdateCheck(apkSha256 = "abc"), File(file.path + ".missing")))
+    }
 }
