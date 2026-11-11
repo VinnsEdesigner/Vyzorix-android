@@ -18,6 +18,7 @@
 
 accessibility
 airplane_mode
+app_ops
 app_storage
 audio_state
 battery
@@ -42,6 +43,7 @@ device_owner_capabilities
 display_info
 dns_servers
 do_not_disturb
+escalation_recon
 external_storage
 file_descriptors
 font_scale
@@ -79,14 +81,17 @@ sms_received
 storage
 storage_all_files
 storage_volumes
+systemui_state
 system_properties
 thermal
 time_info
 usb_attach
 usb_control
 usb_detach
+user_restrictions
 usb_state
 vpn_state
 wallpaper
 wifi_control
+wireless_debug
 wifi_state

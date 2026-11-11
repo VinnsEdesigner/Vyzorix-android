@@ -29,4 +29,13 @@ extern const std::size_t kCommandCount;
  */
 const char *ResolveCommand(const char *name, const char *subcommand);
 
+/**
+ * The wire API for the top-level command `name`, ignoring any subcommand.
+ *
+ * Used by the caller to decide whether `argv[1]` is a subcommand at all: a bare word is
+ * a subcommand only when `name <word>` resolves to an API. Otherwise it is an argument
+ * (`key=value`), and the command is a plain one-column API.
+ */
+const char *ResolveCommandTop(const char *name);
+
 #endif // VYZORIX_ANDROID_BIN_COMMAND_CATALOG_H

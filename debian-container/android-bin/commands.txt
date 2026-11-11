@@ -32,6 +32,7 @@
 # --- Bluetooth / Wi-Fi / radios ---
 bluetooth_state          bt state
 bluetooth_control        bt ctrl
+wireless_debug        wdbg
 wifi_state               wifi state
 wifi_control             wifi ctrl
 nfc_state                nfc
@@ -70,12 +71,14 @@ installed_apps           apps
 package_info             apps info
 packages_dump            apps dump
 default_apps             apps default
+app_ops                ops
 app_storage              storage app
 
 # --- Storage / files ---
 storage                  storage
 storage_volumes          storage volumes
 storage_all_files        storage all
+escalation_recon      esc
 external_storage         storage external
 mount_points             mounts
 file_descriptors         fds
@@ -98,12 +101,14 @@ memory_info              mem
 load_average             load
 kernel_info              kernel
 build_fingerprint        build
+systemui_state        sysui
 system_properties        props
 process_list             procs
 power_save               power
 thermal                  thermal
 time_info                clock
 locale_info              lang
+user_restrictions      restrict
 security_patch           security
 sensor_list              sensor
 camera_list              camera

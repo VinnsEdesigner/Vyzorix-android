@@ -226,6 +226,10 @@ void WriteCommands(const std::string &path, const std::vector<Command> &rows) {
         << "        }\n"
         << "    }\n"
         << "    return nullptr;\n"
+        << "}\n"
+        << "\n"
+        << "const char *ResolveCommandTop(const char *name) {\n"
+        << "    return ResolveCommand(name, \"\");\n"
         << "}\n";
 
     if (!out) {

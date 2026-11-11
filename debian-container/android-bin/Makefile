@@ -15,7 +15,7 @@
 #
 # Targets:
 #   make            build build/bin/ (binary + symlinks)
-#   make check      run the JSON unit tests on the host
+#   make check      run the JSON and command-resolver unit tests on the host
 #   make clean
 
 CXX ?= g++
@@ -78,12 +78,17 @@ symlinks: $(BUILD)/.apis-generated $(BUILD)/bin/android-bin
 $(BUILD):
 	mkdir -p $(BUILD)
 
-# The JSON reader is the one part with logic worth testing off-device; the bridge
-# client needs a live socket and is covered by the on-device suite.
-check: | $(BUILD)
+# The JSON reader and the command resolver are the parts with logic worth testing
+# off-device; the bridge client needs a live socket and is covered by the on-device
+# suite. The resolver test links the *generated* command catalog, so it fails if the
+# catalog and the resolver disagree about a command.
+check: | $(BUILD) $(BUILD)/.apis-generated
 	$(HOST_CXX) -std=c++17 -O2 -Wall -Wextra -Werror -I$(LIB)/include \
 		-o $(BUILD)/json_test $(LIB)/src/vyzorix_json.cpp test/json_test.cpp
 	$(BUILD)/json_test
+	$(HOST_CXX) -std=c++17 -O2 -Wall -Wextra -Werror -Isrc -I$(BUILD) \
+		-o $(BUILD)/command_resolve_test $(BUILD)/command_catalog.cpp test/command_resolve_test.cpp
+	$(BUILD)/command_resolve_test
 
 clean:
 	rm -rf $(BUILD)

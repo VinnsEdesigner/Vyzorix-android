@@ -29,6 +29,7 @@
 #include "api_catalog.h"
 #include "bridge.h"
 #include "command_catalog.h"
+#include "command_resolve.h"
 #include "vyzorix/vyzorix_json.h"
 
 namespace {
@@ -84,30 +85,14 @@ int main(int argc, char **argv) {
     // The program name is the *command* (`bt`, `admin`), not the wire API. Resolve it
     // to the API via the command catalog, consuming a subcommand argument when the
     // command has one (`bt ctrl` -> bluetooth_control). `--api NAME` still overrides
-    // this entirely, so the raw wire name is always reachable.
+    // this entirely, so the raw wire name is always reachable. The mapping itself lives
+    // in command_resolve.h so a host test can pin the subcommand-vs-argument decision.
     const std::string command = ProgramName(argc > 0 ? argv[0] : "");
-    int first_arg = 1;
-    std::string api;
-    {
-        // A subcommand is only consumed when the command is known and the next arg is a
-        // bare word (not an option), so `bt --list` still works.
-        const char *sub = nullptr;
-        if (argc > 1) {
-            const std::string candidate = argv[1];
-            if (!candidate.empty() && candidate.rfind("-", 0) != 0) {
-                sub = argv[1];
-            }
-        }
-        const char *resolved = ResolveCommand(command.c_str(), sub);
-        if (resolved != nullptr) {
-            api = resolved;
-            if (sub != nullptr) first_arg = 2; // the subcommand was consumed
-        } else {
-            // Not a command: fall back to the raw name, so an old symlink or a direct
-            // `android-bin <api>` call still works.
-            api = command;
-        }
-    }
+    const android_bin::Invocation invocation =
+        android_bin::ResolveInvocation(command.c_str(), argc > 1 ? argv[1] : nullptr);
+    // Not const: `--api NAME` overrides it below.
+    std::string api = invocation.api;
+    const int first_arg = invocation.first_arg;
     std::string args_json;
     bool have_args = false;
     std::vector<std::string> pairs;
