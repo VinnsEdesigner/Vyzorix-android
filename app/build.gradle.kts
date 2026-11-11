@@ -285,13 +285,11 @@ android {
         // The extended tier's checksum. It is downloaded, so it is verified after
         // fetching; empty means the tier is unavailable, never unverified.
         buildConfigField("String", "ROOTFS_EXTENDED_SHA256", "\"${extendedRootfsSha256()}\"")
-        // Where a device whose ABI is not the bundled one fetches its rootfs. The
-        // release that carries all three tarballs.
+        // Where the device fetches its rootfs. The release that carries the tarballs.
         buildConfigField("String", "ROOTFS_BASE_URL", "\"${rootfsBaseUrl()}\"")
-        buildConfigField("boolean", "ROOTFS_BUNDLED", "${bundledRootfsFile() != null}")
-        // Layer 3 (the supervisor + the terse-command CLI). Bundled when the build
-        // has the archive; fetched from the release otherwise, verified against this
-        // checksum. Empty means the download path is unavailable, never unverified.
+        // Layer 3 (the supervisor + the terse-command CLI). Fetched from the release,
+        // verified against this checksum. Empty means the download path is unavailable,
+        // never unverified.
         buildConfigField("String", "LAYER3_SHA256", "\"${layer3Sha256()}\"")
         // Allow the terminal to run a plain device shell when the container is
         // not installed. Off unless asked for, because that shell runs as the app's
