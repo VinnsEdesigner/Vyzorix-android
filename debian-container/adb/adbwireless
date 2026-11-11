@@ -1,0 +1,55 @@
+#!/bin/bash
+# adbwireless — pair and connect the bundled adb to this device over Wi-Fi.
+#
+# The container ships no adb by default; this helper is installed alongside the published
+# `adb-<abi>.tar.gz` asset. It sets up the library path adb needs and wraps the two-step
+# wireless flow, so an operator does not have to remember either.
+#
+#   adbwireless pair <ip:port> <code>   pair using the code from the Settings dialog
+#   adbwireless connect [ip:port]       connect (uses the last paired ip when omitted)
+#   adbwireless status                  server status and connected devices
+#   adbwireless kill                    stop the adb server
+#
+# The pairing port and code come from Settings → Developer options → Wireless debugging →
+# "Pair device with pairing code"; the connect port is on the Wireless debugging screen
+# itself. The device's own address is reported by the `wdbg` bridge command.
+set -uo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The asset stages bin/ and lib/ side by side; adb finds its libraries there.
+export LD_LIBRARY_PATH="${here}/../lib:${here}:${LD_LIBRARY_PATH:-}"
+ADB="${here}/adb"
+STATE="${HOME}/.adbwireless.ip"
+
+[[ -x "${ADB}" ]] || { echo "adbwireless: adb not found beside this script (${ADB})" >&2; exit 1; }
+
+usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+cmd="${1:-}"
+shift || true
+
+case "${cmd}" in
+  pair)
+    ip_port="${1:-}"; code="${2:-}"
+    if [[ -z "${ip_port}" || -z "${code}" ]]; then
+      echo "usage: adbwireless pair <ip:port> <code>" >&2
+      exit 2
+    fi
+    "${ADB}" pair "${ip_port}" "${code}" && printf '%s' "${ip_port%:*}" > "${STATE}"
+    ;;
+  connect)
+    ip_port="${1:-}"
+    if [[ -z "${ip_port}" ]]; then
+      [[ -f "${STATE}" ]] || { echo "adbwireless: no ip given and none remembered; run pair first" >&2; exit 2; }
+      # The connect port is not the pair port and changes; require it explicitly when it
+      # matters, and default to the standard 5555 only as a last resort.
+      ip_port="$(cat "${STATE}"):5555"
+      echo "adbwireless: connecting to ${ip_port} (override with an explicit ip:port)"
+    fi
+    "${ADB}" connect "${ip_port}"
+    ;;
+  status)  "${ADB}" devices -l ;;
+  kill)    "${ADB}" kill-server ;;
+  ""|-h|--help|help) usage 0 ;;
+  *) echo "adbwireless: unknown command '${cmd}'" >&2; usage 2 ;;
+esac
