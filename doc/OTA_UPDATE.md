@@ -33,18 +33,34 @@ check is cheap, but the download is not.
 |:--|:--|
 | `UpdateCheck` | The manifest DTO, mirroring the server's fields exactly. |
 | `UpdateClient` | `check(versionCode)` and `download(check, file)`. The download **verifies the SHA-256** and refuses a mismatch or a missing hash. |
-| `UpdateChecker` | The whole pass: check → download → verify → hand to the installer. Never throws; a failure means the device keeps its current build. |
-| `ApkInstaller` | The seam for the install. `AndroidApkInstaller` (in `:app`) launches the system installer; a test records that the APK arrived. |
+| `UpdateChecker` | The whole pass: check → download → verify → hand to the installer. Never throws; a failure means the device keeps its current build. Re-posts the install prompt on each pass, and clears it once a fresh check confirms the device is on the latest build. |
+| `ApkInstaller` | The seam for the install. `AndroidApkInstaller` (in `:app`) posts the standing "Accept install" notification and launches the system installer; a test records that the APK arrived. |
 
 `UpdateChecker` runs from `CloudConnection.onConnected` on its own daemon thread, so
 a 64 MB download cannot stall the socket reader.
 
-### Why the install needs the user
+### Why the install needs the user, and why the prompt stays
 
 A third-party app cannot install a package silently. `AndroidApkInstaller` launches
 an `ACTION_VIEW` intent on the APK with the package-archive MIME type, and the user
 confirms. A silent install needs a system signature or root. So the mechanism is
 automatic; the last tap is consent.
+
+That last tap can be missed. The system installer's own confirmation is easy to
+dismiss by accident, and once it is gone there is nothing left to tap — the APK is
+staged, but the operator has no control. So the agent also posts a standing **"update
+ready to install"** notification, and this is the durable retry path:
+
+- it is **ongoing** — it cannot be swiped away;
+- it carries an explicit **Accept install** action that re-opens the installer for
+  the same staged, verified APK, as many times as needed; and
+- it is cleared only once the install is *confirmed* — the next pass sees the device
+  already on the latest build (`UpdateChecker.onUpToDate` →
+  `DeviceNotification.clearInstall`).
+
+`UpdateChecker` re-posts it on every OTA pass, so the button is present from the
+moment the download completes until the update is actually applied. A device whose
+install was cancelled therefore never loses its way back in.
 
 The APK is exposed through a `FileProvider` (the installer runs in another process
 and cannot read the app's private storage; a `file://` URI throws

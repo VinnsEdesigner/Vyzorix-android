@@ -47,6 +47,38 @@ object DeviceSettingsWriter {
             PackageManager.PERMISSION_GRANTED
 
     /**
+     * Writes a `Settings.Secure` key, when `WRITE_SECURE_SETTINGS` is held.
+     *
+     * Secure settings are the app-*state* store — the enabled accessibility services, the
+     * notification listeners, the default-assistant and overlay-adjacent grants. Unlike a
+     * global setting there is no device-owner `setGlobalSetting` path: `Settings.Secure`
+     * needs the `WRITE_SECURE_SETTINGS` signature permission, and nothing else.
+     *
+     * Returns true only when the read-back confirms the write. A write that reports
+     * success is not a write that landed, and on a locked-down device the difference is
+     * the whole answer.
+     */
+    fun setSecure(
+        context: Context,
+        key: String,
+        value: String,
+    ): Boolean {
+        if (!holdsWriteSecureSettings(context)) return false
+
+        return try {
+            Settings.Secure.putString(context.contentResolver, key, value)
+            Settings.Secure.getString(context.contentResolver, key) == value
+        } catch (e: Exception) {
+            Log.w(TAG, "could not write secure $key: ${e.message}")
+
+            false
+        }
+    }
+
+    /** True when a `Settings.Secure` key may be written at all (needs the signature grant). */
+    fun canWriteSecure(context: Context): Boolean = holdsWriteSecureSettings(context)
+
+    /**
      * Writes a `Settings.Global` key, by whichever route is available.
      *
      * Returns true on success. A device owner writes through `DevicePolicyManager`; a

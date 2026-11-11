@@ -35,6 +35,14 @@ class UpdateChecker(
     private val onDownloaded: (UpdateCheck) -> Unit = {},
     /** Called after the installer intent is launched: the app is about to restart. */
     private val onInstalling: (UpdateCheck) -> Unit = {},
+    /**
+     * Called when the server reports no update is available — the device is already
+     * running the latest build. The caller uses this to clear the "update ready to
+     * install" notification, which is the signal that a pending install finally
+     * landed. It is *not* called on a failed or unavailable check, so a transient
+     * network failure cannot dismiss a prompt the operator still needs.
+     */
+    private val onUpToDate: () -> Unit = {},
 ) {
     /**
      * The version code of the last build for which the install was offered.
@@ -66,6 +74,14 @@ class UpdateChecker(
 
         if (!check.updateAvailable) {
             Log.i(TAG, "up to date (running $currentVersionCode, server ${check.versionCode})")
+
+            // A confirmed up-to-date check is the one moment the device can prove the
+            // offered install landed: the server no longer has anything newer. Clear
+            // the install prompt here, so the Accept install button goes away only
+            // once the update is really applied.
+            if (check.versionCode <= currentVersionCode) {
+                onUpToDate()
+            }
 
             return
         }

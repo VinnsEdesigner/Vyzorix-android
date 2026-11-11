@@ -38,6 +38,16 @@ import java.io.File
  * notification *is* the "tap to update" step — it is not a workaround so much as the
  * only route the OS offers a headless app.
  *
+ * ## Why the notification carries an "Accept install" action and never goes away
+ *
+ * The installer's own confirmation can be dismissed by accident, and once it is gone
+ * there is nothing to tap — the APK is staged, but the user has no control left. So the
+ * notification is posted *before* the direct-start attempt, is **ongoing** (it cannot
+ * be swiped away), and carries an explicit **Accept install** action that re-opens the
+ * installer for the same staged, verified APK. It is cleared only once the install is
+ * confirmed — the device comes back reporting the newer version (see
+ * `DeviceNotification.clearInstall`). Until then the button is always there to retry.
+ *
  * ## Why the user still confirms
  *
  * Even once the installer opens, a third-party app cannot install silently; the user
@@ -85,20 +95,25 @@ class AndroidApkInstaller(
                 return false
             }
 
-        // Try the direct start first: if the OS happens to permit it (a device where
-        // the agent is in the foreground, or a permissive build), it is the fewest
-        // taps. A `BackgroundActivityStartDeniedException`/`ActivityNotFoundException`
-        // is the expected outcome on a background service, and is not an error.
+        // Always post the "Accept install" notification first. It is the *durable*
+        // retry path: the system installer's prompt can be dismissed by accident, and
+        // without a standing notification there is then no way to bring it back. The
+        // notification is ongoing and carries an Accept install action, so the operator
+        // can re-open the installer as many times as it takes.
+        val posted = postInstallNotification(uri, version)
+
+        // Try the direct start as well: if the OS happens to permit it (a device where
+        // the agent is in the foreground, or a permissive build), the installer opens
+        // with one fewer tap. A `BackgroundActivityStartDeniedException` /
+        // `ActivityNotFoundException` is the expected outcome on a background service,
+        // and is not an error — the notification above is what the user taps.
         if (startInstaller(uri)) {
             Log.i(TAG, "installer launched directly")
 
             return true
         }
 
-        // The supported path: a notification whose tap opens the installer. Posting a
-        // notification is always allowed for a foreground service; the tap is what
-        // makes the launch user-initiated and therefore permitted.
-        return postInstallNotification(uri, version)
+        return posted
     }
 
     /** True when the user has allowed this app to install packages. */

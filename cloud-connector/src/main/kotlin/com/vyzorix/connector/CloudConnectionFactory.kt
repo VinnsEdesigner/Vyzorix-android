@@ -160,6 +160,12 @@ object CloudConnectionFactory {
                             UpdateMarker.mark(context, check.version)
                             DeviceNotification(context).applyingUpdate(check.version)
                         },
+                        // A confirmed "no update available" means the offered install
+                        // landed: the device now runs the newer build, so the Accept
+                        // install prompt (and its button) is no longer needed. Until
+                        // this fires, the prompt stays, so a cancelled install can be
+                        // retried.
+                        onUpToDate = { DeviceNotification(context).clearInstall() },
                     ),
                 secretKeyPem = secretKey.publicKeyPem(),
                 deployApplier = deployApplier(context, baseUrl, http, uuid, signer, secretKey),

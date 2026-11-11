@@ -22,9 +22,9 @@ import com.vyzorix.R
  *  - [needsStart]            — armed but not running. The only action is **Start Vyzorix**.
  *  - [startingNotification]  — the object `startForeground` needs at promotion.
  *  - [waiting]               — running and unclaimed; shows the pairing code.
- *  - [running]               — claimed and running. Says whether the connection is up:
- *                              "Connection stable and running" or "No network connection,
- *                              but still running".
+ *  - [running]               — claimed and running. Names the device and says whether the
+ *                              connection is up: "Connection stable and running as <name>"
+ *                              or "No network connection, running as <name> but offline".
  *  - [downloadingUpdate]     — an OTA download in flight, with a progress bar.
  *  - [updateDownloaded]      — downloaded and verified; the installer is opening.
  *  - [applyingUpdate]        — installed; the app is coming back up and reconnecting.
@@ -200,11 +200,21 @@ class DeviceNotification(
      * background service from starting the installer directly, so the launch has to
      * come from the user tapping this. [tapIntent] opens the installer.
      *
-     * It is deliberately *not* `setOngoing(true)` — unlike the status notification, the
-     * user may dismiss it — and it uses the same burgundy accent and icon. It is a
-     * *second* notification id so it does not replace the persistent status one, and a
-     * distinct channel at DEFAULT importance, because a prompt the user must tap must
-     * be visible and must not be silenced by the status channel's low importance.
+     * ## The "Accept install" action, and why it stays
+     *
+     * The system installer's own prompt can be dismissed by accident, and once it is
+     * gone there is no way to bring it back — the APK is staged but the operator has
+     * no control left. So the action is explicit and the notification is
+     * **ongoing**: it cannot be swiped away, and every tap of **Accept install**
+     * re-opens the installer for the same staged, verified APK. It is re-posted on
+     * each OTA pass (see `UpdateChecker`), so the button is present until the install
+     * is actually confirmed — which the next process shows by reporting the newer
+     * version. Only then is it cleared ([clearInstall]).
+     *
+     * It is a *second* notification id so it does not replace the persistent status
+     * one, and a distinct channel at DEFAULT importance, because a prompt the user
+     * must tap must be visible and must not be silenced by the status channel's low
+     * importance. `setOnlyAlertOnce` keeps a re-post from buzzing again.
      */
     fun installReady(
         version: String,
@@ -220,11 +230,40 @@ class DeviceNotification(
             .setContentText("Tap to install version $version")
             .setStyle(
                 Notification.BigTextStyle().bigText(
-                    "Version $version is downloaded and verified. Tap to install.",
+                    "Version $version is downloaded and verified. Tap Accept install to " +
+                        "open the installer.",
                 ),
             ).setContentIntent(tapIntent)
-            .setAutoCancel(true)
+            .addAction(installAction(tapIntent))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .build()
+    }
+
+    /**
+     * Cancels the "update ready to install" notification.
+     *
+     * Called once the running build is no longer older than the offered one — the
+     * install went through. Until this runs the notification (and its Accept install
+     * action) stays, so an install that was cancelled can always be retried.
+     */
+    fun clearInstall() {
+        runCatching {
+            notificationManager()?.cancel(INSTALL_NOTIFICATION_ID)
+        }
+    }
+
+    /** The "Accept install" action: re-opens the installer for the staged APK. */
+    private fun installAction(tapIntent: PendingIntent): Notification.Action {
+        val builder =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Notification.Action.Builder(null, "Accept install", tapIntent)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Action.Builder(0, "Accept install", tapIntent)
+            }
+
+        return builder.build()
     }
 
     private fun ensureInstallChannel() {
@@ -275,7 +314,7 @@ class DeviceNotification(
         return if (networkUp) {
             "Connection stable and running$who."
         } else {
-            "No network connection, but still running$who."
+            "No network connection, running$who but offline."
         }
     }
 
