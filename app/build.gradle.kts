@@ -1,6 +1,7 @@
 // :app — the APK.
 
 import java.io.File
+import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.android.application)
@@ -174,6 +175,31 @@ fun bundledLayer3File(): File? =
         .takeIf { it.isFile }
 
 /**
+ * The SHA-256 of the Layer 3 archive, or empty when it has not been built.
+ *
+ * Layer 3 is fetched when the build does not bundle it, and a fetched archive has no
+ * APK signature over it, so the installer verifies it against this. Computed from the
+ * archive the build produced rather than read from a separate sums file, because there
+ * is no separate sums file for it — the rootfs's `SHA256SUMS` covers only the rootfs
+ * tarballs. Hashing the file directly cannot drift from it.
+ */
+fun layer3Sha256(): String {
+    val file = bundledLayer3File() ?: return ""
+
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read <= 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+
+    return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+}
+
+/**
  * Where a non-arm64 device fetches its rootfs.
  *
  * The GitHub release that carries the tarballs. Kept as a build config so the URL is
@@ -260,6 +286,10 @@ android {
         // release that carries all three tarballs.
         buildConfigField("String", "ROOTFS_BASE_URL", "\"${rootfsBaseUrl()}\"")
         buildConfigField("boolean", "ROOTFS_BUNDLED", "${bundledRootfsFile() != null}")
+        // Layer 3 (the supervisor + the terse-command CLI). Bundled when the build
+        // has the archive; fetched from the release otherwise, verified against this
+        // checksum. Empty means the download path is unavailable, never unverified.
+        buildConfigField("String", "LAYER3_SHA256", "\"${layer3Sha256()}\"")
         // Allow the terminal to run a plain device shell when the container is
         // not installed. Off unless asked for, because that shell runs as the app's
         // uid and can read the app's private files, which the container exists to

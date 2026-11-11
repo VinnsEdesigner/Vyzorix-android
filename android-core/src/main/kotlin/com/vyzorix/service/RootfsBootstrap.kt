@@ -86,5 +86,18 @@ object RootfsBootstrap {
      * Idempotent and cheap when already installed: the first thing it does is a
      * marker check. Blocking I/O on a first install, so not the main thread.
      */
-    fun ensureLayer3(context: Context): Boolean = Layer3Installer(context).ensureInstalled()
+    fun ensureLayer3(context: Context): Boolean {
+        val config = ContainerConfig.get()
+
+        return Layer3Installer(
+            context = context,
+            // The bundled asset when the build has it; the release otherwise. The
+            // checksum is required for the download path — a fetched archive has no APK
+            // signature over it, so an unverified one is refused.
+            download = config?.open,
+            baseUrl = config?.baseUrl.orEmpty(),
+            abi = config?.bundledAbi.orEmpty(),
+            expectedSha256 = config?.layer3Sha256.orEmpty(),
+        ).ensureInstalled()
+    }
 }

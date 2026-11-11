@@ -992,3 +992,22 @@ The device is on **0.1.8** (server log `update check version_code: 8`) and has
 - **clang-format is part of `nativeGate`** (NDK's clang-format); new C++ must be
   `clang-format -i`d or the gate fails.
 - Published `app-v0.2.0`; server reports it with no redeploy; device picking it up.
+
+## Layer3 asset marker bug (2026-11-11) — app-v0.2.1
+- **Symptom**: the device (and emulator) ran the OLD container commands
+  (`installed_apps`, no `apps`/`bt`), and `android-bin --api packages_dump` said
+  `unknown api`, even after installing the new APK that bundled the new layer3.
+- **Root cause**: `Layer3Installer` marks an install with `"$abi:${assetLength()}"`,
+  and `assetLength()` uses `AssetManager.openFd`. `noCompress` listed only `"tar.gz"`,
+  so AAPT **deflated** `assets/layer3/layer3.l3` — a compressed asset has **no fd**, so
+  `openFd` throws, `assetLength()` returns -1, and the marker was the CONSTANT
+  `arm64-v8a:-1`. It never changed, so a rebuilt layer3 never reinstalled.
+- **Fix**: `noCompress += listOf("tar.gz", "l3")` in `app/build.gradle.kts`. Verified:
+  the asset is `STORED` (compress_type 0) in the APK, so `openFd` works and the marker
+  gets a real length. `app-v0.2.1`.
+- **Lesson**: any asset whose *byte length* or *fd* the code reads must be in
+  `noCompress`; AAPT deflation silently removes the fd.
+- **Also seen**: the extended-tier download has **no timeout** — on an offline emulator
+  the rootfs install thread hangs forever in `openStream()`, so layer3 never installs.
+  Worth a connect/read timeout. (The emulator has no internet, which is why the live
+  layer3 reinstall could not be shown there.)

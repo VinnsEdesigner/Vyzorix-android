@@ -46,6 +46,9 @@ class VyzorixApplication : Application() {
                 sha256 = BuildConfig.ROOTFS_SHA256,
                 extendedSha256 = BuildConfig.ROOTFS_EXTENDED_SHA256,
                 baseUrl = BuildConfig.ROOTFS_BASE_URL,
+                // Layer 3 is bundled when the build has the archive; when it does not,
+                // the installer fetches it from the same release and verifies this.
+                layer3Sha256 = BuildConfig.LAYER3_SHA256,
                 // A plain URL stream. The rootfs is fetched once, from a release, and
                 // the checksum is what makes it trustworthy — an HTTP client would add
                 // a dependency without adding a guarantee here.
