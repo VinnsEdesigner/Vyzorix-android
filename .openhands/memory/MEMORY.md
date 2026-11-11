@@ -937,3 +937,40 @@ The device is on **0.1.8** (server log `update check version_code: 8`) and has
 - New permissions declared: BLUETOOTH_SCAN, BLUETOOTH_ADMIN, CHANGE_WIFI_STATE,
   SET_WALLPAPER. Registry entries: `wifi_control` (ACCESS_FINE_LOCATION),
   `bluetooth_control` (BLUETOOTH_CONNECT, minSdk 31). New tag `hw:bluetooth`.
+
+## Terse commands, admin policies, package dump, OTA loop closed (2026-11-11)
+- **Terse command layer.** `debian-container/android-bin/commands.txt` is the human
+  command surface (`bt ctrl`, `admin action`, `apps dump`); `apis.txt` stays the wire
+  surface. The generator reads both, emits ONE symlink per *command* (45 top-level, 74
+  commands) plus a `command_catalog.cpp` dispatch table; `android-bin` resolves
+  `argv[0]` + `argv[1]` via `ResolveCommand`. `ApiCatalogTest` fails if the two files
+  disagree — it caught `device_info` having no command. Naming rules: terse, no
+  underscores, never shadow a real binary (`procs`/`lang`/`sensor` not `ps`/`locale`/
+  `sensors`), never a shell keyword as a top-level command (`time` -> `clock`).
+- **Device-admin policies**: all 10 tags. **`encrypt-storage` is WRONG — the tag is
+  `encrypted-storage`**; a wrong tag fails SILENTLY (framework logs `W DeviceAdminInfo:
+  Unknown tag under uses-policies`, enables nothing, `dpm` still says Success). Verify
+  with `adb shell dumpsys device_policy` (lists the parsed policies). The 10 are:
+  force-lock, wipe-data, reset-password, limit-password, expire-password, watch-login,
+  disable-camera, disable-keyguard-features, encrypted-storage, set-global-proxy.
+- **Admin-gated but NOT a declared policy**: `installCaCert`/`uninstallCaCert`/
+  `installKeyPair`/`removeKeyPair` (gate is "is this an active admin"). `device_admin_action`
+  exercises the declared policies; the policy getters THROW without an active admin, so
+  the status read must guard them behind the admin check.
+- **`packages_dump`** now has exact folders (`dataDir`/`sourceDir`/`nativeLibraryDir`/
+  split dirs), parent/children (shared-uid families + APK splits), all components, and a
+  `privileged` bool DERIVED from `sourceDir` prefix (`/system/priv-app/`, `/apex/`)
+  because `FLAG_PRIVILEGED` is @hide. Live: 185 packages incl. `android`,
+  `com.android.shell`, `com.android.systemui`; 6 shared-uid groups.
+- **`/v1/apk` is served by `Server.serveDownload` in `apps/api/internal/api/server_handlers.go`,
+  NOT the updater handler's `APK`.** I patched the wrong one first. It now redirects
+  (302) to the GitHub release asset when the file is not staged locally, via
+  `updater.Handler.AssetURL` -> `github.Client.FetchAssetURL`.
+- **OTA loop verified end-to-end**: published `app-v0.1.9` (with a `version.json`
+  asset); `/v1/check-update` reported 0.1.9 with NO redeploy (server reads the release);
+  the Nokia on 0.1.8 checked, got the 302, and downloaded the 73 MB APK. Install still
+  needs the user tap.
+- **`go vet`/tests break on a new `device.Repository` method**: the `noopDeviceRepo`
+  fakes in `internal/ws/hub_test.go` and `tests/testutil_test.go` must implement it.
+- Server telemetry now carries `appVersion`; `processTelemetry` writes it via
+  `DeviceRepository.UpdateAppVersion`, so `devices.app_version` tracks an OTA.

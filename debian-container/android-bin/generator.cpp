@@ -90,8 +90,7 @@ struct Command {
  * api must be one apis.txt lists — a command pointing at no API is the drift this
  * exists to prevent, so it is a hard error here and again in the JVM test.
  */
-std::vector<Command> ReadCommands(const std::string &path,
-                                  const std::vector<std::string> &apis) {
+std::vector<Command> ReadCommands(const std::string &path, const std::vector<std::string> &apis) {
     std::ifstream in(path);
     if (!in) {
         throw std::runtime_error("cannot open " + path);

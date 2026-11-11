@@ -101,25 +101,54 @@ class UpdateClient(
         // The server serves the APK at /v1/apk/<name>; the name is a basename, so it
         // cannot escape the directory it is served from (the server also enforces
         // that with filepath.Base).
+        destination.parentFile?.mkdirs()
+
+        // Resume: a partial file from a previous attempt (the network dropped
+        // mid-download) is continued with a Range request rather than truncated. The
+        // manifest's checksum is the guarantee, so a partial file is only ever
+        // *appended to* — the whole thing is verified at the end regardless of how
+        // many attempts it took.
+        val partial = partialBytes(check, destination)
+
         val request =
             Request
                 .Builder()
                 .url("$baseUrl/v1/apk/${check.apkFilename}")
+                .apply { if (partial > 0) header("Range", "bytes=$partial-") }
                 .get()
                 .build()
 
-        destination.parentFile?.mkdirs()
-
         http.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("apk download failed: HTTP ${response.code}")
-            }
+            // 200 = the server ignored the Range (no resume, start over); 206 = the
+            // range was honoured (append). Anything else is a failure.
+            val resuming = partial > 0 && response.code == HTTP_PARTIAL
+            requireUsableResponse(response.code, response.isSuccessful, partial, resuming)
 
             val body = response.body ?: throw IOException("apk download returned no body")
-            val total = body.contentLength().takeIf { it > 0 } ?: check.apkSizeBytes
+
+            // A 200 to a Range request means the server will not resume, so the file
+            // must be rewritten from the start; a 206 appends.
+            val startAt = if (resuming) partial else 0L
+            if (!resuming && destination.exists()) destination.delete()
+
+            // `total` is the whole file's size, not this response's, so progress is
+            // measured against the finished download across attempts.
+            val remaining = body.contentLength().takeIf { it > 0 } ?: (check.apkSizeBytes - startAt)
+            val total = startAt + remaining
+
             body.byteStream().use { input ->
-                destination.outputStream().use { output ->
-                    copyReportingProgress(input, output, total, check.apkFilename, onProgress)
+                // Append mode is the whole point — it is what stops the
+                // restart-from-zero. `File.outputStream(append=)` does not exist, so the
+                // stream is opened directly.
+                java.io.FileOutputStream(destination, resuming).use { output ->
+                    copyReportingProgress(
+                        input,
+                        output,
+                        total,
+                        startAt,
+                        check.apkFilename,
+                        onProgress,
+                    )
                 }
             }
         }
@@ -135,6 +164,49 @@ class UpdateClient(
     }
 
     /**
+     * Throws unless [code] is a response the download can use.
+     *
+     * Usable means: 2xx, and — when a Range was sent — either 206 (honoured, append) or
+     * 200 (ignored, full body). A 2xx that is neither cannot be resumed from and is not
+     * the whole file, so it is a failure like any other. Kept out of [download] so that
+     * method has one HTTP throw rather than two (detekt's ThrowsCount).
+     */
+    private fun requireUsableResponse(
+        code: Int,
+        successful: Boolean,
+        partial: Long,
+        resuming: Boolean,
+    ) {
+        if (!successful) {
+            throw IOException("apk download failed: HTTP $code")
+        }
+        if (partial > 0 && !resuming && code != HTTP_OK) {
+            throw IOException("apk download failed: HTTP $code")
+        }
+    }
+
+    /**
+     * How many bytes of a partial download to resume from, or 0.
+     *
+     * A staged file is only resumed when it is *smaller* than the manifest's size and
+     * the manifest names a size. A file at or past the expected size is either complete
+     * (and `matches` already returned it, so we would not be here) or corrupt, and is
+     * restarted rather than appended to.
+     */
+    private fun partialBytes(
+        check: UpdateCheck,
+        destination: File,
+    ): Long {
+        if (!destination.isFile) return 0
+
+        val length = destination.length()
+        if (length <= 0) return 0
+        if (check.apkSizeBytes > 0 && length >= check.apkSizeBytes) return 0
+
+        return length
+    }
+
+    /**
      * Copies [input] to [output], reporting progress to the server as it goes.
      *
      * The report is throttled: a 64 MB download in 8 KB reads would be thousands of
@@ -146,12 +218,14 @@ class UpdateClient(
         input: java.io.InputStream,
         output: java.io.OutputStream,
         total: Long,
+        /** Bytes already on disk from a resumed download; progress starts here. */
+        startAt: Long,
         filename: String,
         onProgress: (percent: Int) -> Unit,
     ) {
         val id = deviceId()
         val buffer = ByteArray(COPY_BUFFER)
-        var loaded = 0L
+        var loaded = startAt
         var lastReportedPercent = -1
 
         while (true) {
@@ -242,6 +316,12 @@ class UpdateClient(
     private companion object {
         const val TAG = "UpdateClient"
         const val COPY_BUFFER = 64 * 1024
+
+        /** HTTP 200: a full response, so a Range request was not honoured. */
+        const val HTTP_OK = 200
+
+        /** HTTP 206: a partial response, so a Range request was honoured. */
+        const val HTTP_PARTIAL = 206
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     }
 }

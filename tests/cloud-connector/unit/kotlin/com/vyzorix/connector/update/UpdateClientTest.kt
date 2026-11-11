@@ -75,6 +75,82 @@ class UpdateClientTest {
     }
 
     @Test
+    fun `a partial file is resumed with a Range request, not restarted`() {
+        // The bug this guards: a network drop mid-download left a partial file, and the
+        // next attempt truncated it and started from byte 0. The resume sends a Range
+        // from the partial length and appends.
+        val whole = "0123456789abcdefghij".toByteArray() // 20 bytes
+        val alreadyHave = 8L
+        val rest = whole.copyOfRange(alreadyHave.toInt(), whole.size)
+
+        // The server honours the range: 206 with only the remaining bytes.
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(206)
+                .setBody(okio.Buffer().write(rest)),
+        )
+
+        val destination =
+            File.createTempFile("update", ".apk").apply {
+                writeBytes(whole.copyOfRange(0, alreadyHave.toInt()))
+            }
+        val check =
+            UpdateCheck(
+                updateAvailable = true,
+                apkFilename = "app.apk",
+                apkSha256 = sha256(whole),
+                apkSizeBytes = whole.size.toLong(),
+            )
+
+        val file = client().download(check, destination)
+
+        assertEquals("the whole file must be assembled", "0123456789abcdefghij", file.readText())
+
+        val request = server.takeRequest()
+        assertEquals("bytes=8-", request.getHeader("Range"))
+    }
+
+    @Test
+    fun `a server that ignores the Range restarts cleanly`() {
+        // A 200 to a Range request means the server will not resume. The partial file
+        // must be discarded and rewritten, not appended to (which would corrupt it).
+        val whole = "the-whole-payload".toByteArray()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(okio.Buffer().write(whole)))
+
+        val destination =
+            File.createTempFile("update", ".apk").apply {
+                writeBytes("garbage-from-a-failed-attempt".toByteArray())
+            }
+        val check =
+            UpdateCheck(
+                updateAvailable = true,
+                apkFilename = "app.apk",
+                apkSha256 = sha256(whole),
+                apkSizeBytes = whole.size.toLong(),
+            )
+
+        val file = client().download(check, destination)
+
+        assertEquals("the-whole-payload", file.readText())
+    }
+
+    @Test
+    fun `a complete staged file is not re-downloaded`() {
+        // `matches` is what the caller uses to skip a download; this pins the contract
+        // the resume path relies on — a file at the full size is not partial.
+        val payload = "complete".toByteArray()
+        val destination = File.createTempFile("update", ".apk").apply { writeBytes(payload) }
+        val check =
+            UpdateCheck(
+                updateAvailable = true,
+                apkSha256 = sha256(payload),
+                apkSizeBytes = payload.size.toLong(),
+            )
+
+        assertTrue(client().matches(check, destination))
+    }
+
+    @Test
     fun `download verifies the checksum and returns the file`() {
         val payload = "apk-bytes".toByteArray()
         server.enqueue(MockResponse().setResponseCode(200).setBody(okio.Buffer().write(payload)))

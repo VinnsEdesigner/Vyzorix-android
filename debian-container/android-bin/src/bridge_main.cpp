@@ -27,8 +27,8 @@
 #include <vector>
 
 #include "api_catalog.h"
-#include "command_catalog.h"
 #include "bridge.h"
+#include "command_catalog.h"
 #include "vyzorix/vyzorix_json.h"
 
 namespace {
