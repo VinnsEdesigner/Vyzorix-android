@@ -38,6 +38,8 @@ __pycache__/
 # scripts/build-rootfs.sh, which records the exact package versions in BUILD.md so a
 # rebuild is comparable. The device verifies SHA256SUMS before extracting.
 /debian-container/rootfs/dist/
+# The published adb asset, built by scripts/build-adb.sh. Large, and a release artifact.
+/debian-container/adb/dist/
 
 # The Layer 3 container binaries. Same reasoning as the rootfs tarballs: a build
 # artifact, rebuilt by scripts/build-layer3.sh, not a repo file.

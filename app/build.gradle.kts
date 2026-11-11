@@ -125,27 +125,27 @@ fun bundledRootfsFile(): File? =
         .takeIf { it.isFile }
 
 /**
- * The SHA-256 of the bundled rootfs, from the build's own `SHA256SUMS`.
+ * The SHA-256 of the core rootfs.
  *
- * Read from the file the build wrote rather than recomputed here, so the APK's
- * expectation and the published checksum cannot disagree — they are the same line of
- * the same file. Empty when no rootfs is bundled, which the installer reads as
- * "nothing to verify against" (the APK signature already covers a bundled asset).
+ * The rootfs is not bundled, so this is what the fetcher verifies the download against.
+ * It is read from the build's `SHA256SUMS` when present, else from the `rootfsSha256`
+ * property / `VYZORIX_ROOTFS_SHA256` env — a release build in a clean checkout (no
+ * `dist/`) supplies it that way. An empty value disables the fetch rather than fetching
+ * unverified, which is the fail-closed default.
  */
-fun bundledRootfsSha256(): String = sha256FromSums("debian-core-${bundledRootfsAbi()}.tar.gz")
+fun bundledRootfsSha256(): String =
+    (findProperty("rootfsSha256") as String?)
+        ?: System.getenv("VYZORIX_ROOTFS_SHA256")
+        ?: sha256FromSums("debian-core-${bundledRootfsAbi()}.tar.gz")
 
 /**
- * The SHA-256 of the **extended** tier, from the same SHA256SUMS.
- *
- * The extended tarball is never bundled — it is the ~108 MB optional tooling a
- * shell-only device never runs — but the device still verifies it after downloading,
- * so the expected sum has to be compiled in. It is read from the build's own
- * SHA256SUMS, exactly as the core sum is, so the APK and the release cannot disagree.
- *
- * Empty when the file is absent or does not list the tarball, which the installer
- * reads as "the extended tier is unavailable" — never as "do not verify".
+ * The SHA-256 of the **extended** tier, verified after download. Same sources as the
+ * core sum: the build's `SHA256SUMS`, else the `rootfsExtendedSha256` property / env.
  */
-fun extendedRootfsSha256(): String = sha256FromSums("debian-extended-${bundledRootfsAbi()}.tar.gz")
+fun extendedRootfsSha256(): String =
+    (findProperty("rootfsExtendedSha256") as String?)
+        ?: System.getenv("VYZORIX_ROOTFS_EXTENDED_SHA256")
+        ?: sha256FromSums("debian-extended-${bundledRootfsAbi()}.tar.gz")
 
 /** The first field of the SHA256SUMS line for [name], or empty. */
 fun sha256FromSums(name: String): String {
@@ -175,15 +175,18 @@ fun bundledLayer3File(): File? =
         .takeIf { it.isFile }
 
 /**
- * The SHA-256 of the Layer 3 archive, or empty when it has not been built.
+ * The SHA-256 of the Layer 3 archive.
  *
- * Layer 3 is fetched when the build does not bundle it, and a fetched archive has no
- * APK signature over it, so the installer verifies it against this. Computed from the
- * archive the build produced rather than read from a separate sums file, because there
- * is no separate sums file for it — the rootfs's `SHA256SUMS` covers only the rootfs
- * tarballs. Hashing the file directly cannot drift from it.
+ * Layer 3 is not bundled, so this is what the fetcher verifies the download against.
+ * Computed from the local archive when the build has one (a source checkout that ran
+ * `scripts/build-layer3.sh`), else supplied via the `layer3Sha256` property /
+ * `VYZORIX_LAYER3_SHA256` env — a release build in a clean checkout has no archive.
+ * Empty disables the fetch rather than fetching unverified.
  */
 fun layer3Sha256(): String {
+    (findProperty("layer3Sha256") as String?)?.let { return it }
+    System.getenv("VYZORIX_LAYER3_SHA256")?.let { return it }
+
     val file = bundledLayer3File() ?: return ""
 
     val digest = MessageDigest.getInstance("SHA-256")
@@ -396,138 +399,11 @@ dependencies {
 }
 
 /**
- * Stages the bundled rootfs as an APK asset.
+ * The rootfs and Layer 3 are **not** bundled in the APK.
  *
- * ## Why a copy rather than pointing `assets.srcDirs` at the dist directory
- *
- * `dist/` holds six tarballs (three ABIs × core + extended) totalling ~450 MB. A
- * `srcDirs` entry would sweep every one of them into the APK. This copies the single
- * file the build is configured for, so the APK carries one rootfs.
- *
- * ## Why the asset path has no ABI in it
- *
- * `assets/` is shared across ABIs — Android splits only `jniLibs/`. So the asset is
- * always `rootfs/debian-core.tar.gz`, and `BuildConfig.ROOTFS_ABI` records which
- * architecture's userspace it is. A device of a different ABI downloads its own.
- *
- * A missing tarball is not an error. The container is one feature; the app still builds
- * and runs bridge-only, which is the state a device is in until the rootfs arrives.
+ * They are published as separate release assets (`debian-core-<abi>.tar.gz`,
+ * `debian-extended-<abi>.tar.gz`, `layer3-<abi>.tar.gz`) and fetched on first run, verified
+ * against the checksums compiled in above. This keeps the APK small (no ~46 MB rootfs, no
+ * ~10 MB layer3) and lets each be updated without a new APK. The `ROOTFS_*` / `LAYER3_*`
+ * BuildConfig fields below are what the fetchers use; there is no staging step.
  */
-val stageRootfs by tasks.registering {
-    val source = bundledRootfsFile()
-    val destDir = layout.buildDirectory.dir("generated/rootfsAssets/rootfs")
-    val destName = "debian-core.rootfs"
-
-    description = "Stages the ${bundledRootfsAbi()} rootfs into assets/."
-
-    onlyIf { source != null }
-    if (source != null) {
-        inputs.file(source)
-        outputs.file(destDir.map { it.file(destName) })
-
-        doLast {
-            // A plain byte copy, NOT Gradle's Copy task.
-            //
-            // The destination extension is `.rootfs`, not `.tar.gz`, and that is
-            // load-bearing: AGP's mergeAssets treats a `.tar.gz` asset as an archive
-            // and unpacks it, so the APK received a 157 MB *uncompressed* tar named
-            // `debian-core.tar` instead of the 46 MB gzip the build produced and
-            // SHA256SUMS describes. The installer's checksum check would then have
-            // failed on a perfectly good build. An extension AGP does not recognise
-            // as an archive is stored byte-for-byte.
-            //
-            // The bytes are still gzip; TarGz reads them as such. Only the name
-            // differs, and the download path keeps the release's real `.tar.gz` name.
-            val out = destDir.get().file(destName).asFile
-            out.parentFile.mkdirs()
-            source.inputStream().use { input -> out.outputStream().use { input.copyTo(it) } }
-        }
-    }
-}
-
-android.sourceSets.getByName("main").assets.srcDir(
-    layout.buildDirectory.dir("generated/rootfsAssets"),
-)
-android.sourceSets.getByName("main").assets.srcDir(
-    layout.buildDirectory.dir("generated/layer3Assets"),
-)
-
-/**
- * Builds the Layer 3 container binaries with their own Makefile.
- *
- * **This exists because its absence cost a day.** The tarball is produced by
- * `scripts/build-layer3.sh`, and staging only copies whatever is already at
- * `app-runtime/dist/` — so a source change to the supervisor was invisible on the
- * device while the host build and its tests passed. Every device test installed the
- * same stale binary, which made a series of isolation experiments look like they
- * proved things they did not.
- *
- * The task is skipped when the cross-compiler is missing, so a build on a machine
- * without the toolchain still produces an APK (bridge-only, no supervisor) rather
- * than failing. `./gradlew gate` and the container tools' own `make check` are what
- * verify the tools themselves.
- */
-val buildLayer3 by tasks.registering(Exec::class) {
-    description = "Cross-compiles the Layer 3 container binaries for ${bundledRootfsAbi()}."
-
-    val script = rootProject.file("scripts/build-layer3.sh")
-    onlyIf { script.isFile }
-    if (script.isFile) {
-        commandLine("bash", script.absolutePath, "--arch", bundledRootfsAbi())
-        // The tools' own sources are the inputs. Declaring the whole tree is
-        // deliberate: a missed file here reintroduces the stale-binary bug.
-        inputs.dir(rootProject.file("app-runtime/supervisor/src"))
-        inputs.dir(rootProject.file("app-runtime/cli-wrappers"))
-        inputs.dir(rootProject.file("native/lib"))
-        inputs.file(rootProject.file("app-runtime/supervisor/Makefile"))
-        inputs.file(rootProject.file("app-runtime/cli-wrappers/Makefile"))
-        inputs.file(script)
-        outputs.file(rootProject.file("app-runtime/dist/layer3-${bundledRootfsAbi()}.tar.gz"))
-    }
-}
-
-val stageLayer3 by tasks.registering {
-    val source = bundledLayer3File()
-    val destDir = layout.buildDirectory.dir("generated/layer3Assets/layer3")
-    val destName = "layer3.l3"
-
-    // The same copy-not-srcDir rule as the rootfs, and the same `.l3` extension
-    // trick: AGP's mergeAssets unpacks an asset it recognises as an archive, so a
-    // `.tar.gz` would arrive decompressed. The bytes are still gzip; only the name
-    // avoids AGP's handling.
-    description = "Stages the ${bundledRootfsAbi()} Layer 3 binaries into assets/."
-
-    // Building the binaries is a prerequisite of staging them, so the asset can
-    // never be older than the sources that produce it.
-    dependsOn(buildLayer3)
-
-    // Resolved at execution time, not configuration time: the tarball does not exist
-    // until `buildLayer3` has run, and reading it here would always see the previous
-    // build's file (or none).
-    val sourceProvider = providers.provider { bundledLayer3File() }
-
-    onlyIf { sourceProvider.get() != null }
-    inputs.file(sourceProvider)
-    outputs.file(destDir.map { it.file(destName) })
-
-    doLast {
-        val input = sourceProvider.get() ?: return@doLast
-        val out = destDir.get().file(destName).asFile
-        out.parentFile.mkdirs()
-        input.inputStream().use { from -> out.outputStream().use { from.copyTo(it) } }
-    }
-}
-
-tasks
-    .matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(stageRootfs, stageLayer3) }
-
-// Every other task that reads the staged assets needs the same dependency. The
-// `merge*Assets` matcher above covers the packaging path; the lint path
-// (`generate*LintVitalReportModel`, `lintVital*`) reads the same directories and
-// Gradle fails the build for an undeclared dependency when a *release* build runs
-// lint, which it does and a debug build does not. Matching on the two prefixes keeps
-// this off the many unrelated tasks.
-tasks
-    .matching { it.name.contains("Lint") || it.name.contains("lint") }
-    .configureEach { dependsOn(stageRootfs, stageLayer3) }
