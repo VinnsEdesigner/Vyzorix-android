@@ -44,9 +44,12 @@ all: symlinks
 
 # The catalog and the symlinks come from one pass over apis.txt, so what the binary
 # prints and what the build creates cannot disagree.
-$(BUILD)/api_catalog.cpp $(BUILD)/.apis-generated: apis.txt generator.cpp | $(BUILD)
+$(BUILD)/api_catalog.cpp $(BUILD)/command_catalog.cpp $(BUILD)/.apis-generated: \
+	apis.txt commands.txt generator.cpp | $(BUILD)
 	$(HOST_CXX) -std=c++17 -O2 -Wall -Wextra -Werror -o $(BUILD)/generator generator.cpp
-	$(BUILD)/generator --apis apis.txt --catalog-out $(BUILD)/api_catalog.cpp
+	$(BUILD)/generator --apis apis.txt --commands commands.txt \
+		--catalog-out $(BUILD)/api_catalog.cpp \
+		--command-catalog-out $(BUILD)/command_catalog.cpp
 	@touch $(BUILD)/.apis-generated
 
 # bridge_main.cpp includes the generated catalog, so it waits for generation.
@@ -55,18 +58,22 @@ $(BUILD)/bridge_main.o: $(BUILD)/.apis-generated
 $(BUILD)/api_catalog.o: $(BUILD)/api_catalog.cpp
 	$(CXX) $(CXXFLAGS) -Isrc -c $< -o $@
 
+$(BUILD)/command_catalog.o: $(BUILD)/command_catalog.cpp
+	$(CXX) $(CXXFLAGS) -Isrc -c $< -o $@
+
 $(BUILD)/%.o: src/%.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -I$(BUILD) -I$(LIB)/include -c $< -o $@
 
 $(LIB_OBJ): $(LIB_SRC) | $(BUILD)
 	$(CXX) $(CXXFLAGS) -I$(LIB)/include -c $< -o $@
 
-$(BUILD)/bin/android-bin: $(OBJ) $(LIB_OBJ) $(BUILD)/api_catalog.o
+$(BUILD)/bin/android-bin: $(OBJ) $(LIB_OBJ) $(BUILD)/api_catalog.o $(BUILD)/command_catalog.o
 	@mkdir -p $(BUILD)/bin
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 symlinks: $(BUILD)/.apis-generated $(BUILD)/bin/android-bin
-	$(BUILD)/generator --apis apis.txt --symlink-dir $(BUILD)/bin --target android-bin
+	$(BUILD)/generator --apis apis.txt --commands commands.txt \
+		--symlink-dir $(BUILD)/bin --target android-bin
 
 $(BUILD):
 	mkdir -p $(BUILD)

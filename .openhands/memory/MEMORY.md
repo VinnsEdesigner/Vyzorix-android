@@ -861,3 +861,79 @@ an Android 13 emulator. Pairing code shown in the notification. Key facts:
   `download progress` up to percent 100) but the **install is the user's tap** — until it
   is tapped the device still runs 0.1.5, so `sms_read`/READ_SMS is absent and the inbox
   query returns 0 rows. Publishing an APK is a redeploy; it is gitignored, not dockerignored.
+
+## Querying SMS on a real device — two blockers (2026-11-11)
+The device is on **0.1.8** (server log `update check version_code: 8`) and has
+`sms_read` + READ_SMS, but neither access path works from the outside:
+1. **The device shell cannot read the inbox.** `SHELL_EXEC` runs as the app uid
+   (`u0_a204`, `untrusted_app_27`) which now HOLDS READ_SMS, but the `content` tool is
+   `/system/bin/content`, a script that execs `app_process` — and **SELinux blocks
+   untrusted_app from executing `app_process`/`dalvikvm`/`art_exec`** (the ART tools in
+   `/apex/com.android.art/bin` are "inaccessible or not found" to it). So `content
+   query --uri content://sms/inbox` prints nothing and exits 0 — it looks empty but the
+   tool never ran. `pm`/`dumpsys` are likewise absent from the untrusted_app path.
+2. **The `sms_read` bridge API needs a session token, and the only mint site is the
+   operator terminal**, which is `PTY_SESSION_OPEN` — RiskTierCritical, RequiresConfirmation,
+   and gated on an **MFA-verified session** (`GET /v1/dashboard/device/:imei/terminal`
+   returns HTTP 449 `SECURITY_RISK_UNCONFIRMED: requires an MFA-verified session`). The
+   provisioning operator has `mfa_enabled: false`, so the terminal cannot be opened from
+   the API. Session tokens are minted only at `ServicePtySessionPort` /
+   `VyzorixForegroundService` for that terminal path — there is no non-MFA mint site.
+- **Consequence**: SMS can only be read by the app in-process (what `sms_read` does);
+  there is no shell or API route to it without an MFA-verified operator terminal.
+- Route prefix gotcha: the terminal is `/v1/dashboard/device/:imei/terminal` (NOT
+  `/v1/device/...`), and the WS needs the `X-Organization-ID` header.
+
+## Device-admin + control APIs, verified live (2026-11-11)
+- **The app can be device owner AND admin.** Added `VyzorixDeviceAdminReceiver` +
+  `res/xml/device_admin.xml` in `android-core` (declared in core's manifest). Emulator:
+  `adb shell dpm set-device-owner com.vyzorix.agent/com.vyzorix.service.VyzorixDeviceAdminReceiver`
+  -> "Success". On a real device without adb the only routes are QR/NFC provisioning on
+  a factory-reset device.
+- **New APIs**: `device_admin_request` (opens the activation screen),
+  `call_control` (place a call; gates), `usb_control` (enable USB debugging / clear
+  DISALLOW_USB_FILE_TRANSFER). Enriched `device_owner` (admin components),
+  `device_owner_capabilities` (full policy dump), `developer_options` (enable +
+  canWriteSetting), `accessibility` (enabled+installed).
+- **`device_owner_capabilities`** verified live: `canLockNow:true`, full password/lock
+  policy keys, `storageEncryptionStatus:5`.
+- **Two platform limits, both verified live:**
+  1. **Owner components are UNREADABLE.** `getDeviceOwnerComponentOnAnyUser` is
+     `@SystemApi`; `getDeclaredMethod`+`invoke` throws `SecurityException: Calling
+     identity is not authorized`. The API reports `deviceOwnerComponent:""` and logs the
+     cause. Do not assert it non-empty.
+  2. **`setGlobalSetting` has an allowlist.** `development_settings_enabled` is NOT on
+     it — the owner call returns without throwing and changes nothing. `DeviceSettingsWriter`
+     now VERIFIES the value after writing and falls back to `Settings.Global.putString`
+     when `WRITE_SECURE_SETTINGS` is held. Without that grant, enabling dev options fails
+     (correctly reported as `enabled:false`).
+- **`usb_control` enable works** (adb_enabled is allowlisted): `usbDebuggingEnabledNow:true`.
+- **Test gotcha**: `ApiRouter()` with no `PermissionRequester` refuses every gated API
+  (`call_control` -> "runtime permission not granted"). The instrumented test must pass
+  `ApiRouter(PermissionRequester(context))`.
+- **Instrumented test naming**: minSdk 26 -> DEX < 040 rejects backticked method names
+  with spaces ("Space characters in SimpleName ... not allowed prior to DEX version 040").
+  Use snake_case names in `tests/app/instrumented`.
+- Live test: `./gradlew :app:connectedDebugAndroidTest -ProotfsAbi=x86_64
+  -Pandroid.testInstrumentationRunnerArguments.class=com.vyzorix.agent.AdminApisLiveTest`.
+
+## Bluetooth / WiFi / wallpaper APIs (2026-11-11)
+- **`bluetooth_control`** (service-registered — owns a discovery receiver; also add it to
+  `serviceApiNames`, `ApiSmokeTest`, and the live test's router or the catalogue test
+  fails). Actions: enable/disable, scan/stopScan, pair. Reports `bonded`, `discovered`.
+  **HCI packet read/write is IMPOSSIBLE for a normal app** (needs the stack's HCI socket);
+  reports `packetAccess:false` + reason.
+- **`wifi_control`**: enable/disable, scan, connect(ssid,password), disconnect. Uses the
+  legacy `setWifiEnabled`/`addNetwork`/`getConfiguredNetworks` — **these only work because
+  targetSdk is pinned 28**; they silently refuse at targetSdk 29+. Gated on
+  ACCESS_FINE_LOCATION (scan results). **Hotspot/USB/BT tethering is IMPOSSIBLE for a normal
+  app** (`setWifiApEnabled`/`TetheringManager` are @SystemApi); reports
+  `hotspotSupported:false` + reason.
+- **`wallpaper`**: `SET_WALLPAPER` (normal). `path` or `url` + `target`=home|lock|both.
+  Live: `{"isWallpaperSupported":true,"isSetWallpaperAllowed":true}`.
+- **Verified live** on the API 33 emulator: wifi `{"enabled":true,"state":3,...}`,
+  bluetooth `{"supported":true,"enabled":true,...}`, wallpaper supported. All
+  `AdminApisLiveTest` tests pass.
+- New permissions declared: BLUETOOTH_SCAN, BLUETOOTH_ADMIN, CHANGE_WIFI_STATE,
+  SET_WALLPAPER. Registry entries: `wifi_control` (ACCESS_FINE_LOCATION),
+  `bluetooth_control` (BLUETOOTH_CONNECT, minSdk 31). New tag `hw:bluetooth`.

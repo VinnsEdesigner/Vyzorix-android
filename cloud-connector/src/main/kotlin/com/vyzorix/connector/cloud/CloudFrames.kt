@@ -99,6 +99,14 @@ data class TelemetryFrame(
     @SerialName("bufferLevel") val bufferLevel: Int = 0,
     @SerialName("thermalTemp") val thermalTemp: Double = 0.0,
     @SerialName("speakerOn") val speakerOn: Boolean = false,
+    /**
+     * The app version the device is currently running.
+     *
+     * Sent so the server's record of a device tracks what it is *now*, not what it
+     * reported at enroll: an OTA update changes the version without a re-enroll, and
+     * the server's `devices.app_version` would otherwise stay stale forever.
+     */
+    @SerialName("appVersion") val appVersion: String = "",
 )
 
 /** Reads just the `type` of an inbound frame, without decoding the rest. */

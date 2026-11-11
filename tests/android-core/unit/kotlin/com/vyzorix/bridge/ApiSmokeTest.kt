@@ -3,6 +3,7 @@ package com.vyzorix.bridge
 import android.content.Context
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
+import com.vyzorix.bridge.apis.BluetoothControlApi
 import com.vyzorix.bridge.apis.SmsReceivedApi
 import com.vyzorix.bridge.apis.UsbAttachApi
 import com.vyzorix.bridge.apis.UsbDetachApi
@@ -79,6 +80,8 @@ class ApiSmokeTest {
             // start/stop lifecycle. A fresh instance here reports `listening: false`,
             // which is the correct answer for a receiver that was never started.
             .register(SmsReceivedApi.NAME, SmsReceivedApi())
+            // bluetooth_control is service-registered too: it owns a discovery receiver.
+            .register(BluetoothControlApi.NAME, BluetoothControlApi())
     }
 
     /** A USB host with nothing attached, so the handlers answer without hardware. */

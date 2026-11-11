@@ -1,0 +1,122 @@
+# The human command surface for the bridge APIs.
+#
+# This file is the source of truth for *what an operator types* in the container's
+# shell. It is deliberately separate from `apis.txt`, which is the *wire* surface:
+# the API name the router serves, the catalog the binary prints, the name the server
+# tags. The wire name is a contract with the server and the tests, so renaming it to
+# make the CLI nicer would ripple through all of that for no gain; the human name is
+# free to be terse.
+#
+# `commands_test` (tests/android-core) fails if this file and `apis.txt` disagree, so
+# a new API cannot ship without a command and a command cannot point at no API.
+#
+# Format:  <wire api name>  <command> [subcommand]
+#
+#   * one column  -> a top-level command of that name (`wallpaper`, `battery`)
+#   * two columns -> `command subcommand` (`bt ctrl`, `admin action`)
+#
+# The generator emits one symlink per *command* (not per API) plus a dispatch table,
+# and `android-bin` resolves `argv[0]` + `argv[1]` to the wire name. A top-level
+# command with subcommands still accepts `--api` for the raw name.
+#
+# ## Naming rules the list follows
+#
+#   * Terse where Linux is terse; no underscores.
+#   * Never shadow a real binary: `/usr/local/bin` precedes `/usr/bin`, so a command
+#     named `ps`, `locale` or `sensors` would break the real one. Hence `procs`, `lang`,
+#     `sensor`.
+#   * Never use a shell keyword or builtin as a top-level command: `time`, `read`,
+#     `test`, `set`, `export`. (`sms read` is fine — `read` is a subcommand, not a
+#     command.)
+
+# --- Bluetooth / Wi-Fi / radios ---
+bluetooth_state          bt state
+bluetooth_control        bt ctrl
+wifi_state               wifi state
+wifi_control             wifi ctrl
+nfc_state                nfc
+vpn_state                vpn
+airplane_mode            airplane
+proxy_state              net proxy
+dns_servers              net dns
+network                  net
+network_interfaces       net ifaces
+
+# --- USB ---
+usb_state                usb state
+usb_attach               usb attach
+usb_detach               usb detach
+usb_control              usb ctrl
+
+# --- Telephony / messaging ---
+call_capability          call caps
+call_control             call ctrl
+sms_capability           sms caps
+sms_read                 sms read
+sms_received             sms received
+phone_state              phone
+phone_state_detailed     phone detailed
+
+# --- Device admin ---
+device_owner             admin owner
+device_owner_capabilities admin caps
+device_admin_action      admin action
+device_admin_request     admin request
+device_credentials       device certs
+device_info              device
+
+# --- Packages / apps ---
+installed_apps           apps
+package_info             apps info
+packages_dump            apps dump
+default_apps             apps default
+app_storage              storage app
+
+# --- Storage / files ---
+storage                  storage
+storage_volumes          storage volumes
+storage_all_files        storage all
+external_storage         storage external
+mount_points             mounts
+file_descriptors         fds
+
+# --- Display / input ---
+display_info             display
+screen_state             display screen
+screen_timeout           display timeout
+brightness               display brightness
+rotation_state           display rotation
+font_scale               display font
+input_devices            input
+input_method             input ime
+
+# --- System ---
+battery                  battery
+battery_history          battery history
+cpu_info                 cpu
+memory_info              mem
+load_average             load
+kernel_info              kernel
+build_fingerprint        build
+system_properties        props
+process_list             procs
+power_save               power
+thermal                  thermal
+time_info                clock
+locale_info              lang
+security_patch           security
+sensor_list              sensor
+camera_list              camera
+
+# --- Misc device state ---
+accessibility            a11y
+developer_options        dev
+clipboard_state          clipboard
+do_not_disturb           dnd
+haptic_settings          haptics
+notification_policy      notifications
+location                 location
+audio_state              audio
+wallpaper                wallpaper
+logcat                   logcat
+session                  session

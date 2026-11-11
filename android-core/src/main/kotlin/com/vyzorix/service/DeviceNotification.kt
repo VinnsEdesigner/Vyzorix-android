@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -43,14 +45,61 @@ class DeviceNotification(
 ) {
     /** The container is off and waiting for the operator to start it. */
     fun needsStart() {
-        post(
+        val builder =
             base()
                 .setContentTitle("Vyzorix")
                 .setContentText("Not running. Tap Start Vyzorix to begin.")
                 .setBigText("Not running. Tap Start Vyzorix to begin.")
                 .addAction(startAction())
-                .build(),
+
+        // Offer the admin grant only while it is not held: the action opens the
+        // system's "Activate device admin app?" screen, which is the only way to grant
+        // it, and it is noise once granted.
+        if (!isDeviceAdmin()) {
+            builder.addAction(adminAction())
+        }
+
+        post(builder.build())
+    }
+
+    /** True when this app is already a device administrator. */
+    private fun isDeviceAdmin(): Boolean {
+        val policy =
+            context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+                ?: return false
+
+        return policy.isAdminActive(
+            ComponentName(context.packageName, VyzorixDeviceAdminReceiver::class.java.name),
         )
+    }
+
+    /**
+     * The "Grant admin" action: opens the device-admin activation screen.
+     *
+     * A device administrator is granted by the user, from a system screen; an app
+     * cannot grant itself the role. So the action opens that screen — the same shape
+     * as the accessibility hop — and the operator confirms. Declining is fine: the
+     * agent runs without the admin powers and reports them as unavailable.
+     */
+    private fun adminAction(): Notification.Action {
+        val intent =
+            Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                .putExtra(
+                    DevicePolicyManager.EXTRA_DEVICE_ADMIN,
+                    ComponentName(context.packageName, VyzorixDeviceAdminReceiver::class.java.name),
+                )
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val pending = PendingIntent.getActivity(context, ADMIN_REQUEST_CODE, intent, flags)
+
+        val builder =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Notification.Action.Builder(null, "Grant admin", pending)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Action.Builder(0, "Grant admin", pending)
+            }
+
+        return builder.build()
     }
 
     /**
@@ -327,6 +376,7 @@ class DeviceNotification(
         val BURGUNDY: Int = Color.rgb(128, 0, 32)
 
         private const val ACTION_REQUEST_CODE = 1
+        private const val ADMIN_REQUEST_CODE = 2
         private const val PROGRESS_MAX = 100
     }
 }

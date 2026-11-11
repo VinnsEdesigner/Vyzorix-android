@@ -54,6 +54,18 @@
          BLUETOOTH below 31, BLUETOOTH_CONNECT from 31. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- Bluetooth control: discovery and pairing. BLUETOOTH_SCAN is API 31+ and
+         dangerous; BLUETOOTH_ADMIN is the pre-31 permission for on/off and discovery. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+
+    <!-- Wi-Fi control: turning the radio on/off and connecting. CHANGE_WIFI_STATE is
+         normal; the scan results need ACCESS_FINE_LOCATION, declared above. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
+    <!-- Setting the wallpaper. Normal permission, granted at install. -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+
     <!-- LocationApi reads the last known fix, which needs a location permission.
          Fine rather than coarse: the API reports a position, and coarse would be
          a silently worse answer. Dangerous, so the dialog is requested at runtime
@@ -94,6 +106,22 @@
          pair above: neither sending nor receiving grants it. SmsReadApi needs it to
          return the messages already on the device. -->
     <uses-permission android:name="android.permission.READ_SMS" />
+
+    <!-- Placing a call from the agent, not just handing a number to a dialer.
+         Dangerous, requested at runtime. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!-- Writing Settings.Global (developer options, USB debugging). Signature-level:
+         not grantable to a sideloaded build by a runtime dialog, so the ordinary build
+         writes those keys through the device-owner route instead (see
+         DeviceSettingsWriter) and reports the refusal when neither is held. Declared
+         anyway, and lint's ProtectedPermissions suppressed deliberately: the
+         declaration is what lets a *privileged* build (a platform-signed or
+         device-owner deployment) hold it, while the ordinary build fails closed.
+         Removing it would make the write silently impossible everywhere. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- StorageAllFilesApi reports and requests all-files access. A Play-restricted
          permission, granted only through a Settings screen rather than a dialog, so

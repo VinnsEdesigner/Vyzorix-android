@@ -6,15 +6,20 @@ import com.vyzorix.bridge.apis.AppStorageApi
 import com.vyzorix.bridge.apis.AudioStateApi
 import com.vyzorix.bridge.apis.BatteryApi
 import com.vyzorix.bridge.apis.BatteryHistoryApi
+import com.vyzorix.bridge.apis.BluetoothControlApi
 import com.vyzorix.bridge.apis.BluetoothStateApi
 import com.vyzorix.bridge.apis.BrightnessApi
 import com.vyzorix.bridge.apis.BuildFingerprintApi
 import com.vyzorix.bridge.apis.CallCapabilityApi
+import com.vyzorix.bridge.apis.CallControlApi
 import com.vyzorix.bridge.apis.CameraListApi
 import com.vyzorix.bridge.apis.ClipboardStateApi
 import com.vyzorix.bridge.apis.CpuInfoApi
 import com.vyzorix.bridge.apis.DefaultAppsApi
 import com.vyzorix.bridge.apis.DeveloperOptionsApi
+import com.vyzorix.bridge.apis.DeviceAdminActionApi
+import com.vyzorix.bridge.apis.DeviceAdminRequestApi
+import com.vyzorix.bridge.apis.DeviceCredentialsApi
 import com.vyzorix.bridge.apis.DeviceInfoApi
 import com.vyzorix.bridge.apis.DeviceOwnerApi
 import com.vyzorix.bridge.apis.DeviceOwnerCapabilitiesApi
@@ -40,6 +45,7 @@ import com.vyzorix.bridge.apis.NetworkInterfacesApi
 import com.vyzorix.bridge.apis.NfcStateApi
 import com.vyzorix.bridge.apis.NotificationPolicyApi
 import com.vyzorix.bridge.apis.PackageInfoApi
+import com.vyzorix.bridge.apis.PackagesDumpApi
 import com.vyzorix.bridge.apis.PhoneStateApi
 import com.vyzorix.bridge.apis.PhoneStateDetailedApi
 import com.vyzorix.bridge.apis.PowerSaveApi
@@ -60,9 +66,12 @@ import com.vyzorix.bridge.apis.SystemPropertiesApi
 import com.vyzorix.bridge.apis.ThermalApi
 import com.vyzorix.bridge.apis.TimeInfoApi
 import com.vyzorix.bridge.apis.UsbAttachApi
+import com.vyzorix.bridge.apis.UsbControlApi
 import com.vyzorix.bridge.apis.UsbDetachApi
 import com.vyzorix.bridge.apis.UsbStateApi
 import com.vyzorix.bridge.apis.VpnStateApi
+import com.vyzorix.bridge.apis.WallpaperApi
+import com.vyzorix.bridge.apis.WifiControlApi
 import com.vyzorix.bridge.apis.WifiStateApi
 
 /**
@@ -114,6 +123,7 @@ object ApiCatalogue {
             BrightnessApi.NAME to BrightnessApi,
             BuildFingerprintApi.NAME to BuildFingerprintApi,
             CallCapabilityApi.NAME to CallCapabilityApi,
+            CallControlApi.NAME to CallControlApi,
             CameraListApi.NAME to CameraListApi,
             ClipboardStateApi.NAME to ClipboardStateApi,
             CpuInfoApi.NAME to CpuInfoApi,
@@ -122,6 +132,9 @@ object ApiCatalogue {
             DeviceOwnerApi.NAME to DeviceOwnerApi,
             DeviceOwnerCapabilitiesApi.NAME to DeviceOwnerCapabilitiesApi,
             DeviceInfoApi.NAME to DeviceInfoApi,
+            DeviceAdminRequestApi.NAME to DeviceAdminRequestApi,
+            DeviceAdminActionApi.NAME to DeviceAdminActionApi,
+            DeviceCredentialsApi.NAME to DeviceCredentialsApi,
             DisplayInfoApi.NAME to DisplayInfoApi,
             DnsServersApi.NAME to DnsServersApi,
             DoNotDisturbApi.NAME to DoNotDisturbApi,
@@ -144,6 +157,7 @@ object ApiCatalogue {
             NfcStateApi.NAME to NfcStateApi,
             NotificationPolicyApi.NAME to NotificationPolicyApi,
             PackageInfoApi.NAME to PackageInfoApi,
+            PackagesDumpApi.NAME to PackagesDumpApi,
             PhoneStateApi.NAME to PhoneStateApi,
             PhoneStateDetailedApi.NAME to PhoneStateDetailedApi,
             PowerSaveApi.NAME to PowerSaveApi,
@@ -162,6 +176,9 @@ object ApiCatalogue {
             SystemPropertiesApi.NAME to SystemPropertiesApi,
             ThermalApi.NAME to ThermalApi,
             TimeInfoApi.NAME to TimeInfoApi,
+            UsbControlApi.NAME to UsbControlApi,
+            WallpaperApi.NAME to WallpaperApi,
+            WifiControlApi.NAME to WifiControlApi,
             VpnStateApi.NAME to VpnStateApi,
             WifiStateApi.NAME to WifiStateApi,
         )
@@ -190,6 +207,7 @@ object ApiCatalogue {
             UsbAttachApi.NAME,
             UsbDetachApi.NAME,
             SmsReceivedApi.NAME,
+            BluetoothControlApi.NAME,
         )
 
     /**

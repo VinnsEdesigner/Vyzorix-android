@@ -85,3 +85,8 @@ kotlin-unused-decl:onInterrupt   # required override; the service performs no fe
 kotlin-unused-decl:onAvailable            # platform-invoked NetworkCallback override
 kotlin-unused-decl:onLost                 # platform-invoked NetworkCallback override
 kotlin-unused-decl:onCapabilitiesChanged  # platform-invoked NetworkCallback override
+
+# The device-admin receiver's onDisableRequested is invoked by the system, not by our
+# code: the platform calls it when the user tries to remove the admin, to show the
+# warning it returns. Nothing in this repository calls it.
+kotlin-unused-decl:onDisableRequested     # platform-invoked DeviceAdminReceiver override

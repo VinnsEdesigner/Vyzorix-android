@@ -28,6 +28,29 @@
             </intent-filter>
         </receiver>
 
+        <!-- The device-admin receiver. Declaring it is what makes the app eligible to
+             be added as a device administrator from Settings > Security > Device admin
+             apps; the operator grants the role, the app cannot take it. The
+             BIND_DEVICE_ADMIN permission is the system's guard, and only the system
+             holds it, so the receiver is never directly callable by another app.
+
+             The policy list in res/xml/device_admin.xml is what the activation screen
+             shows and what the app may then use. This is an *admin*, not an owner:
+             admin powers are per-device actions, owner powers are organisation policy,
+             and only the latter can be set at provisioning time. -->
+        <receiver
+            android:name="com.vyzorix.service.VyzorixDeviceAdminReceiver"
+            android:exported="true"
+            android:label="Vyzorix"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

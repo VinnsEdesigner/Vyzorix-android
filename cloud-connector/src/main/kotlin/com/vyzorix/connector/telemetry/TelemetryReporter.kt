@@ -25,6 +25,8 @@ class TelemetryReporter(
     private val source: TelemetrySource,
     private val send: (String) -> Boolean,
     private val deviceId: String,
+    /** The running app version, reported so the server's record stays current. */
+    private val appVersion: String = "",
     private val clock: () -> Long = System::currentTimeMillis,
     initialIntervalSeconds: Int = DEFAULT_INTERVAL_SECONDS,
 ) {
@@ -99,6 +101,7 @@ class TelemetryReporter(
                 bufferLevel = sample.bufferLevel,
                 thermalTemp = sample.thermalTemp,
                 speakerOn = sample.speakerOn,
+                appVersion = appVersion,
             )
 
         // Encoded with the outbound config so the `type` discriminator is always on

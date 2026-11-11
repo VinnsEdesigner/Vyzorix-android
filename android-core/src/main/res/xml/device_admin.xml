@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The device-admin policies this app may use once the operator adds it as an
+  administrator.
+
+  Each `<uses-policies>` child is one capability the system shows on the "Activate
+  device admin app?" screen and grants on confirmation. They are declared individually
+  rather than as a blanket so the operator sees exactly what is being granted — the
+  screen lists them — and so the app cannot use a policy it did not ask for.
+
+  The set is what a device-management agent needs to act on a device it manages: lock
+  it, watch failed logins, set and reset the password rules, wipe it as a last resort,
+  disable the camera, restrict the keyguard, require storage encryption, and set the
+  global proxy. Nothing here is a data-reading capability; an admin acts on the device,
+  it does not read the user's content.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <!-- Lock the device immediately. -->
+        <force-lock />
+        <!-- See failed password attempts. -->
+        <watch-login />
+        <!-- Set and clear the device password, and reset it. -->
+        <reset-password />
+        <limit-password />
+        <expire-password />
+        <!-- Wipe the device as a last resort. -->
+        <wipe-data />
+        <!-- Turn the camera off. -->
+        <disable-camera />
+        <!-- Restrict what can be shown on the lock screen. -->
+        <disable-keyguard-features />
+        <!-- Require storage encryption. -->
+        <encrypted-storage />
+        <!-- Set the global HTTP proxy. -->
+        <set-global-proxy />
+    </uses-policies>
+</device-admin>

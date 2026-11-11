@@ -12,6 +12,7 @@ import com.vyzorix.bridge.AndroidSocketServer
 import com.vyzorix.bridge.ApiCatalogue
 import com.vyzorix.bridge.ApiRouter
 import com.vyzorix.bridge.SessionTokenRegistry
+import com.vyzorix.bridge.apis.BluetoothControlApi
 import com.vyzorix.bridge.apis.SessionApi
 import com.vyzorix.bridge.apis.SmsReceivedApi
 import com.vyzorix.bridge.apis.UsbAttachApi
@@ -59,6 +60,7 @@ class VyzorixForegroundService : Service() {
     private lateinit var broker: PtyBroker
     private lateinit var usbBroker: UsbBroker
     private lateinit var smsReceived: SmsReceivedApi
+    private lateinit var bluetoothControl: BluetoothControlApi
     private lateinit var bridge: AndroidSocketServer
     private lateinit var watchdog: ServiceWatchdog
     private var cloudLink: CloudLink? = null
@@ -133,10 +135,14 @@ class VyzorixForegroundService : Service() {
         broker = PtyBroker()
         usbBroker = UsbBroker(AndroidUsbHost(this))
         smsReceived = SmsReceivedApi()
+        bluetoothControl = BluetoothControlApi()
         // Register the receiver before the router serves `sms_received`, or the API
         // reports `listening: false` for a device that is in fact watching nothing.
         // Idempotent, so a service restart does not stack receivers.
         smsReceived.start(this)
+        // The discovery receiver must be registered before the router serves
+        // bluetooth_control, or a scan finds nothing. Idempotent.
+        bluetoothControl.start(this)
         router = buildRouter()
 
         // Install the container's userspace if it is not already there, before
@@ -438,6 +444,7 @@ class VyzorixForegroundService : Service() {
             .register(UsbAttachApi.NAME, UsbAttachApi(usbBroker))
             .register(UsbDetachApi.NAME, UsbDetachApi(usbBroker))
             .register(SmsReceivedApi.NAME, smsReceived)
+            .register(BluetoothControlApi.NAME, bluetoothControl)
     }
 
     /**
@@ -581,6 +588,7 @@ class VyzorixForegroundService : Service() {
         // the context it was registered against, and the count it feeds no longer
         // has a reader.
         if (::smsReceived.isInitialized) smsReceived.stop(this)
+        if (::bluetoothControl.isInitialized) bluetoothControl.stop(this)
         if (::tokens.isInitialized) tokens.sweep()
         if (::watchdog.isInitialized) watchdog.stop()
         cloudLink?.stop()

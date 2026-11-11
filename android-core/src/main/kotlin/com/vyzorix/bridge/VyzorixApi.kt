@@ -51,6 +51,10 @@ object ApiTags {
     // camera/location/mic are added with their APIs, not before.
     const val HW_USB = "hw:usb"
 
+    // Bluetooth is the second hardware capability: it turns a radio on and off and
+    // pairs with physical devices, so it carries the same class as USB.
+    const val HW_BLUETOOTH = "hw:bluetooth"
+
     // Data sensitivity for hardware identity: the attached-device list, the SoC, a
     // device's serial. Distinct from `data:public` (battery level) because it names
     // physical hardware an operator may not want every role to see.

@@ -98,6 +98,20 @@ object PermissionRegistry {
             // capability question cannot be answered truthfully.
             "sms_capability" to
                 PermissionDef("android.permission.SEND_SMS", 1, Protection.DANGEROUS),
+            // Placing a call needs CALL_PHONE. The router gates the whole API on it, so
+            // a device without the grant is refused rather than throwing at the platform.
+            "call_control" to
+                PermissionDef("android.permission.CALL_PHONE", 1, Protection.DANGEROUS),
+            // Wi-Fi control scans and connects. The scan results need
+            // ACCESS_FINE_LOCATION (dangerous); CHANGE_WIFI_STATE is normal and granted
+            // at install, so location is the one the router must gate on.
+            "wifi_control" to
+                PermissionDef("android.permission.ACCESS_FINE_LOCATION", 1, Protection.DANGEROUS),
+            // Bluetooth control needs BLUETOOTH_CONNECT from API 31; below it the
+            // install-time BLUETOOTH/BLUETOOTH_ADMIN cover it, so the minSdk handles
+            // the split without a second entry.
+            "bluetooth_control" to
+                PermissionDef("android.permission.BLUETOOTH_CONNECT", 31, Protection.DANGEROUS),
             // RECEIVE_SMS is separate from SEND_SMS on every API level, and an app
             // that can send cannot necessarily receive.
             "sms_received" to

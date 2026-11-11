@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "api_catalog.h"
+#include "command_catalog.h"
 #include "bridge.h"
 #include "vyzorix/vyzorix_json.h"
 
@@ -80,12 +81,38 @@ std::string ArgsFromPairs(const std::vector<std::string> &pairs) {
 } // namespace
 
 int main(int argc, char **argv) {
-    std::string api = ProgramName(argc > 0 ? argv[0] : "");
+    // The program name is the *command* (`bt`, `admin`), not the wire API. Resolve it
+    // to the API via the command catalog, consuming a subcommand argument when the
+    // command has one (`bt ctrl` -> bluetooth_control). `--api NAME` still overrides
+    // this entirely, so the raw wire name is always reachable.
+    const std::string command = ProgramName(argc > 0 ? argv[0] : "");
+    int first_arg = 1;
+    std::string api;
+    {
+        // A subcommand is only consumed when the command is known and the next arg is a
+        // bare word (not an option), so `bt --list` still works.
+        const char *sub = nullptr;
+        if (argc > 1) {
+            const std::string candidate = argv[1];
+            if (!candidate.empty() && candidate.rfind("-", 0) != 0) {
+                sub = argv[1];
+            }
+        }
+        const char *resolved = ResolveCommand(command.c_str(), sub);
+        if (resolved != nullptr) {
+            api = resolved;
+            if (sub != nullptr) first_arg = 2; // the subcommand was consumed
+        } else {
+            // Not a command: fall back to the raw name, so an old symlink or a direct
+            // `android-bin <api>` call still works.
+            api = command;
+        }
+    }
     std::string args_json;
     bool have_args = false;
     std::vector<std::string> pairs;
 
-    for (int i = 1; i < argc; i++) {
+    for (int i = first_arg; i < argc; i++) {
         const std::string arg = argv[i];
 
         if (arg == "--help" || arg == "-h") {

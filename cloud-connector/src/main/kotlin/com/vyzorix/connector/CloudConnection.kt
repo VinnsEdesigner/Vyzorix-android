@@ -724,6 +724,7 @@ class CloudConnection(
                 source = telemetrySource,
                 send = { frame -> wsClient?.sendText(frame) ?: false },
                 deviceId = deviceId,
+                appVersion = appVersion,
                 initialIntervalSeconds =
                     configStore.current()?.heartbeatSeconds
                         ?: TelemetryReporter.DEFAULT_INTERVAL_SECONDS,

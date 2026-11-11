@@ -49,6 +49,61 @@ class ApiCatalogTest {
             .filter { it.isNotEmpty() }
     }
 
+    /** The rows of commands.txt: `api command [subcommand]`. */
+    private fun commandsTxt(): List<List<String>> {
+        val file = File(repoRoot(), "debian-container/android-bin/commands.txt")
+        assertTrue("commands.txt must exist at ${file.absolutePath}", file.isFile)
+
+        return file
+            .readLines()
+            .map { it.substringBefore('#').trim() }
+            .filter { it.isNotEmpty() }
+            .map { it.split(Regex("\\s+")) }
+    }
+
+    @Test
+    fun `every api has a command and every command names a real api`() {
+        // The human command layer is separate from the wire names on purpose, but the
+        // two must stay in step: an API with no command is unreachable from the shell,
+        // and a command naming no API is a symlink that fails at call time. The
+        // generator enforces this too; this is the JVM-side check that fails the gate.
+        val commands = commandsTxt()
+        val covered = commands.map { it[0] }.toSet()
+
+        val noCommand = registeredApis.filterNot { it in covered }
+        assertTrue(
+            "these APIs have no command in commands.txt: $noCommand. " +
+                "Add a row, or the container cannot reach them.",
+            noCommand.isEmpty(),
+        )
+
+        val noApi = commands.map { it[0] }.filterNot { it in registeredApis }
+        assertTrue(
+            "commands.txt names APIs that do not exist: $noApi",
+            noApi.isEmpty(),
+        )
+
+        // A command must be a bare token (it becomes a symlink) and a subcommand, when
+        // present, a bare token too (it is an argv word).
+        val bad = commands.filter { it.size !in 2..3 }
+        assertTrue("every commands.txt row is `api command [subcommand]`: $bad", bad.isEmpty())
+    }
+
+    @Test
+    fun `no two commands collide`() {
+        // Two APIs mapped to the same `command subcommand` would make one unreachable:
+        // the dispatch table matches the first and the second is silently lost.
+        val seen = mutableSetOf<String>()
+        val collisions = mutableListOf<String>()
+
+        for (row in commandsTxt()) {
+            val key = row.drop(1).joinToString(" ")
+            if (!seen.add(key)) collisions += key
+        }
+
+        assertTrue("these command names are used twice: $collisions", collisions.isEmpty())
+    }
+
     private companion object {
         /**
          * The floor the catalogue must stay above.
