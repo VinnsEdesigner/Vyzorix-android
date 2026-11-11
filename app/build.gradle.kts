@@ -276,7 +276,14 @@ android {
         // build time and shrinks nothing, and — the reason this matters — a re-packed
         // asset is no longer the file SHA256SUMS describes, so the installer's check
         // would fail on a perfectly good build. `noCompress` stores it verbatim.
-        noCompress += "tar.gz"
+        //
+        // `l3` is here for a different reason: `Layer3Installer` marks the install with
+        // the archive's **byte length**, read via `AssetManager.openFd`. A *compressed*
+        // asset has no fd, so `openFd` throws and the length reads as -1 — a constant
+        // that never changes, so a rebuilt layer3 never reinstalls on an app update.
+        // Storing it uncompressed gives a real fd and a real length. It is itself gzip,
+        // so nothing is saved by deflating it again.
+        noCompress += listOf("tar.gz", "l3")
     }
 
     buildTypes {

@@ -974,3 +974,21 @@ The device is on **0.1.8** (server log `update check version_code: 8`) and has
   fakes in `internal/ws/hub_test.go` and `tests/testutil_test.go` must implement it.
 - Server telemetry now carries `appVersion`; `processTelemetry` writes it via
   `DeviceRepository.UpdateAppVersion`, so `devices.app_version` tracks an OTA.
+
+## OTA resume fix (2026-11-11) — app-v0.2.0
+- **Bug**: a network drop mid-download left a partial APK, and the retry called
+  `destination.outputStream()` (truncates) -> re-downloaded all 73 MB from byte 0, so a
+  flaky link never converged.
+- **Fix** (`UpdateClient.download`): resume. A partial file smaller than the manifest's
+  `apkSizeBytes` -> `Range: bytes=<len>-` and `FileOutputStream(f, append=true)`.
+  `206` appends; `200` to a Range means the server will not resume, so the file is
+  rewritten from the start (never append to a 200 body). The manifest checksum still
+  verifies the whole file. Progress counts from the resumed offset.
+- `File.outputStream(append=)` does NOT exist in Kotlin — use `FileOutputStream(f, append)`.
+- **GitHub serves ranges** (`206`), and the `/v1/apk` redirect preserves it: verified
+  `curl -L -r 0-99 https://vyzorix.fly.dev/v1/apk/...` -> 206. So resume works end-to-end.
+- detekt gotchas hit here: `ThrowsCount` (max 2 throws per function -> extract a helper)
+  and `ComplexCondition` (max 3 operands -> split).
+- **clang-format is part of `nativeGate`** (NDK's clang-format); new C++ must be
+  `clang-format -i`d or the gate fails.
+- Published `app-v0.2.0`; server reports it with no redeploy; device picking it up.
