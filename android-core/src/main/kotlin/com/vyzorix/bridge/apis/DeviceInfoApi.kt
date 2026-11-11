@@ -1,5 +1,7 @@
 package com.vyzorix.bridge.apis
 
+import android.app.ActivityManager
+import android.content.Context
 import android.os.Build
 import android.os.SystemClock
 import com.vyzorix.bridge.ApiCall
@@ -18,6 +20,13 @@ import org.json.JSONObject
  * `build_fingerprint`, so it is not repeated here; `product`, `device` and `brand`
  * appear in both because they are genuinely part of both a device's identity and its
  * build, and a caller asking "what device" should not have to read two APIs for them.
+ *
+ * ## Low-RAM
+ *
+ * `lowRam` reports `ActivityManager.isLowRamDevice()`, which is what a Go-edition
+ * device sets and what drives the platform's reduced-memory behaviour. It is included
+ * here because it explains a class of symptoms (aggressive process death, smaller
+ * limits) that otherwise look like a fault.
  */
 @VyzorixApi(
     tags = [
@@ -58,6 +67,12 @@ object DeviceInfoApi : ApiHandler {
                 .put("supportedAbis", Build.SUPPORTED_ABIS.joinToString(","))
                 .put("supported32BitAbis", Build.SUPPORTED_32_BIT_ABIS.joinToString(","))
                 .put("supported64BitAbis", Build.SUPPORTED_64_BIT_ABIS.joinToString(","))
+                // Whether the platform classifies this as a low-RAM device. Read
+                // defensively: the service is absent on nothing we support, but a
+                // device_info read must never fail over a nicety.
+                .put("lowRam", isLowRamDevice(context))
+                .put("memoryClassMb", memoryClassMb(context))
+                .put("largeMemoryClassMb", largeMemoryClassMb(context))
                 // Runtime.
                 .put("uptimeMs", SystemClock.elapsedRealtime())
                 .put("packageName", context.packageName)
@@ -76,4 +91,18 @@ object DeviceInfoApi : ApiHandler {
 
         return ApiOutcome.ok(fields)
     }
+
+    /** `ActivityManager.isLowRamDevice()`, or false when the service is unavailable. */
+    private fun isLowRamDevice(context: Context): Boolean =
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
+            ?.isLowRamDevice ?: false
+
+    /** The per-app heap limit in MiB, or 0 when the service is unavailable. */
+    private fun memoryClassMb(context: Context): Int =
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.memoryClass ?: 0
+
+    /** The large-heap limit in MiB (largeHeap), or 0 when the service is unavailable. */
+    private fun largeMemoryClassMb(context: Context): Int =
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.largeMemoryClass
+            ?: 0
 }

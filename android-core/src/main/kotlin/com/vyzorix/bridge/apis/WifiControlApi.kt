@@ -11,12 +11,14 @@ package com.vyzorix.bridge.apis
 import android.content.Context
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
+import android.os.UserManager
 import com.vyzorix.bridge.ApiCall
 import com.vyzorix.bridge.ApiHandler
 import com.vyzorix.bridge.ApiOutcome
 import com.vyzorix.bridge.ApiTags
 import com.vyzorix.bridge.BridgeErrorKind
 import com.vyzorix.bridge.VyzorixApi
+import com.vyzorix.service.DeviceSettingsWriter
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -41,6 +43,24 @@ import org.json.JSONObject
  *    are `@SystemApi`; there is no public method. The API reports
  *    `hotspotSupported:false` with the reason rather than pretending — this is a
  *    platform boundary, not a missing call.
+ *
+ * ## Why tethering is reported, not just refused
+ *
+ * There are two independent reasons tethering may be unavailable, and they need
+ * different answers, so both are reported:
+ *
+ *  - **A policy restriction.** `no_config_tethering` (all tethering, including the
+ *    Settings UI) or `no_wifi_tethering` (Wi-Fi only) may be set. These are the
+ *    `UserManager` restrictions a device owner or the OEM applies. They are read here
+ *    and named, so "the hotspot toggle is greyed out" is attributable to a specific
+ *    restriction rather than left a mystery. `canUnblockTethering` says whether *this*
+ *    app could clear it (owner only).
+ *  - **The platform boundary.** Even with no restriction, no public API starts a
+ *    hotspot. That is `hotspotReason`, and it stands regardless of the policy.
+ *
+ * Clearing the restriction is deliberately not done here: it is a policy mutation, and
+ * it would not make the hotspot start anyway (the @SystemApi wall remains), so the
+ * honest scope for this API is to report both.
  *
  * ## Connecting
  *
@@ -71,14 +91,15 @@ object WifiControlApi : ApiHandler {
             JSONObject()
                 .put("enabled", wifi.isWifiEnabled)
                 .put("state", wifi.wifiState)
-                // Reported so a caller knows the hotspot/tethering asks cannot be met,
-                // and why, rather than seeing an empty result.
+                // The two reasons tethering may be unavailable: a policy restriction
+                // (named), and the @SystemApi ceiling that stands regardless. Both are
+                // reported so "the hotspot toggle is greyed out" has an answer.
                 .put("hotspotSupported", false)
                 .put(
                     "hotspotReason",
                     "enabling a hotspot or tethering needs @SystemApi " +
                         "(setWifiApEnabled / TetheringManager), which a normal app cannot call",
-                )
+                ).put("tetheringRestrictions", tetheringRestrictions(context))
 
         val action = call.args["action"].orEmpty()
 
@@ -211,4 +232,36 @@ object WifiControlApi : ApiHandler {
 
     /** Wraps an SSID or password in the quotes the WifiConfiguration API requires. */
     private fun quote(value: String): String = "\"" + value.replace("\"", "\\\"") + "\""
+
+    /**
+     * The tethering restrictions in force, named.
+     *
+     * `no_config_tethering` blocks all tethering (and the Settings UI); `no_wifi_tethering`
+     * blocks Wi-Fi tethering only and is superseded by the former. Both are read so the
+     * report is specific rather than a bare boolean, and `canUnblock` says whether this
+     * app could clear them (a device owner could; a plain app cannot).
+     */
+    private fun tetheringRestrictions(context: Context): JSONObject {
+        val users = context.getSystemService(Context.USER_SERVICE) as? UserManager
+
+        val allBlocked =
+            users?.userRestrictions?.getBoolean(UserManager.DISALLOW_CONFIG_TETHERING, false) ==
+                true
+        val wifiBlocked =
+            users?.userRestrictions?.getBoolean(UserManager.DISALLOW_WIFI_TETHERING, false) ==
+                true
+
+        return JSONObject()
+            .put("allTetheringBlocked", allBlocked)
+            .put("wifiTetheringBlocked", wifiBlocked)
+            // The restriction to name when explaining a greyed-out hotspot toggle.
+            .put(
+                "blockedBy",
+                when {
+                    allBlocked -> UserManager.DISALLOW_CONFIG_TETHERING
+                    wifiBlocked -> UserManager.DISALLOW_WIFI_TETHERING
+                    else -> ""
+                },
+            ).put("canUnblock", DeviceSettingsWriter.isDeviceOwner(context))
+    }
 }

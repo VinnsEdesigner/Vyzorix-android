@@ -37,11 +37,21 @@ import org.json.JSONObject
  * verbatim. These are what an operator needs to find a package on disk; none is
  * derivable from the package name.
  *
- * ## Bounds
+ * ## The limit, and why the default is unlimited
  *
- * A device has hundreds of packages and thousands of components, so the dump is
- * large. `components` (default true) adds the component names; `limit` caps the
- * package count, and `truncated` says whether it was hit.
+ * The dump is **full by default** — every package, with components. A caller may pass
+ * `limit=<n>` to cap the page, and `components=false` to skip the component parse; both
+ * exist because the full dump is the most expensive read in the bridge.
+ *
+ * Parsing every component and every `<meta-data>` blob of all ~300 packages is a large
+ * allocation, and on a low-RAM device it is fatal: the Nokia C22 (1.8 GB, Go edition)
+ * was OOM-killed building the default list, so the call never returned. That is why the
+ * knobs are here — a caller on a constrained device pages the list with `limit`, or drops
+ * the components with `components=false`, instead of being locked out of the dump. The
+ * default stays the full dump so a caller that can afford it gets everything.
+ *
+ * `totalAvailable` and `truncated` always report what the cap left out, so a bounded page
+ * is never mistaken for the whole list.
  */
 @VyzorixApi(
     tags = [
@@ -63,7 +73,9 @@ object PackagesDumpApi : ApiHandler {
         val pm = context.packageManager
 
         val includeComponents = call.args["components"]?.toBooleanStrictOrNull() ?: true
-        val limit = call.args["limit"]?.toIntOrNull()?.coerceIn(1, DEFAULT_LIMIT) ?: DEFAULT_LIMIT
+        // Absent means the default cap; a non-positive value means "no cap", the whole
+        // list, for a caller that explicitly wants everything.
+        val limit = call.args["limit"]?.toIntOrNull() ?: DEFAULT_LIMIT
 
         val all =
             try {
@@ -78,7 +90,7 @@ object PackagesDumpApi : ApiHandler {
             }
 
         val sorted = all.sortedBy { it.packageName }
-        val page = sorted.take(limit)
+        val page = if (limit > 0) sorted.take(limit) else sorted
 
         val array = JSONArray()
         for (info in page) {

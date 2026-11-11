@@ -10,7 +10,9 @@ import com.vyzorix.bridge.ApiCall
 import com.vyzorix.bridge.ApiHandler
 import com.vyzorix.bridge.ApiOutcome
 import com.vyzorix.bridge.ApiTags
+import com.vyzorix.bridge.BridgeErrorKind
 import com.vyzorix.bridge.VyzorixApi
+import com.vyzorix.service.DeviceSettingsWriter
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -33,13 +35,27 @@ import org.json.JSONObject
  * from `AccessibilityManager`, which returns the services the system knows about
  * without a permission — the `BIND_ACCESSIBILITY_SERVICE` permission is for the
  * service to be bound, not for this read.
+ *
+ * ## Enabling and disabling a service, and why it needs the signature grant
+ *
+ * The enabled set lives in the `Settings.Secure` key `enabled_accessibility_services`.
+ * Writing it needs `WRITE_SECURE_SETTINGS` — a signature permission a plain sideloaded
+ * app cannot hold, and a device owner does **not** get it either (there is no
+ * `setGlobalSetting` path for a secure key). So `action=enable`/`disable` are attempted
+ * only when that grant is held; otherwise they report `changed:false` with the reason,
+ * rather than pretending. On a stock device this means the action is a no-op and the
+ * answer is "needs `adb shell pm grant … WRITE_SECURE_SETTINGS`".
+ *
+ * This is deliberate: it is the same wall as the overlay grant. Accessibility state and
+ * app-ops are both outside what an unprivileged app can change, and this API says so
+ * instead of offering a button that silently fails.
  */
 @VyzorixApi(
     tags = [
         ApiTags.DATA_PUBLIC,
-        ApiTags.OP_READ,
-        ApiTags.PROTECTION_NORMAL,
-        ApiTags.VISIBILITY_PUBLIC,
+        ApiTags.OP_WRITE,
+        ApiTags.PROTECTION_SIGNATURE,
+        ApiTags.VISIBILITY_PRIVATE,
     ],
 )
 object AccessibilityApi : ApiHandler {
@@ -67,7 +83,7 @@ object AccessibilityApi : ApiHandler {
             installedJson.put(serviceInfoJson(context, info))
         }
 
-        return ApiOutcome.ok(
+        val result =
             JSONObject()
                 .put("enabled", JSONArray(enabled))
                 .put("count", enabled.size)
@@ -75,8 +91,66 @@ object AccessibilityApi : ApiHandler {
                 .put("isEnabled", manager?.isEnabled ?: false)
                 .put("isTouchExplorationEnabled", manager?.isTouchExplorationEnabled ?: false)
                 .put("installedCount", installedJson.length())
-                .put("installed", installedJson),
+                .put("installed", installedJson)
+                // Whether this app could change the enabled set at all: only a
+                // WRITE_SECURE_SETTINGS holder can. A device owner cannot (no secure path).
+                .put("canWrite", DeviceSettingsWriter.canWriteSecure(context))
+
+        val action = call.args["action"].orEmpty()
+        if (action != "enable" && action != "disable") {
+            return ApiOutcome.ok(result)
+        }
+
+        val component = call.args["component"].orEmpty()
+        if (component.isEmpty()) {
+            return ApiOutcome.fail(
+                BridgeErrorKind.INVALID_ARGS,
+                "component is required for $action (pkg/pkg.Class)",
+            )
+        }
+
+        return ApiOutcome.ok(
+            toggle(context, enabled, component, enable = action == "enable", result),
         )
+    }
+
+    /**
+     * Adds or removes [component] from the enabled set.
+     *
+     * The whole set is rewritten (the setting is a single colon-separated string), and
+     * the read-back is what decides `changed` — a write that reports success but does not
+     * land reports false. When the signature grant is missing this reports false with the
+     * reason without attempting.
+     */
+    private fun toggle(
+        context: Context,
+        current: List<String>,
+        component: String,
+        enable: Boolean,
+        result: JSONObject,
+    ): JSONObject {
+        result.put("action", if (enable) "enable" else "disable").put("component", component)
+
+        if (!DeviceSettingsWriter.canWriteSecure(context)) {
+            return result
+                .put("changed", false)
+                .put(
+                    "reason",
+                    "writing enabled_accessibility_services needs WRITE_SECURE_SETTINGS " +
+                        "(signature); this app does not hold it",
+                )
+        }
+
+        val next = current.filter { it != component }.toMutableList()
+        if (enable) next.add(component)
+
+        val wrote =
+            DeviceSettingsWriter.setSecure(context, ENABLED_SERVICES, next.joinToString(":"))
+
+        return result
+            .put("changed", wrote)
+            .put("enabled", JSONArray(next))
+            .put("count", next.size)
     }
 
     /** A flattened `pkg/class` string as its parts. */

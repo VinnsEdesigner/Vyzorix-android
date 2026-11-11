@@ -10,6 +10,8 @@ import com.vyzorix.bridge.SessionTokenRegistry
 import com.vyzorix.bridge.apis.BluetoothControlApi
 import com.vyzorix.permissions.PermissionRequester
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -263,8 +265,8 @@ class AdminApisLiveTest {
         assertTrue(json.has("totalAvailable"))
         assertTrue(json.has("truncated"))
 
-        // Each package carries its name, its exact folders, its family, and its
-        // children (APK splits).
+        // Each package carries its name, its exact folders, its family, its children
+        // (APK splits), and its components.
         val first = json.getJSONArray("packages").getJSONObject(0)
         for (
         key in
@@ -280,6 +282,7 @@ class AdminApisLiveTest {
             "nativeLibraryDir",
             "splitNames",
             "activities",
+            "requestedPermissions",
         )
         ) {
             assertTrue("the dump must carry $key", first.has(key))
@@ -287,6 +290,212 @@ class AdminApisLiveTest {
 
         // The shared-uid groups are the parent/children view.
         assertTrue(json.has("sharedUidGroups"))
+    }
+
+    @Test
+    fun packages_dump_honours_an_explicit_limit() {
+        // A caller-supplied cap pages the list and says so.
+        val json = call("packages_dump", mapOf("limit" to "5"))
+
+        assertEquals("the page must be capped at the limit", 5, json.getInt("count"))
+        assertTrue("a capped page must report the full total", json.getInt("totalAvailable") >= 5)
+        assertTrue("a capped page must be marked truncated", json.getBoolean("truncated"))
+    }
+
+    @Test
+    fun user_restrictions_dumps_the_whole_aosp_catalogue() {
+        val json = call("user_restrictions")
+
+        // Every restriction is listed, restricted or not — that is the point of the API.
+        assertTrue("the catalogue must be substantial", json.getInt("catalogCount") > 40)
+        assertTrue(json.has("anyRestricted"))
+        assertTrue(json.has("restrictedCount"))
+        assertTrue(json.has("active"))
+        assertTrue(json.has("canClear"))
+
+        // The catalogue names the restrictions a locked-down device carries.
+        val restrictions = json.getJSONArray("restrictions")
+        val keys =
+            (0 until restrictions.length()).map { restrictions.getJSONObject(it).getString("key") }
+        assertTrue("no_usb_file_transfer must be catalogued", "no_usb_file_transfer" in keys)
+        assertTrue("no_config_tethering must be catalogued", "no_config_tethering" in keys)
+    }
+
+    @Test
+    fun app_ops_reports_this_packages_op_modes() {
+        val json = call("app_ops")
+
+        assertEquals(
+            "the ops must be for this package",
+            context.packageName,
+            json.getString("packageName"),
+        )
+        assertTrue(json.has("anyDenied"))
+        assertTrue(json.has("deniedCount"))
+
+        val ops = json.getJSONArray("ops")
+        assertTrue("the op catalogue must be substantial", ops.length() > 10)
+
+        // Every op reports a mode; on a real device the modes are real, not unknown.
+        val modes = (0 until ops.length()).map { ops.getJSONObject(it).getString("mode") }
+        assertTrue(
+            "every op must report a mode; got ${modes.toSet()}",
+            modes.all {
+                it in setOf("allowed", "ignored", "default", "foreground", "errored", "unknown")
+            },
+        )
+        // The overlay op — the one this device resets — must be present and readable.
+        val overlay =
+            (0 until ops.length())
+                .map { ops.getJSONObject(it) }
+                .first { it.getString("op") == "SYSTEM_ALERT_WINDOW" }
+        Log.i(TAG, "app_ops SYSTEM_ALERT_WINDOW -> ${overlay.getString("mode")}")
+    }
+
+    @Test
+    fun accessibility_reports_canWrite_and_refuses_a_toggle_without_the_grant() {
+        // A read is always allowed; the write needs WRITE_SECURE_SETTINGS, which a normal
+        // install does not hold, so the toggle must report changed:false with a reason
+        // rather than silently doing nothing.
+        val json = call("accessibility")
+
+        assertTrue(json.has("canWrite"))
+        assertTrue(json.has("enabled"))
+        assertTrue(json.has("installed"))
+
+        val toggled =
+            call(
+                "accessibility",
+                mapOf("action" to "enable", "component" to "com.example/.Svc"),
+            )
+
+        assertEquals("the action must be reported", "enable", toggled.getString("action"))
+        assertTrue("a toggle must report whether it changed", toggled.has("changed"))
+        if (!toggled.getBoolean("changed")) {
+            assertTrue(
+                "a refused toggle must carry a reason",
+                toggled.optString("reason").isNotEmpty(),
+            )
+        }
+    }
+
+    @Test
+    fun systemui_state_reports_the_qs_tiles_and_gating_keys() {
+        val json = call("systemui_state")
+
+        assertTrue(json.has("qsTiles"))
+        assertTrue(json.has("secure"))
+        assertTrue(json.has("global"))
+        assertTrue(json.has("activeRestrictions"))
+
+        // The QS layout key is read (possibly empty on a fresh device).
+        Log.i(TAG, "systemui_state qsTiles -> ${json.getJSONArray("qsTiles")}")
+
+        // The OEM/settings components are probed for existence — the read-only half of
+        // `am start -n`. Each target reports installed/resolvable, whether or not it
+        // exists, so a stripped build is an answer rather than a failure.
+        val targets = json.getJSONArray("launchTargets")
+        assertTrue("the launch targets must be probed", targets.length() >= 4)
+        val engineermode =
+            (0 until targets.length())
+                .map { targets.getJSONObject(it) }
+                .first { it.getString("packageName") == "com.sprd.engineermode" }
+        assertTrue("an EngineerMode target must be reported", engineermode.has("installed"))
+        assertTrue(engineermode.has("resolvable"))
+        Log.i(TAG, "launchTargets -> $targets")
+    }
+
+    @Test
+    fun device_info_reports_low_ram_and_memory_class() {
+        val json = call("device_info")
+
+        assertTrue("device_info must report lowRam", json.has("lowRam"))
+        assertTrue("device_info must report a memory class", json.getInt("memoryClassMb") > 0)
+        Log.i(
+            TAG,
+            "device_info lowRam=${json.getBoolean("lowRam")} " +
+                "memoryClassMb=${json.getInt("memoryClassMb")}",
+        )
+    }
+
+    @Test
+    fun escalation_recon_reports_the_route_state() {
+        val json = call("escalation_recon")
+
+        assertTrue(json.has("ownUid"))
+        assertTrue(json.has("rooted"))
+        assertTrue(json.has("isDeviceOwner"))
+        // Each known route is probed, whether or not it is present.
+        for (route in listOf("shizuku", "sui", "dhizuku")) {
+            val r = json.getJSONObject(route)
+            assertTrue("$route must report installed", r.has("installed"))
+            assertTrue("$route must report permissionGranted", r.has("permissionGranted"))
+        }
+        Log.i(TAG, "escalation_recon -> $json")
+    }
+
+    @Test
+    fun wireless_debug_reports_state_and_is_honest_about_the_code() {
+        val json = call("wireless_debug")
+
+        assertTrue(json.has("wirelessDebuggingEnabled"))
+        assertTrue(json.has("usbDebuggingEnabled"))
+        assertTrue(json.has("ips"))
+        // The honest wall: the pair port/code are not readable by any app.
+        assertFalse("the pair port must not be claimed readable", json.getBoolean("portReadable"))
+        assertTrue(json.getString("pairCommandHint").contains("adb pair"))
+        Log.i(TAG, "wireless_debug -> $json")
+    }
+
+    @Test
+    fun launching_a_system_intent_from_the_app_process() {
+        // The question: does startActivity from the app's own (background) process put a
+        // system activity on screen, or does Android silently drop it? `started` from the
+        // API is only "startActivity did not throw"; the proof is the resumed activity,
+        // which is read here with shell identity via UiAutomation.
+        val ui = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val before = topActivity(ui)
+
+        val json =
+            call(
+                "systemui_state",
+                mapOf(
+                    "action" to "launch",
+                    "intent" to "android.settings.APPLICATION_DEVELOPMENT_SETTINGS",
+                ),
+            )
+        val started = json.getBoolean("started")
+        val reason = json.optString("reason")
+
+        Thread.sleep(3000)
+        val after = topActivity(ui)
+
+        Log.i(TAG, "LAUNCH started=$started reason='$reason'")
+        Log.i(TAG, "LAUNCH before='$before'")
+        Log.i(TAG, "LAUNCH after='$after'")
+
+        // Informational: the finding is whether `after` names the settings activity. No
+        // hard assertion — a userdebug emulator is more permissive than a user build, so
+        // the value of this is the observation, not a pass/fail.
+        assertTrue("the launch attempt must report an outcome", json.has("started"))
+    }
+
+    /** The current top activity, read via a shell command with shell identity. */
+    private fun topActivity(ui: android.app.UiAutomation): String {
+        val pfd = ui.executeShellCommand("dumpsys activity activities")
+        val text =
+            android.os.ParcelFileDescriptor
+                .AutoCloseInputStream(pfd)
+                .bufferedReader()
+                .readText()
+
+        // The first resumed/visible activity line names the top activity.
+        val line =
+            text.lineSequence().firstOrNull { it.contains("mResumedActivity") }
+                ?: text.lineSequence().firstOrNull { it.contains("ResumedActivity") }
+                ?: text.lineSequence().firstOrNull { it.contains("topResumedActivity") }
+
+        return line?.trim().orEmpty()
     }
 
     private companion object {

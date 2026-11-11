@@ -2,6 +2,7 @@ package com.vyzorix.bridge
 
 import com.vyzorix.bridge.apis.AccessibilityApi
 import com.vyzorix.bridge.apis.AirplaneModeApi
+import com.vyzorix.bridge.apis.AppOpsApi
 import com.vyzorix.bridge.apis.AppStorageApi
 import com.vyzorix.bridge.apis.AudioStateApi
 import com.vyzorix.bridge.apis.BatteryApi
@@ -26,6 +27,7 @@ import com.vyzorix.bridge.apis.DeviceOwnerCapabilitiesApi
 import com.vyzorix.bridge.apis.DisplayInfoApi
 import com.vyzorix.bridge.apis.DnsServersApi
 import com.vyzorix.bridge.apis.DoNotDisturbApi
+import com.vyzorix.bridge.apis.EscalationReconApi
 import com.vyzorix.bridge.apis.ExternalStorageApi
 import com.vyzorix.bridge.apis.FileDescriptorsApi
 import com.vyzorix.bridge.apis.FontScaleApi
@@ -63,16 +65,19 @@ import com.vyzorix.bridge.apis.StorageAllFilesApi
 import com.vyzorix.bridge.apis.StorageApi
 import com.vyzorix.bridge.apis.StorageVolumesApi
 import com.vyzorix.bridge.apis.SystemPropertiesApi
+import com.vyzorix.bridge.apis.SystemUiStateApi
 import com.vyzorix.bridge.apis.ThermalApi
 import com.vyzorix.bridge.apis.TimeInfoApi
 import com.vyzorix.bridge.apis.UsbAttachApi
 import com.vyzorix.bridge.apis.UsbControlApi
 import com.vyzorix.bridge.apis.UsbDetachApi
 import com.vyzorix.bridge.apis.UsbStateApi
+import com.vyzorix.bridge.apis.UserRestrictionsApi
 import com.vyzorix.bridge.apis.VpnStateApi
 import com.vyzorix.bridge.apis.WallpaperApi
 import com.vyzorix.bridge.apis.WifiControlApi
 import com.vyzorix.bridge.apis.WifiStateApi
+import com.vyzorix.bridge.apis.WirelessDebugApi
 
 /**
  * Every read-only bridge API, in one place.
@@ -115,6 +120,7 @@ object ApiCatalogue {
         linkedMapOf(
             AccessibilityApi.NAME to AccessibilityApi,
             AirplaneModeApi.NAME to AirplaneModeApi,
+            AppOpsApi.NAME to AppOpsApi,
             AppStorageApi.NAME to AppStorageApi,
             AudioStateApi.NAME to AudioStateApi,
             BatteryApi.NAME to BatteryApi,
@@ -138,6 +144,7 @@ object ApiCatalogue {
             DisplayInfoApi.NAME to DisplayInfoApi,
             DnsServersApi.NAME to DnsServersApi,
             DoNotDisturbApi.NAME to DoNotDisturbApi,
+            EscalationReconApi.NAME to EscalationReconApi,
             ExternalStorageApi.NAME to ExternalStorageApi,
             FileDescriptorsApi.NAME to FileDescriptorsApi,
             FontScaleApi.NAME to FontScaleApi,
@@ -174,10 +181,13 @@ object ApiCatalogue {
             StorageApi.NAME to StorageApi,
             StorageVolumesApi.NAME to StorageVolumesApi,
             SystemPropertiesApi.NAME to SystemPropertiesApi,
+            SystemUiStateApi.NAME to SystemUiStateApi,
             ThermalApi.NAME to ThermalApi,
             TimeInfoApi.NAME to TimeInfoApi,
             UsbControlApi.NAME to UsbControlApi,
+            UserRestrictionsApi.NAME to UserRestrictionsApi,
             WallpaperApi.NAME to WallpaperApi,
+            WirelessDebugApi.NAME to WirelessDebugApi,
             WifiControlApi.NAME to WifiControlApi,
             VpnStateApi.NAME to VpnStateApi,
             WifiStateApi.NAME to WifiStateApi,

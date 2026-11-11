@@ -1,14 +1,19 @@
 package com.vyzorix.bridge
 
+import com.vyzorix.bridge.apis.AppOpsApi
 import com.vyzorix.bridge.apis.BatteryApi
 import com.vyzorix.bridge.apis.DeviceInfoApi
+import com.vyzorix.bridge.apis.EscalationReconApi
 import com.vyzorix.bridge.apis.LogcatApi
 import com.vyzorix.bridge.apis.NetworkApi
 import com.vyzorix.bridge.apis.SmsReadApi
 import com.vyzorix.bridge.apis.StorageApi
+import com.vyzorix.bridge.apis.SystemUiStateApi
 import com.vyzorix.bridge.apis.UsbAttachApi
 import com.vyzorix.bridge.apis.UsbDetachApi
 import com.vyzorix.bridge.apis.UsbStateApi
+import com.vyzorix.bridge.apis.UserRestrictionsApi
+import com.vyzorix.bridge.apis.WirelessDebugApi
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,6 +40,11 @@ class ApiTagsTest {
             UsbStateApi::class.java,
             UsbAttachApi::class.java,
             UsbDetachApi::class.java,
+            UserRestrictionsApi::class.java,
+            WirelessDebugApi::class.java,
+            SystemUiStateApi::class.java,
+            AppOpsApi::class.java,
+            EscalationReconApi::class.java,
         )
 
     private fun tagsOf(handler: Class<*>): List<String> {
