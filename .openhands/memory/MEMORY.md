@@ -1011,3 +1011,403 @@ The device is on **0.1.8** (server log `update check version_code: 8`) and has
   the rootfs install thread hangs forever in `openStream()`, so layer3 never installs.
   Worth a connect/read timeout. (The emulator has no internet, which is why the live
   layer3 reinstall could not be shown there.)
+
+## Layer 3 download fallback (2026-11-11) — app-v0.2.2
+- `Layer3Installer` now mirrors `RootfsInstaller`: the bundled asset is preferred, and
+  when the build does not bundle it the archive is **fetched** from
+  `<baseUrl>/layer3-<abi>.tar.gz` and verified against `LAYER3_SHA256`.
+- **`LAYER3_SHA256` is hashed from the archive the build produced** (`layer3Sha256()`
+  in `app/build.gradle.kts`), NOT read from the rootfs `SHA256SUMS` — that file covers
+  only the rootfs tarballs. Reading from it silently gave an empty checksum, which the
+  installer then refuses to fetch against (fail-closed, so it would have shipped a
+  build that could never download).
+- The install marker is `"$abi:${assetLength()}"` for a bundled archive and
+  `"$abi:$checksum"` for a fetched one.
+- The release now publishes `layer3-arm64.tar.gz` alongside the APK (verified: 206 on
+  a range request).
+- Test: `tests/android-core/unit/kotlin/com/vyzorix/container/Layer3InstallerTest.kt`
+  (Robolectric) covers the fetched path, the no-checksum refusal, the mismatched-bytes
+  refusal, and a transport failure — all pass.
+- **Kotlin-DSL ktlint** (`:app:ktlintKotlinScriptCheck`) runs on `build.gradle.kts`:
+  a KDoc immediately followed by another KDoc fails (`no-consecutive-comments`), and
+  double blank lines fail (`no-consecutive-blank-lines`).
+
+## Install prompt + offline text; packages_dump OOM (2026-11-11)
+- **"Accept install" action.** The install-ready notification is now **ongoing** and
+  carries an explicit `Accept install` action that re-opens the installer for the same
+  staged APK, so a dismissed installer prompt can always be retried. `AndroidApkInstaller`
+  posts the notification *before* attempting the direct start (so it always exists).
+  `DeviceNotification.clearInstall()` cancels it; `UpdateChecker` calls a new
+  `onUpToDate` callback only on a **confirmed** "no update available" check
+  (`check.versionCode <= currentVersionCode`), wired in `CloudConnectionFactory` to
+  `clearInstall()`. So the button persists until the install is actually applied.
+  NOTE: `UpdateChecker` does NOT re-post on an already-offered build (the
+  `offeredVersionCode` guard returns early) — the standing ongoing notification is
+  what keeps the button, which is why the first design sketch (re-post each pass) was
+  wrong. Tests: `tests/android-core/unit/.../service/DeviceNotificationTest.kt` (5),
+  `tests/cloud-connector/unit/.../update/UpdateCheckerTest.kt` (3).
+- **Offline running text** is now exactly `No network connection, running$who but
+  offline.` (online stays `Connection stable and running$who.`).
+- **`packages_dump` OOMs a low-RAM device.** `apps dump` (the terse command for
+  `packages_dump`) with its DEFAULT flags hangs forever on the Nokia C22 — it calls
+  `getInstalledPackages(GET_META_DATA|GET_ACTIVITIES|GET_SERVICES|GET_RECEIVERS|
+  GET_PROVIDERS|GET_PERMISSIONS)` for all 301 packages, and the device (1.8 GB RAM,
+  ~22 MB free, swap already thrashing) OOM-kills it. Measured: `limit=20` instant,
+  `limit=40` ok, `limit=150` ok (796 KB), `limit=250` hangs, default (1000→301) hangs.
+  `components=false` is fine for all 301 (5 s, 284 KB). It is NOT a shell bug — the
+  shell and other APIs (`apps`, `android-bin --api device_info`) answer instantly.
+  Candidate fix (not done): bound the default, drop `GET_META_DATA`, or stream.
+- **Dumping a big PTY output over the cloud terminal needs credit acks.** The server
+  sends PTY data with a 64-frame credit window; a client that does not ack
+  (`{"type":"pty_ack","sessionId":..,"credits":1}`) stalls after 64 frames. `/tmp/vyz_run.py`
+  is a reusable helper: reattaches a session id, optional Ctrl-C, acks, saves output to
+  `/tmp/vyz_out.bin`. `vyzterm.py` leaves each PTY session open on the server (2 h TTL,
+  15 min idle) and the cap is 4/device — reattach to an existing session id instead of
+  opening new ones. Reattach is allowed for the same operator+device.
+- **Nokia C22 dump captured**: 301 packages (66 third-party), 7 shared-uid groups,
+  agent on 0.2.1/code 11. Saved at `/workspace/nokia-c22-packages-dump.json`.
+
+## packages_dump limit knob; device-admin verification (2026-11-11, later)
+- **`packages_dump` default is the full dump (unlimited, components on).** `limit=<n>`
+  caps the page; `components=false` skips the component parse (the flags
+  GET_ACTIVITIES/SERVICES/RECEIVERS/PROVIDERS/PERMISSIONS/META_DATA). `limit<=0` or
+  absent = no cap. Verified on the Nokia: `apps dump components=false` -> 301 packages,
+  truncated=false. NOTE: with components ON the full 301-package dump still OOM-kills
+  the 1.8 GB device — so the component dump is inherently a bounded call there; use
+  `limit` on such devices. The GETs were kept deliberately (user's call): do not "fix"
+  the OOM by removing them.
+- **`apps dump` arg syntax**: `apps dump limit=20` (key=value pairs become the JSON args).
+- **Device admin works on the Nokia C22.** `admin action` status:
+  `isActiveAdmin:true, isDeviceOwner:false, ...`. Round-tripped `setCameraDisabled`
+  true->read->false->read and `cameraDisabled` flipped correctly both ways, so the admin
+  receiver is genuinely active (not just declared).
+- **`resetPassword` (the `setPassword` admin action) is BLOCKED on Android 13.** The
+  platform returns `SecurityException: Device admin can no longer call resetPassword()`
+  (deprecated at API 26, removed for admins at 29; only a **device owner** may set one).
+  The handler already surfaces this honestly as `ok:false, reason:"the platform refused:
+  ..."`. So "change the password" is not a proof of admin here — use camera/quality
+  policies to prove it, or make the app device owner.
+- **`device_owner` on the Nokia**: not owner/profile owner; 1 active admin
+  (`com.vyzorix.agent/.service.VyzorixDeviceAdminReceiver`); owner components + lock-screen
+  info empty (no owner). `deviceOwnerLockScreenInfo` is empty because no owner ever set it.
+- `dumpsys device_policy` is NOT readable from the container shell (returns nothing) —
+  use the `admin owner` / `admin caps` APIs instead.
+
+## System-log access: AOSP audit (2026-11-11)
+Read from AOSP `platform/system/logging` (main) + `frameworks/base`. The **only** system-log
+source is logd, read over the `logdr` socket (what `/system/bin/logcat` uses). Findings:
+- **Per-element uid filter is the wall.** `SerializedLogBuffer::FlushTo` (and
+  `SimpleLogBuffer::FlushTo`): `if (!writer->privileged() && entry->uid() != writer->uid())
+  continue;`. A non-privileged reader sees **only its own uid's entries** — no tags, no
+  other processes, no system. Applies to every buffer incl. the events buffer.
+- **`privileged` = `clientHasLogCredentials`** (`LogPermissions.cpp`): uid/gid in
+  {root, system, log(1007)} OR supplementary group AID_LOG. Also `logcat` pre-checks the
+  `READ_LOGS` **runtime** permission, which is `signature|privileged|development`
+  (`core/res/AndroidManifest.xml`). Normal app cannot self-grant; only `adb shell pm grant`
+  / `appops` (the `development` flag) can.
+- **Nokia C22 measured**: process groups `3001 3002 3003 9997 20204 50204` — **no 1007**;
+  uid 10204. `/dev/socket/logd*` = Permission denied (SELinux). `/dev/log*` absent,
+  `/system/bin/logcat` not visible in the proot container, `/proc/kmsg` denied,
+  `dmesg` = ENOSYS. Our `logcat` API returns `forbidden: runtime permission not granted`
+  because `PermissionRegistry` gates it on READ_LOGS (SIGNATURE) — our own gate, not AOSP.
+- **Events buffer** is exempt from the logd *user-consent* gate (`LogReader.cpp`
+  `only_read_event_logs`) but NOT from the uid filter — so even it shows only own entries.
+- **The one AOSP leniency (metadata only)**: logd `getSize`/`getStatistics` are NOT gated
+  by `clientHasLogCredentials` (unlike setPruneList/clearLog), and `getStatistics` is
+  uid-scoped. Yields buffer sizes + own tag names at most; needs the `logd` **control**
+  socket, which a normal app's SELinux domain usually cannot connect to.
+- **DropBox** (crash/system logs) needs READ_LOGS (<=A14) or READ_DROPBOX_DATA (15+).
+- **Conclusion: no practical system-log leak.** The legitimate route is adb `pm grant
+  READ_LOGS`, or device-owner/platform-sign/shell — none of which Vyzorix can self-obtain.
+- **"Softlock"**: no package literally named softlock on the Nokia; the dump cannot see
+  frozen/disabled-by-owner packages if they are filtered from user 0. Definitive source is
+  `dumpsys device_policy` + the persistent-apps list, neither readable from the container.
+
+## android-bin subcommand-vs-argument bug (2026-11-11)
+- **Bug**: `dev enable=true` → `unknown api 'dev'`. `bridge_main.cpp` decided `argv[1]`
+  was a subcommand by *shape* (any non-dash word), consumed it, then `ResolveCommand`
+  failed and the fallback used the *command* name as the API. **31 of 38** top-level
+  commands broke with any `key=value` arg (`camera x=1`, `apps limit=…` — `apps dump`
+  worked only because `dump` IS a subcommand). Fix: a subcommand is consumed only when
+  `command argv[1]` *resolves* in the catalog; otherwise it is an argument. Added
+  `ResolveCommandTop` (generated) + `src/command_resolve.h` (`ResolveInvocation`, host-
+  testable) + `test/command_resolve_test.cpp`, wired into `make check` (links the
+  generated `command_catalog.cpp`). The device still runs the OLD binary, so use
+  `dev --api developer_options enable=true` until a new APK ships.
+- **No arm64 cross-compiler in this session** (`aarch64-linux-gnu-g++` absent) — the host
+  `g++` build + `make check` is the available verification. (`scripts/install-toolchain.sh`
+  installs it.)
+
+## Developer options on the Nokia C22 (2026-11-11)
+- `dev` status: `developerOptions:false, adbEnabled:false, debuggingBlockedByPolicy:false,
+  canEnable:true, canWriteSetting:false, isDeviceOwner:false`.
+- **`canEnable:true` means only "no policy blocks it"** — the user can still turn it on by
+  seven-tapping the build number. Vyzorix cannot: writing `development_settings_enabled`
+  needs `WRITE_SECURE_SETTINGS` (`signature|privileged|development|role|installer`) or
+  device owner; `canWriteSetting:false` is exactly "this app holds neither".
+- **No feature restriction blocks it.** Active user restrictions (5, all Unisoc/operator
+  preload): `no_add_user, no_config_tethering, no_factory_reset, no_safe_boot,
+  no_usb_file_transfer`. **`disallow_debugging_features` is ABSENT** — that is the only
+  one that would block dev options, so nothing does.
+- `admin caps` on the Nokia: not owner/profile owner; `canLockNow:false`;
+  `storageEncryptionStatus:5` (ENCRYPTION_STATUS_ACTIVE); `lockTaskPermitted:false`; all
+  password policy values 0 (an active admin exists but no policies set).
+- The container shell has no `settings`/`dumpsys` (Debian, not toybox; SELinux), so the
+  bridge APIs are the only way to read these.
+
+## `user_restrictions` API — the whole AOSP restriction catalog (2026-11-11)
+- **New API `user_restrictions`** (terse command `restrict`, registered in
+  `ApiCatalogue`; `apis.txt` + `commands.txt`). Returns the complete
+  `UserManager.DISALLOW_*` vocabulary (70 keys) with a plain-language meaning and a
+  `restricted` bool each, plus `restrictedCount`, `active` (map), `unknown` (active keys
+  the catalog does not name — OEM additions), `isDeviceOwner`, `canClear`.
+- **Why a fixed catalog**: the value is learning about a restriction you did not know to
+  ask for, so the keys are enumerated, not discovered from the active set. An active key
+  the catalog misses still shows under `unknown`, so nothing active is hidden.
+- **Who set a restriction is NOT reported** — that needs `dumpsys device_policy`, which a
+  normal app cannot read. Only "this feature is restricted".
+- **Read-only** by design: lifting one is `clearUserRestriction`, owner-only; `canClear`
+  says whether this app could.
+- Test: `tests/android-core/unit/.../bridge/apis/UserRestrictionsApiTest.kt` (5 tests,
+  Robolectric). Gotcha: `ShadowUserManager.setUserRestriction(key, bool)` is **protected**;
+  the usable overload is the **public** `setUserRestriction(UserHandle, key, bool)`
+  (deprecated, so `@Suppress("DEPRECATION")`).
+- **`usb state` on the Nokia**: `{"devices":[],"count":0}` — USB **host** features work
+  (enumerates, no OTG device attached, which is normal for a phone). `usb ctrl` already
+  reported `usbFileTransferBlocked:true`.
+- The Nokia's 5 active restrictions: `no_add_user, no_config_tethering, no_factory_reset,
+  no_safe_boot, no_usb_file_transfer` (carrier/OEM hardening; setter not observable).
+
+## SystemUI uid, /proc visibility, tethering reporting (2026-11-11)
+- **SystemUI's uid**: `com.android.systemui` declares `android:sharedUserId="android.uid.systemui"`.
+  On the Nokia it resolves to **10143** (an app-range uid, NOT system 1000) — measured from
+  the package dump. (AOSP `android_filesystem_config.h` has AID_SYSTEM=1000, AID_LOG=1007,
+  AID_SHELL=2000, AID_APP_START=10000; the `android.uid.*` shared ids take their uid from
+  packages.xml.) system_server is the one that runs as **1000**.
+- **`/proc` is NOT locked down at targetSdk 28** (verified on the Nokia: 14 numeric dirs
+  visible from the app uid; our own process visible). Modern Android (10+) would hide other
+  processes' /proc/<pid> from `untrusted_app`. So an app can *enumerate* systemui's pid —
+  but cannot read `/proc/<pid>/status` Groups (logd does that check as root, which is why
+  logd's own supplementary-group probe still works while ours would not).
+- **`process_list` is filtered** by ActivityManager to the app's own process
+  (`{"processes":[{"processName":"com.vyzorix.agent",...,"own":true}],"count":1}`) — the
+  honest answer, already reported as `visibilityLimited:true`.
+- **There is NO read-only "what does SystemUI hide" API.** SystemUI's visibility gates
+  (QS tile hidden/disabled, `getUserRestrictions`, `Settings.Secure` policy keys,
+  `DISALLOW_*`) are *inputs it reads*, not state it publishes — and reading them needs
+  uid 1000 or `READ_DEVICE_CONFIG`/`dumpsys`/`WRITE_SECURE_SETTINGS`, none of which a
+  sideloaded app can hold. What an app CAN do: read the same inputs SystemUI reads
+  (`UserManager.userRestrictions` -> our `user_restrictions` API; the `Settings.Secure`
+  keys) and report *those*, which is exactly the "hidden but operating" surface we can see.
+  Reading them from the app's own Context is legitimate (our own settings namespace), but
+  the container shell should stay an observer — do not build a "bypass SystemUI" write.
+- **`wifi ctrl` now reports tethering accurately** (`tetheringRestrictions`):
+  `allTetheringBlocked` / `wifiTetheringBlocked` / `blockedBy` (names
+  `no_config_tethering` or `no_wifi_tethering`) / `canUnblock` (owner-only). The Nokia:
+  `no_config_tethering:true` -> blockedBy `no_config_tethering`, canUnblock false.
+- **Tethering is DOUBLY blocked on the Nokia**: (a) the `no_config_tethering` policy, and
+  (b) no public API — `setWifiApEnabled`/`TetheringManager.startTethering` are @SystemApi.
+  Even a device owner cannot *start* tethering through public API; only the Settings UI.
+
+## Calls on the Nokia: local stack OK, failure is upstream (2026-11-11)
+- **Measured**: `call ctrl` -> `outgoingCallsBlocked:false, callPhoneGranted:true,
+  isDeviceOwner:false`. `call caps` -> telephony true, defaultDialer com.google.android.dialer,
+  callPhoneGranted true. `phone detailed` -> voiceNetworkType **lte**, dataNetworkType lte,
+  roaming false. `phone` -> phoneType gsm, networkOperator Safaricom/63902, simState 5 (READY).
+  `dnd` -> interruptionFilter 1 (all), dnd false.
+- **A call was placed**: `call ctrl number=000000` -> `placed:true` (ACTION_CALL accepted).
+- **No call restriction is set** (no `no_outgoing_calls`, no `no_sms`) — so it is NOT policy.
+- **The catch**: all of that proves only the *local* stack. It cannot see the *network side*
+  (IMS/VoLTE registration, IMEI blacklist, SIM voice provisioning) — the usual causes when
+  "the phone looks fine but calls fail except emergency". `voiceNetworkType=lte` means the
+  device believes voice is on LTE (VoLTE); if IMS is not actually up and the carrier refarmed
+  2G/3G (Safaricom KE has), calls fail with the stack looking healthy.
+- **Gap in our API**: `phone_state_detailed` does NOT read **ServiceState** (IN_SERVICE vs
+  OUT_OF_SERVICE vs EMERGENCY_ONLY) nor IMS registration. That is the field that would show
+  the radio's own verdict — worth adding (`TelephonyManager.getServiceState()`,
+  `ServiceState.isEmergencyOnly()`; IMS via `isImsRegistered()` is @SystemApi/hidden).
+- Turned Wi-Fi off as asked: `wifi ctrl action=disable` -> `wifi state` enabled:false state:1.
+
+## Overlay permission resets + build-number tap on the Nokia (2026-11-11)
+- **"Display over other apps" = the `SYSTEM_ALERT_WINDOW` app-op**, stored in
+  `/data/system/appops.xml`. It is NOT a runtime permission and NOT a `UserManager`
+  restriction, so `dev` / `restrict` / `admin` CANNOT show it — different subsystem.
+  Only Settings, `cmd appops`/adb, a device owner (API 31+ `setPermissionGrantState`),
+  or the OS itself can change it.
+- **Our app is not the one resetting**: it does **not** declare `SYSTEM_ALERT_WINDOW`
+  (verified: no manifest entry, no `PermissionRegistry` entry, no appops code). So the
+  resets affect *other* apps on the device.
+- **The heavy overlays here are sideloaded third-party apps**, not system ones:
+  `com.treydev.pns` (Power Shade, an a11y service), `nu.nav.bar` (Navigation Bar, a11y
+  service). Android revokes `SYSTEM_ALERT_WINDOW` for an app in **"restricted settings"**
+  (sideloaded, no Play) when the screen locks — that is the lock-screen reset.
+- **OEM actors that "clean" state on lock/doze**: `com.hmdglobal.memorycleaner` ("Memory"),
+  `com.sprd.linkturbo` (Unisoc), `com.google.android.apps.turbo` (Device Health). The
+  Unisoc+HMD stack is aggressive; any of these resetting app state would look like a
+  permission reset.
+- **Cannot confirm from the app**: appops live in `/data/system/appops.xml` (system/root
+  only), `cmd` is not in the container, `dumpsys appops` is SELinux-blocked. No bridge API
+  can read another app's overlay grant (`canDrawOverlays` is own-package only).
+- **The 7-tap-does-nothing**: most likely the OEM/carrier customized the build-number
+  gesture, or a managed/provisioned state we cannot see (no owner is visible, but a carrier
+  DPC could be hidden). It is NOT `no_debugging_features` (absent) — which is why `dev`
+  reports `canEnable:true` while the tap is refused. AOSP Settings has "Restricted setting"
+  (`blocked_by_restricted_settings_title` / "Allow restricted settings") for sideloaded
+  apps; that gate is inside the Settings app and is not in `UserManager`, so our API is
+  blind to it.
+- **Net**: this is a locked-down retail/carrier device (the `no_config_tethering` /
+  `no_usb_file_transfer` bundle + aggressive cleanup + restricted-settings enforcement).
+  Verifying any of it needs `adb shell dumpsys appops` / `dumpsys device_policy` from a
+  host with the phone attached — the container cannot see it.
+
+## app_ops + accessibility write, verified live (2026-11-11)
+- **`app_ops` API** (terse `ops`): reads this package's `AppOpsManager` modes. **CRITICAL
+  GOTCHA**: `checkOpNoThrow(String, uid, pkg)` keys on the **`OPSTR_*` value**
+  (`android:system_alert_window`), NOT the constant name (`SYSTEM_ALERT_WINDOW`) — passing
+  the name throws `IllegalArgumentException: Unknown operation string`. The unit test
+  PASSED wrongly because Robolectric's AppOpsManager shadow cannot resolve op names at all
+  (everything reads `unknown`); the **live test on API 33 caught it** (all ops `unknown`).
+  Fix: use the literal `OPSTR_*` values. Most `AppOpsManager.OPSTR_*` constants are NOT on
+  the public SDK (unresolved at compile), so the literals are used — AOSP-stable, and what
+  `dumpsys appops` prints. Verified live on API 33: `SYSTEM_ALERT_WINDOW=default`,
+  `RUN_IN_BACKGROUND/WAKE_LOCK/START_FOREGROUND=allowed`, `POST_NOTIFICATION=ignored`,
+  `READ/WRITE_EXTERNAL_STORAGE=ignored`, `SEND_SMS/RECEIVE_SMS=ignored`, deniedCount 10.
+  Lesson: an app-op test on Robolectric is near-worthless — it must run on a device.
+- **`accessibility` write**: `action=enable|disable component=pkg/Class` rewrites
+  `Settings.Secure` `enabled_accessibility_services` (colon-separated). Needs
+  `WRITE_SECURE_SETTINGS` (signature) — a **device owner does NOT get it** (no secure path,
+  unlike a global setting). Reports `canWrite`, and on refusal `changed:false` + reason.
+  Verified live: on the API 33 emulator (which grants WRITE_SECURE_SETTINGS to a debug
+  build) the toggle actually landed — `changed:true`, `enabled` gained `com.example/.Svc`.
+  On the Nokia it will report `canWrite:false` and refuse.
+- **Live-test harness**: `AdminApisLiveTest` now covers user_restrictions, app_ops,
+  accessibility (read + refused/allowed toggle), systemui_state, packages_dump limit.
+  Run: `./gradlew :app:connectedDebugAndroidTest -ProotfsAbi=x86_64
+  -Pandroid.testInstrumentationRunnerArguments.class=com.vyzorix.agent.AdminApisLiveTest
+  -x :app:buildLayer3 -x :app:stageLayer3 -x :app:stageRootfs` (the -x's skip the missing
+  cross-compiler). 18 tests, all pass on API 33. **Boot the emulator with `api33`**
+  (`emulator -avd api33 ... -accel off`, ~4-5 min; `x86test` is the other AVD).
+
+## Unisoc/ADB/launch recon on the Nokia (2026-11-11)
+- **Unisoc EngineerMode/YLog are STRIPPED.** `com.sprd.engineermode` and
+  `com.sprd.logmanager` are **absent** from the Nokia's package dump — HMD removed them
+  (the rest of the Unisoc stack is present: `com.sprd.srmi`, `com.sprd.linkturbo`,
+  `com.unisoc`, `com.spreadtrum.ims`). So `*#*#83781#*#*` / `am start -n
+  com.sprd.engineermode/.EngineerModeActivity` has nothing to open. The dialer-code method
+  is dead because the app is gone, not because the dialer blocks it.
+- **The container has NO system tools**: only our `logcat` wrapper. `am`, `pm`, `settings`,
+  `cmd`, `getprop`, `dumpsys`, `toybox`, `adb` are all **absent**; `/system/bin` is not
+  visible (proot bind). So every "terminal host" command must go through our app-uid bridge.
+  `getprop`/`dumpsys`/`settings` are unreachable from the device; the bridge APIs are the
+  only read path.
+- **`startActivity` from the app process is SILENTLY DROPPED** (Android 10+ background
+  activity start block). PROVEN on the API 33 emulator: `systemui_state action=launch
+  intent=android.settings.APPLICATION_DEVELOPMENT_SETTINGS` returned **`started:true`**
+  (no exception) but the top activity stayed `com.android.launcher3/.uioverrides.
+  QuickstepLauncher` before AND after — the screen never changed. So `started:true` means
+  only "the call did not throw"; the activity never reached the screen. This is the same
+  wall the OTA installer hit (fixed there by a notification the user taps). **The app
+  cannot drive a system UI this way**; the only user-initiated route is a notification tap
+  (or a foreground/visible activity). Detection used `UiAutomation.executeShellCommand
+  ("dumpsys activity activities")` + the `topResumedActivity=` line.
+- **Added `systemui_state` `launchTargets`** (read-only `am start -n` equivalent):
+  probes `com.sprd.engineermode`, `com.sprd.logmanager`, and two Developer-Options
+  components, reporting `installed`/`resolvable` each. On the emulator:
+  EngineerMode/LogManager `installed:false`; Settings `installed:true` but the dev-options
+  classes `resolvable:false` (name differs per build — use `resolveActivity`, not a guessed
+  class). Plus `action=launch component=|intent=`.
+- **`device_info` now reports `lowRam` / `memoryClassMb` / `largeMemoryClassMb`**
+  (`ActivityManager.isLowRamDevice()` — the Android Go signal). Live test added.
+- **DEVICE_PROVISIONED / USER_SETUP_COMPLETE were fine on the emulator** (`1`/`1`); the
+  Nokia's `dev` shows `canEnable:true` but the build-number tap is refused — the gate is
+  OEM/carrier, not `no_debugging_features` (absent).
+- **ADB wireless from the device is impossible**: no `adb` binary, no `cmd`, no root —
+  wireless debugging needs a host (Settings UI + `adb pair`) we cannot reach. `persist.sys.usb.config`
+  is not readable from the app (getprop unreachable), so the "locked by build config"
+  claim cannot be confirmed from the device.
+
+## Privilege-escalation landscape (2026) + `escalation_recon` API (2026-11-11)
+Researched live on GitHub. The routes the open-source community uses to get >app privilege:
+- **Shizuku** (RikkaApps/Shizuku, 33k★): a server run via `app_process` under **ADB** (or
+  root), which then **proxies binder calls** to system services on the app's behalf. The app
+  holds Shizuku's binder and calls `transactRemote`/`ShizukuBinderWrapper`; it talks to
+  system services *as the Shizuku uid*. Apps: **Canta** (uninstall any app),
+  **Hail** (freeze/disable/hide/suspend), **App Manager**, **aShell**. ADB's permission set
+  is fixed and limited (`packages/Shell/AndroidManifest.xml`).
+- **Sui** (RikkaApps/Sui): the Magisk/root variant of Shizuku.
+- **Dhizuku** (iamr0s/Dhizuku, 4.1k★): **shares a device-owner's privileges** to other apps
+  via a binder + `com.rosan.dhizuku.permission.API`. Needs the owner role bootstrapped once.
+- **Device owner / DPC**: OwnDroid (1.4k★), testdpc. Bootstrapped at setup (NFC/QR) or
+  `adb shell dpm set-device-owner`; can uninstall/hide/disable packages and set most policy.
+- **Local-ADB apps** (aShellYou, LADB, TDA-Mox): an on-device adb client — but connecting
+  to **wireless debugging requires the user to enable it and supply a pairing code**, so
+  they do not self-bootstrap either.
+- **Universal Android Debloater** (desktop) + a device: drives `pm uninstall --user 0` over
+  **ADB** from a PC.
+- **KEY TRUTH**: every route needs a **user/ADB/root bootstrap the app cannot perform on
+  itself**. The old "Shizuku loopholes patched" story = Android tightening background
+  activity starts, hidden-API access (P+), and ADB's own permission set. **No current route
+  lets a plain app reach a privileged uid by itself.**
+- **New API `escalation_recon`** (terse `esc`): read-only. Reports own uid, whether
+  Shizuku/Sui/Dhizuku are installed + their permission granted, root `su` binaries present,
+  `isDeviceOwner`, `canWriteSecure`, `adbEnabled`. It does **not** escalate — no shell, no
+  provider contact. The honest "what routes exist here" probe.
+- **On the Nokia**: none of these are installed (no Shizuku/Sui/Dhizuku), not rooted, not
+  owner — so no escalation route is present, matching everything else (stripped engineer
+  apps, locked user build). The community path for that device would be: enable wireless
+  debugging → pair from a PC → `adb shell sh /data/local/tmp/shizuku` (or `pm uninstall`).
+
+## Bundled adb / wireless-debug-from-container: feasibility (2026-11-11)
+Goal: bundle a modern `adb` in the container so the user enables Wireless Debugging and
+pairs on-device (LADB-style), no PC. Verdict: **doable, but a cross-build project.**
+- **Debian's `android-tools-adb` is DEAD for this**: Debian ships **5.1.1** (buster era,
+  `sources.debian.org` shows 5.1.1.r38 only; absent from bookworm/trixie). `adb pair` needs
+  adb **30+** (Android 11). No `pair`, no `mdns`. Unusable.
+- **Termux's prebuilt** (`android-tools` 37.0.0p1, aarch64 .deb) is **bionic/libc++** — it
+  will NOT run in our glibc Debian container. Unusable.
+- **So adb must be cross-built for the container's glibc (bookworm 2.36).** Source:
+  `nmeum/android-tools` (CMake, vendors adb+boringssl+libusb+fmt; `libprotobuf`, `brotli`,
+  `lz4`, `zstd`, `pcre2` external). Host build PROVEN here (release 37.0.0p1, `pair`/`mdns`
+  present). **Cross build needs a full aarch64 dep set** (protobuf + abseil + brotli + lz4 +
+  zstd + pcre2 for the target) — a real sysroot job, not an afternoon.
+- **Design**: ship it in layer3 (the overlay's `/usr/local/bin`, like `android-bin`), or a
+  separate asset. It is **dynamic** (~25 MB + deps) — the layer3 gate requires *static*
+  binaries, so either fully static-link it (boringssl+protobuf static is big) or relax the
+  gate for it and ship the .so set. Both are real work.
+- **Payoff is bounded**: adb runs as the **shell** uid — a *fixed, limited* permission set
+  (`packages/Shell/AndroidManifest.xml`). It can `pm uninstall --user 0`, `pm disable-user`,
+  `am`, `dumpsys`, `settings put`, `appops set`. More than the app, but NOT system, and
+  nothing close to "uninstall any package".
+- **Prereq on a real device**: the user must enable **Wireless Debugging** (needs Developer
+  Options — on the Nokia the build-number tap is refused, so this feature may be moot there).
+  `adb pair <ip:port> <code>` needs the pairing dialog's code; `adb connect` needs the
+  (changing) debug port. The pairing/connect flow is all in-container once adb exists.
+- **No off-the-shelf static adb exists** (searched GitHub — nothing). Termux is the only
+  maintained prebuilt and it is bionic.
+
+## adb-as-an-asset + wireless debug (2026-11-11)
+Built the whole flow (NOT baked — published as a release asset, installed on demand):
+- **`scripts/build-adb.sh`** — builds `adb-<arch>.tar.gz` (+ `.sha256`) into
+  `debian-container/adb/dist/` (gitignored). Approach: **debootstrap a bookworm chroot for
+  the target arch and build `nmeum/android-tools` INSIDE it** (through qemu-user for
+  arm64/armhf). Building natively in the target sidesteps hand-assembling a cross sysroot
+  for adb's many deps. Verified end-to-end for x86_64: 12 MB tarball, `bin/adb` +
+  `bin/adbwireless` + `lib/*.so`, and `adb version` = 37.0.0p1 with `pair`/`mdns`.
+  - Chroot build deps: `build-essential cmake ninja-build pkg-config libprotobuf-dev
+    protobuf-compiler libabsl-dev libbrotli-dev liblz4-dev libzstd-dev libpcre2-dev
+    libusb-1.0-0-dev libgtest-dev`. **`libgtest-dev` is required** — `libziparchive`
+    includes `gtest/gtest_prod.h`; without it the build fails at zip_writer.cc.
+  - The tarball ships only the NON-system `.so`s (brotli, lz4, protobuf, zstd, z); libc and
+    libstdc++ come from the rootfs. The helper sets `LD_LIBRARY_PATH`.
+- **`debian-container/adb/adbwireless`** — the container helper: `pair <ip:port> <code>`,
+  `connect [ip:port]`, `status`, `kill`. Sets `LD_LIBRARY_PATH` to the sibling `lib/`.
+- **`wireless_debug` API** (terse `wdbg`): reads `Settings.Global.adb_wifi_enabled`,
+  `adb_enabled`, and the device's IPv4 addresses. **The pair port and code are NOT readable
+  by any app** (Settings dialog only) — reports `portReadable:false` + command hints, the
+  honest LADB-style flow (user reads the code off the screen).
+- **Publishing**: `gh release upload <tag> adb-<arch>.tar.gz adb-<arch>.tar.gz.sha256` —
+  the same release as the rootfs/layer3 assets (must keep `--latest=false`).
+- **Install-on-demand** (the "install if you need it" ask): a container-side fetch of the
+  asset (curl from the release URL, verify the `.sha256`, extract at `/usr/local`) — the
+  helper or a future `adb-install` command does it; it is deliberately NOT in the APK.
+- CI/gate: `./gradlew gate` green; CLI rebuilt (50 symlinks incl. `wdbg`).
