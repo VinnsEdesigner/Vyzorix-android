@@ -26,6 +26,13 @@ class VyzorixApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // The launcher icon tracks whether the agent is armed. Reconciling it here, at
+        // process start, is what makes it survive the moments a one-shot assertion does
+        // not: an OTA update resets the component state, and an OEM launcher may not
+        // refresh its drawer when the component flips. Without this the icon could
+        // "never hide" on a real device even though the switch was on.
+        LauncherIcon.reconcile(this)
+
         // Tell the service whether a terminal may run a plain device shell. Off in a
         // production build: it runs as the app's uid, which the container prevents.
         TerminalShellPolicy.allowUncontainedShell(BuildConfig.ALLOW_UNCONTAINED_SHELL)

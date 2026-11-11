@@ -29,6 +29,12 @@ class UpdateChecker(
     private val stagingDir: File,
     /** Called with the manifest when a newer build exists, for logging/telemetry. */
     private val onUpdateFound: (UpdateCheck) -> Unit = {},
+    /** Progress 0–100 while downloading, or -1 when the size is unknown. */
+    private val onProgress: (UpdateCheck, Int) -> Unit = { _, _ -> },
+    /** Called once the APK is downloaded and verified, before the installer is launched. */
+    private val onDownloaded: (UpdateCheck) -> Unit = {},
+    /** Called after the installer intent is launched: the app is about to restart. */
+    private val onInstalling: (UpdateCheck) -> Unit = {},
 ) {
     /**
      * One full pass: check, and if there is a newer build, download and install it.
@@ -56,7 +62,7 @@ class UpdateChecker(
 
         val apk = File(stagingDir, check.apkFilename)
         try {
-            client.download(check, apk)
+            client.download(check, apk) { percent -> onProgress(check, percent) }
         } catch (t: Throwable) {
             // A failed or unverified download is not fatal; the next connect retries.
             Log.w(TAG, "update download failed: ${t.message}")
@@ -64,9 +70,12 @@ class UpdateChecker(
             return
         }
 
+        onDownloaded(check)
+
         val launched = installer.install(apk)
         if (launched) {
             Log.i(TAG, "installer launched for ${check.version}")
+            onInstalling(check)
         } else {
             // The device cannot install packages itself (no installer permission, or
             // the user declined). The verified APK is staged; an operator can install

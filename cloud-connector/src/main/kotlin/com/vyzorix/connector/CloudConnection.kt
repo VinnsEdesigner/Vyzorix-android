@@ -12,6 +12,7 @@ import com.vyzorix.connector.cloud.DeviceWsClient
 import com.vyzorix.connector.cloud.EnrollRequest
 import com.vyzorix.connector.cloud.EnrollResponse
 import com.vyzorix.connector.cloud.EnrollmentClient
+import com.vyzorix.connector.cloud.NetworkMonitor
 import com.vyzorix.connector.command.CommandDispatcher
 import com.vyzorix.connector.config.ConfigError
 import com.vyzorix.connector.config.ConfigStore
@@ -88,6 +89,14 @@ class CloudConnection(
         val tierHint: Int = DeviceFactsCollector.TIER_UNROOTED,
         /** The wall clock, injected so a test can expire a pairing code without waiting. */
         val clock: () -> Long = System::currentTimeMillis,
+        /**
+         * Whether the device currently has a usable network.
+         *
+         * Read by the notification so the operator sees "no network connection, but
+         * still running" rather than a reassuring "running" over a dead link. Injected
+         * (like the clock) so a test needs no ConnectivityManager.
+         */
+        val connectivityUp: () -> Boolean = { true },
     )
 
     private val context = deps.context
@@ -105,6 +114,7 @@ class CloudConnection(
     private val deployApplier = deps.deployApplier
     private val tierHint = deps.tierHint
     private val clock = deps.clock
+    private val connectivityUp = deps.connectivityUp
     private val running = AtomicBoolean(false)
 
     /**
@@ -130,6 +140,13 @@ class CloudConnection(
      * else happens to trigger a fetch.
      */
     private var configPoller: ConfigPoller? = null
+
+    /**
+     * Watches connectivity so the running notification can say whether the link is up.
+     *
+     * Null until [start]. Started alongside the socket and reaped with it.
+     */
+    private var networkMonitor: NetworkMonitor? = null
 
     /**
      * The pairing code last issued by the server, or null before enroll and once the
@@ -214,7 +231,28 @@ class CloudConnection(
             reconcileNotificationFromStoredConfig()
 
             openSocket()
+            startNetworkMonitor()
         }, "vyzorix-cloud-start").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Starts watching connectivity, so the running notification tracks the link.
+     *
+     * A change re-posts the notification only when a config is held — an unclaimed
+     * device's notification is the pairing code, which the network state does not
+     * qualify, so it is left alone. Idempotent.
+     */
+    private fun startNetworkMonitor() {
+        if (networkMonitor != null) return
+
+        val monitor =
+            NetworkMonitor(context) { up ->
+                configStore.current()?.let { config ->
+                    notification.running(config.name, networkUp = up)
+                }
+            }
+        networkMonitor = monitor
+        monitor.start()
     }
 
     /**
@@ -230,7 +268,7 @@ class CloudConnection(
     private fun reconcileNotificationFromStoredConfig() {
         val config = configStore.current() ?: return
 
-        notification.running(config.name)
+        notification.running(config.name, networkUp = connectivityUp())
     }
 
     /** Stops the connection. The service calls this from `onDestroy`. */
@@ -244,6 +282,10 @@ class CloudConnection(
         // service, so it is reaped with the rest rather than left ticking.
         configPoller?.stop()
         configPoller = null
+        // The connectivity callback is registered with the platform; leaving it would
+        // keep waking a connection that is being torn down.
+        networkMonitor?.stop()
+        networkMonitor = null
         // Unlike a socket drop — which *detaches* sessions so their shells survive a
         // reconnect — an explicit stop reaps them. The service is going away, so the
         // port and its shells go with it; leaving a detached shell behind would leak
@@ -605,7 +647,7 @@ class CloudConnection(
     ) {
         try {
             val config = configStore.apply(document)
-            notification.running(config.name)
+            notification.running(config.name, networkUp = connectivityUp())
             // A config means the device is claimed, so the pairing code is spent: drop
             // it so the poller stops trying to refresh it.
             pairingCode = null

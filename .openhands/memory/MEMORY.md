@@ -807,3 +807,32 @@ an Android 13 emulator. Pairing code shown in the notification. Key facts:
   outcome in the `commands` table (Turso): `status=completed`, `result=<output>`.
 - The device's `SHELL_EXEC` result comes back over the WS as a `command_result` frame; the
   server records it and the command row moves to `completed`.
+
+## SMS read API, permission class fix, migration, icon, OTA 0.1.6 (2026-11-10)
+- **`sms_read` added** (device `5135339`): reads the telephony inbox via
+  `Telephony.Sms.Inbox.CONTENT_URI` with `READ_SMS`. Bounded page (default 50, cap 200,
+  newest first); returns sender/date/read/type/body + `totalAvailable`; `readable:false`
+  when READ_SMS is absent. `sms_received` stays count-only by design.
+- **The "APIs that don't return results" root cause**: the manifest declares CAMERA,
+  ACCESS_FINE_LOCATION, CALL_PHONE, READ_PHONE_STATE, SEND_SMS, RECEIVE_SMS, READ_SMS,
+  but `LaunchActivity` requested only 4 permissions by hand, so `camera`, `location`,
+  `phone_state_detailed`, `sms_capability`, `sms_received`, `sms_read` returned FORBIDDEN
+  forever. Fixed: `LaunchActivity` derives the set from
+  `PermissionRegistry.dialogGrantablePermissions(sdkInt)` (new) + the two app-level perms
+  (shared storage, BLUETOOTH_CONNECT). `call_capability` stays ungated (reports, no dial).
+- **Notification icon**: `android-core/src/main/res/drawable/vyzorix_notification_icon.xml`
+  (terminal glyph) replaces `stat_sys_download_done`. android-core now HAS a res/ dir;
+  `DeviceNotification` imports `com.vyzorix.R`.
+- **Accessibility description** expanded in `app/src/main/res/values/strings.xml`.
+- **Server migration 83** (`8ed4cbab`): `notification_audit_log` lacked `device_id`,
+  `success`, `error_msg` that `notification.Repository.LogEntry` inserts, so every audit
+  write failed. Applied on deploy ("Applied migration 83"). DB now has all 9 columns.
+- **OTA**: bumped the catalog to 0.1.6/code 6, built+**signed** the arm64 release APK,
+  staged with `tooling/scripts/generate_version.sh` into `apps/api/bin/` +
+  `apps/api/data/version.json` (APKs are **gitignored** but NOT dockerignored, so they
+  reach the image via the build context — that is the intended "publish = redeploy"
+  flow). Deployed; `/v1/check-update` returns 0.1.6 and the APK serves (HEAD 200).
+- **Device is offline** (Nokia C22, last seen 18:11), so the live `sms_read` query is
+  pending a reconnect. Note: app 0.1.5 is the *full* build (not the sideload flavor), so
+  OTA works; the agent checks `/v1/check-update` on WS connect and hands the APK to the
+  package installer (the last tap is the user's — a third-party app cannot silently install).

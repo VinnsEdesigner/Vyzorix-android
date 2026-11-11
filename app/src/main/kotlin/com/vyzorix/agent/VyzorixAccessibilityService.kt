@@ -1,8 +1,7 @@
 package com.vyzorix.agent
 
 import android.accessibilityservice.AccessibilityService
-import android.content.ComponentName
-import android.content.pm.PackageManager
+import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.vyzorix.service.DeviceNotification
@@ -38,11 +37,21 @@ import com.vyzorix.service.DeviceNotification
  * can always be reached again.
  */
 class VyzorixAccessibilityService : AccessibilityService() {
+    override fun onCreate() {
+        super.onCreate()
+
+        // Re-assert the icon state as early as possible. On Android 13+ the service is
+        // re-bound when the operator flips the switch, but an OEM may deliver the
+        // binding through a different path; doing it here as well as in
+        // onServiceConnected means the icon hides on whichever fires first.
+        LauncherIcon.setHidden(this, hidden = true)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.i(TAG, "accessibility enabled; hiding the launcher icon and arming the agent")
 
-        hideLauncherIcon(hidden = true)
+        LauncherIcon.setHidden(this, hidden = true)
         DeviceNotification(this).needsStart()
     }
 
@@ -54,49 +63,15 @@ class VyzorixAccessibilityService : AccessibilityService() {
         // Required override; intentionally empty. This service performs no feedback.
     }
 
-    override fun onUnbind(intent: android.content.Intent?): Boolean {
+    override fun onUnbind(intent: Intent?): Boolean {
         Log.i(TAG, "accessibility disabled; restoring the launcher icon")
 
-        hideLauncherIcon(hidden = false)
+        LauncherIcon.setHidden(this, hidden = false)
 
         return super.onUnbind(intent)
     }
 
-    /**
-     * Shows or hides the launcher icon.
-     *
-     * `COMPONENT_ENABLED_STATE_DISABLED` on the launcher alias removes the icon from
-     * the app drawer without disabling the app: the accessibility service, the
-     * foreground service, and the boot receiver all keep working, because only the
-     * alias is disabled, not the package. That is the point — the app stays fully
-     * functional and completely invisible.
-     *
-     * It targets [LaunchActivity]'s alias (see the manifest), not the activity class,
-     * so the activity can still be started by an explicit intent if one is ever
-     * needed. Only the launcher entry goes away.
-     */
-    private fun hideLauncherIcon(hidden: Boolean) {
-        val alias = ComponentName(this, LAUNCHER_ALIAS)
-        val state =
-            if (hidden) {
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            } else {
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            }
-
-        runCatching {
-            packageManager.setComponentEnabledSetting(
-                alias,
-                state,
-                PackageManager.DONT_KILL_APP,
-            )
-        }.onFailure { Log.w(TAG, "could not change the launcher icon state", it) }
-    }
-
     private companion object {
         const val TAG = "VyzorixAccessibility"
-
-        /** The launcher-visible alias declared in the manifest. */
-        const val LAUNCHER_ALIAS = "com.vyzorix.agent.LauncherAlias"
     }
 }

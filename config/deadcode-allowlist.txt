@@ -77,3 +77,11 @@ kotlin-test-only-decl:terminalPortOrNull  # test seam to the service's own termi
 # service observes nothing. The gate reports it as unused because nothing calls it.
 kotlin-unused-decl:onAccessibilityEvent   # required override; the service observes nothing
 kotlin-unused-decl:onInterrupt   # required override; the service performs no feedback
+
+# The connectivity monitor's NetworkCallback overrides are invoked by the platform,
+# not by our code: ConnectivityManager calls onAvailable/onLost/onCapabilitiesChanged
+# when the network changes. Nothing in this repository calls them, so the gate reads
+# them as unused; removing them would make the monitor never fire.
+kotlin-unused-decl:onAvailable            # platform-invoked NetworkCallback override
+kotlin-unused-decl:onLost                 # platform-invoked NetworkCallback override
+kotlin-unused-decl:onCapabilitiesChanged  # platform-invoked NetworkCallback override

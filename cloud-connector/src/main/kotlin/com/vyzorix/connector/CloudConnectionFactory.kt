@@ -5,6 +5,7 @@ import com.vyzorix.capability.PtyBroker
 import com.vyzorix.connector.cloud.DeviceRequestSigner
 import com.vyzorix.connector.cloud.DeviceWsClient
 import com.vyzorix.connector.cloud.EnrollmentClient
+import com.vyzorix.connector.cloud.NetworkMonitor
 import com.vyzorix.connector.command.AppCommands
 import com.vyzorix.connector.command.AppControlClient
 import com.vyzorix.connector.command.CommandDispatcher
@@ -28,6 +29,7 @@ import com.vyzorix.connector.update.ApkInstaller
 import com.vyzorix.connector.update.UpdateChecker
 import com.vyzorix.connector.update.UpdateClient
 import com.vyzorix.service.DeviceNotification
+import com.vyzorix.service.UpdateMarker
 import java.io.File
 import java.security.KeyStore
 import okhttp3.OkHttpClient
@@ -128,6 +130,12 @@ object CloudConnectionFactory {
                 telemetrySource = DeviceTelemetrySource(context),
                 // The OTA flow. Staged under files/updates, which is the one path the
                 // FileProvider exposes to the installer (see app's file_paths.xml).
+                //
+                // The callbacks drive the notification through the update: a progress
+                // bar while it downloads, "downloaded, opening the installer", and —
+                // after the install restarts the app — "reconnecting". The last state
+                // is posted here rather than from the app's own startup, because only
+                // this process knows an update was in flight.
                 updateChecker =
                     UpdateChecker(
                         client =
@@ -141,10 +149,25 @@ object CloudConnectionFactory {
                         installer = apkInstaller,
                         currentVersionCode = appVersionCode,
                         stagingDir = File(context.filesDir, "updates"),
+                        onProgress = { check, percent ->
+                            DeviceNotification(context).downloadingUpdate(check.version, percent)
+                        },
+                        onDownloaded = { DeviceNotification(context).updateDownloaded(it.version) },
+                        onInstalling = { check ->
+                            // Write the marker before the install, so the process the
+                            // install starts can show "reconnecting" — this process is
+                            // about to be replaced and cannot post that state itself.
+                            UpdateMarker.mark(context, check.version)
+                            DeviceNotification(context).applyingUpdate(check.version)
+                        },
                     ),
                 secretKeyPem = secretKey.publicKeyPem(),
                 deployApplier = deployApplier(context, baseUrl, http, uuid, signer, secretKey),
                 tierHint = tierHint,
+                // The notification's network line is only as good as this: a validated
+                // internet connection, read live, so "Connection stable" is not claimed
+                // over a captive-portal Wi-Fi that reaches nothing.
+                connectivityUp = { NetworkMonitor.isUp(context) },
             ),
         )
     }

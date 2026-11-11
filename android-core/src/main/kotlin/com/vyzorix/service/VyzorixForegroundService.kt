@@ -642,7 +642,20 @@ class VyzorixForegroundService : Service() {
      * It shares [DeviceNotification.NOTIFICATION_ID], so the service's notification
      * and the state machine's are the same object — one Vyzorix notification.
      */
-    private fun buildNotification(): Notification = DeviceNotification(this).startingNotification()
+    private fun buildNotification(): Notification {
+        // A process that came up because an update was installed shows the "updating /
+        // reconnecting" state rather than a bare "Starting…", so the operator sees the
+        // update land. The marker is consumed here; the cloud connection overwrites
+        // this with "running" once it reconnects.
+        val applying = UpdateMarker.applyingVersion(this)
+        if (applying != null) {
+            UpdateMarker.clear(this)
+
+            return DeviceNotification(this).applyingUpdateNotification(applying)
+        }
+
+        return DeviceNotification(this).startingNotification()
+    }
 
     companion object {
         private const val TAG = "VyzorixService"

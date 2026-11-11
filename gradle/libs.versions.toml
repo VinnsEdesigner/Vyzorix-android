@@ -40,8 +40,8 @@ android-targetSdk = "28"
 # The app's own version. Single source: the update checker compares the server's
 # version_code against android-appVersionCode, and the release that publishes an APK
 # must carry the same number. Bump both together.
-android-appVersionCode = "6"
-android-appVersionName = "0.1.6"
+android-appVersionCode = "7"
+android-appVersionName = "0.1.7"
 
 # AndroidX
 androidx-annotation = "1.7.1"

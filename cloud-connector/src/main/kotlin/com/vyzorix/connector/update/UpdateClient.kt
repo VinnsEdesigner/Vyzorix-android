@@ -87,6 +87,7 @@ class UpdateClient(
     fun download(
         check: UpdateCheck,
         destination: File,
+        onProgress: (percent: Int) -> Unit = {},
     ): File {
         // One guard, one throw: the manifest must name a file and carry the hash the
         // download is verified against. Detekt's ThrowsCount prefers a single refusal
@@ -118,7 +119,7 @@ class UpdateClient(
             val total = body.contentLength().takeIf { it > 0 } ?: check.apkSizeBytes
             body.byteStream().use { input ->
                 destination.outputStream().use { output ->
-                    copyReportingProgress(input, output, total, check.apkFilename)
+                    copyReportingProgress(input, output, total, check.apkFilename, onProgress)
                 }
             }
         }
@@ -146,6 +147,7 @@ class UpdateClient(
         output: java.io.OutputStream,
         total: Long,
         filename: String,
+        onProgress: (percent: Int) -> Unit,
     ) {
         val id = deviceId()
         val buffer = ByteArray(COPY_BUFFER)
@@ -158,12 +160,17 @@ class UpdateClient(
             output.write(buffer, 0, read)
             loaded += read
 
-            if (id.isEmpty() || total <= 0) continue
+            if (total <= 0) continue
 
             val percent = ((loaded * 100) / total).toInt()
             if (percent != lastReportedPercent) {
                 lastReportedPercent = percent
-                reportProgress(id, filename, loaded, total, percent)
+                // The local callback drives the notification's progress bar, so it runs
+                // even when there is no device id to report against.
+                onProgress(percent)
+                if (id.isNotEmpty()) {
+                    reportProgress(id, filename, loaded, total, percent)
+                }
             }
         }
     }
