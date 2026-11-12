@@ -142,7 +142,13 @@ echo "all binaries are ${expected_machine} and statically linked"
 
 log "packing"
 mkdir -p "${OUT}"
-tar -C "${STAGE}" -czf "${OUT}/vyzorix-cli-${ARCH}.tar.gz" .
+# A **reproducible** tarball: fixed mtime/owner/order, and `gzip -n` so the gzip header
+# carries no timestamp either. The same inputs then produce the same bytes, and
+# therefore the same SHA-256 — which matters because the APK compiles in the archive's
+# checksum (`VYZORIX_CLI_SHA256`) as the anchor for the *fetched* copy. A tarball whose
+# bytes moved on every build would fail that check on the device.
+tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+  -cf - -C "${STAGE}" . | gzip -n -9 > "${OUT}/vyzorix-cli-${ARCH}.tar.gz"
 ls -lh "${OUT}/vyzorix-cli-${ARCH}.tar.gz"
 # The listing is a convenience, and `tar | head` is a SIGPIPE race: head exits after
 # 20 lines, tar gets EPIPE, and with `set -o pipefail` the whole build fails
