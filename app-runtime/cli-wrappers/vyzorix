@@ -53,34 +53,124 @@ commands() {
   done | sort -u
 }
 
+# The session identity, as the server resolved it, from the environment the launcher
+# set. Read with python3 (in the container's core tier) so a value in the JSON can
+# never be evaluated as shell — it is data, and it is treated as data.
+#
+# Prints nothing when there is no session (a plain device shell), which every caller
+# reads as "unknown operator".
+identity_field() {
+  [[ -n "${VYZORIX_SESSION:-}" ]] || return 0
+  printf '%s' "$VYZORIX_SESSION" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+v = d.get(sys.argv[1], '')
+print(v if not isinstance(v, list) else '\n'.join(v))
+" "$1" 2>/dev/null
+}
+
+# True when the session may call [api]. No session, or an empty allowlist, permits
+# nothing — the same default-deny the bridge enforces, so the CLI never offers a
+# command that would be refused.
+allowed() {
+  local api="$1"
+  [[ -n "${VYZORIX_SESSION:-}" ]] || return 1
+  [[ -n "$api" ]] || return 1
+  identity_field allowlist | grep -Fxq "$api"
+}
+
+# The API a command maps to, from the generated catalog. The command→API map is the
+# binary's, not this script's, so it cannot drift from what is installed.
+api_of() {
+  local cmd="$1"
+  "$here/android-bin" --api __catalog --commands 2>/dev/null | awk -F'\t' -v c="$cmd" '$1==c {print $2; exit}'
+}
+
 banner() {
   printf '\n' >&2
   printf '  %sV Y Z O R I X%s  %sCLI%s\n' "$brand" "$r" "$d" "$r" >&2
   printf '  %s────────────────────────────────────────%s\n' "$d" "$r" >&2
-  printf '  %sthe device APIs, as commands%s\n\n' "$d" "$r" >&2
+}
+
+# The operator header: who the server says you are, and when the session ends. This
+# is what makes the terminal a session rather than an anonymous shell.
+whoami() {
+  if [[ -z "${VYZORIX_SESSION:-}" ]]; then
+    printf '  %sunknown operator%s  %s(this shell carries no session; opened outside a cloud terminal)%s\n\n' \
+      "$b" "$r" "$d" "$r"
+    return
+  fi
+
+  local name role org email op exp
+  name="$(identity_field name)"; role="$(identity_field roleLabel)"
+  org="$(identity_field orgName)"; email="$(identity_field email)"
+  op="$(identity_field operator)"; exp="$(identity_field expiresAt)"
+
+  [[ -n "$name" ]] || name="$op"
+  printf '  %s%s%s' "$b" "${name:-unknown}" "$r"
+  [[ -n "$role" ]] && printf '  %s·%s %s' "$d" "$r" "$role"
+  printf '\n'
+  [[ -n "$org" ]] && printf '  %s%s%s\n' "$d" "$org" "$r"
+  [[ -n "$email" ]] && printf '  %s%s%s\n' "$d" "$email" "$r"
+  if [[ -n "$exp" && "$exp" != "0" ]]; then
+    printf '  %ssession expires %s%s\n' "$d" "$(date -d "@$((exp/1000))" 2>/dev/null || echo "at $exp")" "$r"
+  fi
+  printf '\n'
 }
 
 list_commands() {
-  local -a cmds; mapfile -t cmds < <(commands)
-  local g last=""
+  local -a all; mapfile -t all < <(commands)
+  # No session: there is no profile to scope by, so the full surface is shown. This
+  # is display only — a call is still refused by the bridge if the local token does
+  # not permit it. With a session, only what the server granted is shown.
+  local scoped=1
+  [[ -n "${VYZORIX_SESSION:-}" ]] || scoped=0
+
+  local g
   for g in Hardware Connectivity Telephony Apps Device System Other; do
-    local -a members=()
-    local c; for c in "${cmds[@]}"; do [[ "$(group_of "$c")" == "$g" ]] && members+=("$c"); done
-    ((${#members[@]})) || continue
+    local -a allowed_members=() locked_members=()
+    local c api
+    for c in "${all[@]}"; do
+      [[ "$(group_of "$c")" == "$g" ]] || continue
+      if ((scoped)); then
+        api="$(api_of "$c")"
+        if allowed "$api"; then allowed_members+=("$c"); else locked_members+=("$c"); fi
+      else
+        allowed_members+=("$c")
+      fi
+    done
+    # A group is shown when it has any command at all, so the operator sees the whole
+    # map — what they can run, and what exists but is out of scope. Hiding a locked
+    # group would make the surface look smaller than it is.
+    (( ${#allowed_members[@]} + ${#locked_members[@]} )) || continue
     printf '  %s%s%s\n' "$b" "$g" "$r"
-    printf '    %s\n' "$(printf '%s  ' "${members[@]}" | sed 's/  $//')"
+    if ((${#allowed_members[@]})); then
+      printf '    %s\n' "$(printf '%s  ' "${allowed_members[@]}" | sed 's/  $//')"
+    fi
+    if ((${#locked_members[@]})); then
+      printf '    %s%s%s\n' "$d" "$(printf '%s  ' "${locked_members[@]}" | sed 's/  $//')" "$r"
+    fi
     printf '\n'
   done
 }
 
 usage() {
   banner
+  whoami
   printf '  %sUsage%s\n' "$b" "$r"
   printf '    vyzorix                  %sthis list%s\n' "$d" "$r"
   printf '    vyzorix <command> ...    %scall a command%s\n' "$d" "$r"
+  printf '    vyzorix whoami           %swho the server says you are%s\n' "$d" "$r"
   printf '    vyzorix help <command>   %shelp for one command%s\n' "$d" "$r"
   printf '    vyzorix version\n\n'
-  printf '  %sCommands%s\n' "$b" "$r"
+  printf '  %sCommands%s' "$b" "$r"
+  if [[ -n "${VYZORIX_SESSION:-}" ]]; then
+    printf '  %s(dimmed = not in your scope)%s' "$d" "$r"
+  fi
+  printf '\n'
   list_commands
   printf '  %severy command prints JSON, and exits non-zero on failure.%s\n\n' "$d" "$r"
 }
@@ -95,17 +185,42 @@ case "${1:-}" in
   version|--version|-v)
     printf 'Vyzorix CLI %s (%s)\n' "$(cat "$here/VERSION" 2>/dev/null || echo dev)" "$(uname -m)"
     ;;
+  whoami)
+    whoami
+    ;;
   list|commands)
     list_commands
     ;;
   *)
     cmd="$1"; shift
+    # A command is a bare name. Reject anything with a path separator so `vyzorix
+    # ../../bin/sh` cannot exec a file outside the bundle — the dispatch must only
+    # ever reach a symlink beside this script.
+    if [[ "$cmd" == */* ]]; then
+      printf 'vyzorix: not a command: %s\n' "$cmd" >&2
+      exit 2
+    fi
     target="$here/$cmd"
     if [[ ! -x "$target" ]]; then
       printf 'vyzorix: no such command: %s\n\n' "$cmd" >&2
       usage >&2
       exit 2
     fi
+
+    # Refuse locally what the bridge would refuse anyway, so the operator gets a
+    # clear reason rather than a raw FORBIDDEN from the socket. The bridge is still
+    # the enforcement point — this is the explanation, not the gate — so the check
+    # is the same default-deny: no session, or an API outside the allowlist, is
+    # refused here and would be refused there.
+    if [[ -n "${VYZORIX_SESSION:-}" ]]; then
+      api="$(api_of "$cmd")"
+      if [[ -n "$api" ]] && ! allowed "$api"; then
+        printf 'vyzorix: %s is not in your scope (%s)\n' "$cmd" "$api" >&2
+        printf '  %syour role does not include this command; ask an admin if you need it%s\n' "$d" "$r" >&2
+        exit 1
+      fi
+    fi
+
     exec "$target" "$@"
     ;;
 esac

@@ -41,12 +41,12 @@ class TerminalRelayInstrumentedTest {
                 broker = broker,
                 tokens = SessionTokenRegistry(),
                 deviceId = { "test-device" },
-                apiAllowlist = { setOf("identity") },
+                unattributedAllowlist = { setOf("identity") },
                 // The session id is ignored here: production names the shell's tmux
                 // session after it so a reconnect reattaches, but this test drives a
                 // plain device shell (the rootfs is not in this APK), so there is
                 // nothing to name.
-                shellRequest = { _, _ ->
+                shellRequest = { _, _, _ ->
                     PtyRequest(
                         executable = "/system/bin/sh",
                         arguments = listOf("/system/bin/sh"),

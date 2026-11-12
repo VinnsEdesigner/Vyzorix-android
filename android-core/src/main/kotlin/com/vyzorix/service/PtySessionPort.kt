@@ -18,6 +18,12 @@ interface PtySessionPort {
     /**
      * Opens a shell for [sessionId] and starts streaming its output.
      *
+     * [identity] is the operator the server resolved for this session — who they are
+     * and the API allowlist they were granted. It is delivered to the container's
+     * shell (as `VYZORIX_SESSION`) so the Vyzorix CLI inside it can show the operator
+     * and offer only what they may call. Null means the server sent no identity (an
+     * older server, or a reattach), which is "unknown operator", not a refusal.
+     *
      * [onOutput] is called with terminal output as it arrives, from the reader
      * thread. It must be safe to call from any thread, and the implementation must
      * not block the reader: a slow consumer drops output rather than stalling the
@@ -33,6 +39,7 @@ interface PtySessionPort {
         sessionId: String,
         rows: Int,
         cols: Int,
+        identity: SessionIdentity?,
         onOutput: (sessionId: String, data: ByteArray) -> Unit,
         onExit: (sessionId: String, exitCode: Int) -> Unit,
     ): Boolean

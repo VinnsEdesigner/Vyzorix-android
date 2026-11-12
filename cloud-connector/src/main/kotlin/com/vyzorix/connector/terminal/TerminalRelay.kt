@@ -3,6 +3,7 @@ package com.vyzorix.connector.terminal
 import android.util.Log
 import com.vyzorix.connector.cloud.PtyFrame
 import com.vyzorix.service.PtySessionPort
+import com.vyzorix.service.SessionIdentity
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -123,7 +124,7 @@ class TerminalRelay(
         // it is not an error: a browser open falls back to a sane default, and a
         // *server-initiated* reattach carries none precisely so the shell keeps the
         // size it already had (see the reattach branch below).
-        val size = readResize(frame.payload)
+        val (size, identity) = readOpen(frame.payload)
 
         // An OPEN for a session we already hold is a **reattach**, not a second shell.
         //
@@ -154,6 +155,7 @@ class TerminalRelay(
                 sessionId = frame.sessionId,
                 rows = rows,
                 cols = cols,
+                identity = identity,
                 onOutput = { id, data -> onSessionOutput(id, data) },
                 onExit = { id, code -> onShellExit(id, code) },
             )
@@ -412,6 +414,26 @@ class TerminalRelay(
             PtyFrame.decodeResize(payload)
         } catch (e: PtyFrame.MalformedFrame) {
             null
+        }
+    }
+
+    /**
+     * Reads an OPEN payload: the window size and, when the server sent one, the
+     * operator identity.
+     *
+     * The size is read on its own first so an older server's payload (size only) still
+     * yields a size; the identity is null in that case, which the port treats as an
+     * unattributed session rather than a failure.
+     */
+    private fun readOpen(payload: ByteArray): Pair<Pair<Int, Int>?, SessionIdentity?> {
+        if (payload.size < PtyFrame.RESIZE_PAYLOAD_SIZE) return null to null
+
+        return try {
+            PtyFrame.decodeOpen(payload)
+        } catch (expected: PtyFrame.MalformedFrame) {
+            // A malformed OPEN is not fatal to the session: the shell opens with a
+            // default size and an unknown operator.
+            null to null
         }
     }
 

@@ -34,8 +34,21 @@ class ServicePtySessionPort(
     private val broker: PtyBroker,
     private val tokens: SessionTokenRegistry,
     private val deviceId: () -> String,
-    private val apiAllowlist: () -> Set<String>,
-    private val shellRequest: (sessionId: String, token: String) -> PtyRequest,
+    /**
+     * The allowlist to use when the server delivered **no** identity.
+     *
+     * Defaults to the empty set — **deny** — because the safe answer to "the server
+     * did not authorise this session" is "it may call nothing". The shell still opens
+     * (the container's own tools are not bridge APIs), but no device API is reachable.
+     *
+     * This is deliberately *not* the full command set. An earlier revision fell back
+     * to every API, which is fail-open: a missing authorization decision became the
+     * widest one. A caller that wants a different policy for the unattributed case
+     * must pass it explicitly, so fail-open is a decision, never a default.
+     */
+    private val unattributedAllowlist: () -> Set<String> = { emptySet() },
+    private val shellRequest: (sessionId: String, token: String, identityJson: String?) ->
+    PtyRequest,
     /**
      * Whether the container can start a shell at all.
      *
@@ -58,6 +71,7 @@ class ServicePtySessionPort(
         sessionId: String,
         rows: Int,
         cols: Int,
+        identity: SessionIdentity?,
         onOutput: (sessionId: String, data: ByteArray) -> Unit,
         onExit: (sessionId: String, exitCode: Int) -> Unit,
     ): Boolean {
@@ -70,20 +84,39 @@ class ServicePtySessionPort(
             return false
         }
 
+        // The operator and the API allowlist come from the server's resolved identity.
+        // Before this, every session was issued an empty operator and the *full*
+        // command set, so the bridge could not attribute a call and the CLI could not
+        // show who was connected.
+        //
+        // **An absent identity denies.** The server resolves a capability before it
+        // tells the device to open; if that resolution did not reach us (an older
+        // server, a reattach whose frame carried none), the safe reading is "this
+        // session is not authorised for any API", not "authorised for all of them".
+        // The shell still opens so the container's own tools work, but the bridge
+        // refuses every device API — which is what [ApiRouter] enforces via the token.
+        val operatorId = identity?.operator.orEmpty()
+        val allowlist =
+            if (identity != null && identity.allowlist.isNotEmpty()) {
+                identity.allowlist.toSet()
+            } else {
+                unattributedAllowlist()
+            }
+
         // The token is what lets the shell reach the bridge and be identified. It is
-        // scoped to the local API set, stated explicitly: an empty allowlist permits
-        // nothing.
+        // scoped to the server's allowlist: an empty allowlist permits nothing.
         val token =
             tokens.issue(
                 sessionId = sessionId,
                 deviceId = deviceId(),
-                operatorId = "",
-                apiAllowlist = apiAllowlist(),
+                operatorId = operatorId,
+                apiAllowlist = allowlist,
             )
 
-        val request = shellRequest(sessionId, token.token).copy(rows = rows, cols = cols)
+        val request =
+            shellRequest(sessionId, token.token, identity?.toJson()).copy(rows = rows, cols = cols)
 
-        val opened = broker.open(sessionId, deviceId(), "", request)
+        val opened = broker.open(sessionId, deviceId(), operatorId, request)
         if (opened is PtyResult.Err) {
             tokens.revokeSession(sessionId)
             Log.w(TAG, "terminal $sessionId could not start: ${opened.error.detail}")

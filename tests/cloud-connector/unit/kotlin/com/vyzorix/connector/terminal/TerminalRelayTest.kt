@@ -20,6 +20,9 @@ class TerminalRelayTest {
     /** A recording port: every call is captured, and open/close can be forced to fail. */
     private class FakePort : PtySessionPort {
         val opened = mutableListOf<String>()
+
+        /** The identity each open carried, so a test can assert it arrived. */
+        val identities = mutableListOf<Pair<String, com.vyzorix.service.SessionIdentity?>>()
         val written = mutableListOf<Pair<String, ByteArray>>()
         val resized = mutableListOf<Triple<String, Int, Int>>()
         val closed = mutableListOf<String>()
@@ -34,10 +37,13 @@ class TerminalRelayTest {
             sessionId: String,
             rows: Int,
             cols: Int,
+            identity: com.vyzorix.service.SessionIdentity?,
             onOutput: (String, ByteArray) -> Unit,
             onExit: (String, Int) -> Unit,
         ): Boolean {
             if (failOpen) return false
+
+            identities += sessionId to identity
 
             opened += sessionId
             resized += Triple(sessionId, rows, cols)
@@ -120,6 +126,49 @@ class TerminalRelayTest {
             PtyFrame.resizePayload(rows, cols),
             sessionId,
         )
+
+    /** An OPEN payload the server builds: window size then the identity JSON. */
+    private fun openFrameWithIdentity(
+        sessionId: String,
+        identityJson: String,
+        rows: Int = 24,
+        cols: Int = 80,
+    ): ByteArray {
+        val size = PtyFrame.resizePayload(rows, cols)
+        val payload = size + identityJson.toByteArray(Charsets.UTF_8)
+
+        return PtyFrame.encode(PtyFrame.TYPE_OPEN, payload, sessionId)
+    }
+
+    @Test
+    fun `an open frame carries the operator identity to the port`() {
+        val (r, port, _) = relay()
+
+        r.onFrame(
+            openFrameWithIdentity(
+                "s1",
+                """{"operator":"op-1","name":"Kamau","role":"operator",""" +
+                    """"roleLabel":"Operator","allowlist":["camera_list","battery"]}""",
+            ),
+        )
+
+        val identity = port.identities.single().second
+        assertEquals("op-1", identity?.operator)
+        assertEquals("Operator", identity?.roleLabel)
+        assertEquals(listOf("camera_list", "battery"), identity?.allowlist)
+    }
+
+    @Test
+    fun `an open frame without an identity opens an unattributed session`() {
+        // A server that predates the identity block: the shell still opens, and the
+        // port is told the operator is unknown rather than being handed a wrong one.
+        val (r, port, _) = relay()
+
+        r.onFrame(openFrame("s1"))
+
+        assertTrue(r.isOpen("s1"))
+        assertEquals(null, port.identities.single().second)
+    }
 
     @Test
     fun `an open frame starts a session sized from the frame`() {

@@ -1,5 +1,6 @@
 package com.vyzorix.connector.cloud
 
+import com.vyzorix.service.SessionIdentity
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -204,6 +205,23 @@ object PtyFrame {
         val buffer = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN)
 
         return (buffer.short.toInt() and UINT16_MASK) to (buffer.short.toInt() and UINT16_MASK)
+    }
+
+    /**
+     * Reads an OPEN payload: the window size (the first four bytes) and, when present,
+     * the operator identity that follows it.
+     *
+     * The size is read unconditionally so an older server's payload — size only —
+     * still yields a size. The identity is null when the payload predates it.
+     */
+    fun decodeOpen(payload: ByteArray): Pair<Pair<Int, Int>, SessionIdentity?> {
+        val size = decodeResize(payload)
+        if (payload.size <= RESIZE_PAYLOAD_SIZE) return size to null
+
+        val json =
+            String(payload, RESIZE_PAYLOAD_SIZE, payload.size - RESIZE_PAYLOAD_SIZE, Charsets.UTF_8)
+
+        return size to SessionIdentity.parse(json)
     }
 
     private fun sessionData(

@@ -267,7 +267,6 @@ class VyzorixForegroundService : Service() {
             // A provider, not a value: the device id is not known until enrollment
             // finishes, which is after this port is built.
             deviceId = { cloudLink?.deviceId().orEmpty() },
-            apiAllowlist = { router.names().toSet() },
             shellRequest = ::terminalShellRequest,
             // The container shell cannot start until the rootfs is installed; the
             // port refuses rather than opening a pty for a shell that dies at once.
@@ -289,6 +288,7 @@ class VyzorixForegroundService : Service() {
     private fun terminalShellRequest(
         sessionId: String,
         token: String,
+        identityJson: String?,
     ): PtyRequest =
         if (ProotLauncher.isReady(this)) {
             // Wrap in tmux when it is available so a dropped WebSocket reattaches to
@@ -306,7 +306,12 @@ class VyzorixForegroundService : Service() {
                     null
                 }
 
-            ProotLauncher.loginShellRequest(this, token, tmuxSession = tmux)
+            ProotLauncher.loginShellRequest(
+                this,
+                token,
+                tmuxSession = tmux,
+                identityJson = identityJson,
+            )
         } else {
             ProotLauncher.uncontainedShellRequest(this, token)
         }

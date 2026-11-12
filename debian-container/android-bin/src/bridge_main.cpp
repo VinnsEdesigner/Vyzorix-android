@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <exception>
 #include <iostream>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -110,6 +111,23 @@ int main(int argc, char **argv) {
             // the symlinks the build creates.
             for (std::size_t i = 0; i < kApiNameCount; i++) {
                 std::cout << kApiNames[i] << "\n";
+            }
+
+            return 0;
+        }
+        if (arg == "--commands") {
+            // `<command><TAB><api>` for every command, deduped by name (first wins).
+            //
+            // The Vyzorix CLI reads this to map a command to the API the server
+            // allowlists, so it can show only the commands the operator may run. It is
+            // generated from commands.txt, so it cannot drift from the symlinks.
+            std::set<std::string> seen;
+            for (std::size_t i = 0; i < kCommandCount; i++) {
+                const std::string name = kCommands[i].name;
+                if (!seen.insert(name).second) {
+                    continue;
+                }
+                std::cout << name << "\t" << kCommands[i].api << "\n";
             }
 
             return 0;

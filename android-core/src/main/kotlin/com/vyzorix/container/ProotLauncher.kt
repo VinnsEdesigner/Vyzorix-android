@@ -106,6 +106,16 @@ object ProotLauncher {
     const val TMP_DIR_ENV = "PROOT_TMP_DIR"
 
     /**
+     * The env var carrying the terminal session's identity into the container.
+     *
+     * The shell the operator lands in reads it (via the `vyzorix` front door) to show
+     * who is connected and offer only what they may call. It is set from the server's
+     * resolved identity, so the container's view of the operator cannot disagree with
+     * what the bridge enforces.
+     */
+    const val SESSION_ENV = "VYZORIX_SESSION"
+
+    /**
      * The `resolv.conf` the container binds, written from the device's own DNS servers.
      *
      * Kept in the app's files dir, not the rootfs: the rootfs ships an empty
@@ -464,6 +474,14 @@ object ProotLauncher {
          * a device may not have, and a shell without reattach is better than no shell.
          */
         tmuxSession: String? = null,
+        /**
+         * The operator's identity, as JSON, to place in the container's environment.
+         *
+         * Null (the default) sets nothing: a shell opened without a resolved identity
+         * has no `VYZORIX_SESSION`, and the CLI reports an unknown operator rather than
+         * inventing one.
+         */
+        identityJson: String? = null,
     ): List<String> {
         val args =
             mutableListOf(
@@ -494,6 +512,13 @@ object ProotLauncher {
                 "$BRIDGE_SOCKET_ENV=$BRIDGE_SOCKET_IN_CONTAINER",
                 "$BRIDGE_TOKEN_ENV=$token",
             )
+
+        // The session's identity, so the CLI in the container can show the operator and
+        // offer only what they may call. Set only when there is one; a shell without it
+        // reports an unknown operator rather than a blank that reads as "no one".
+        if (identityJson != null) {
+            args += "$SESSION_ENV=$identityJson"
+        }
 
         if (tmuxSession != null) {
             // tmux must be told its socket directory explicitly, or it refuses to
@@ -557,10 +582,17 @@ object ProotLauncher {
         context: Context,
         token: String,
         tmuxSession: String? = null,
+        identityJson: String? = null,
     ): PtyRequest =
         PtyRequest(
             executable = prootBinary(context).absolutePath,
-            arguments = loginShellArgs(context, token, tmuxSession = tmuxSession),
+            arguments =
+                loginShellArgs(
+                    context,
+                    token,
+                    tmuxSession = tmuxSession,
+                    identityJson = identityJson,
+                ),
             // The outer environment — what proot itself is started with. It is
             // deliberately NOT in loginShellArgs' `env -i` list: that is the
             // *container's* environment, and proot reads PROOT_TMP_DIR before it ever
