@@ -2,8 +2,8 @@ package com.vyzorix.service
 
 import android.content.Context
 import com.vyzorix.container.ContainerConfig
-import com.vyzorix.container.Layer3Installer
 import com.vyzorix.container.RootfsInstaller
+import com.vyzorix.container.VyzorixCliInstaller
 
 /**
  * Installs the container's userspace, whoever needs it first.
@@ -80,16 +80,16 @@ object RootfsBootstrap {
     }
 
     /**
-     * Ensures the Layer 3 container binaries are installed. Returns whether the
+     * Ensures the the Vyzorix CLI container binaries are installed. Returns whether the
      * supervisor is present afterwards.
      *
      * Idempotent and cheap when already installed: the first thing it does is a
      * marker check. Blocking I/O on a first install, so not the main thread.
      */
-    fun ensureLayer3(context: Context): Boolean {
+    fun ensureVyzorixCli(context: Context): Boolean {
         val config = ContainerConfig.get()
 
-        return Layer3Installer(
+        return VyzorixCliInstaller(
             context = context,
             // The bundled asset when the build has it; the release otherwise. The
             // checksum is required for the download path — a fetched archive has no APK
@@ -97,7 +97,7 @@ object RootfsBootstrap {
             download = config?.open,
             baseUrl = config?.baseUrl.orEmpty(),
             abi = config?.bundledAbi.orEmpty(),
-            expectedSha256 = config?.layer3Sha256.orEmpty(),
+            expectedSha256 = config?.vyzorixCliSha256.orEmpty(),
         ).ensureInstalled()
     }
 }

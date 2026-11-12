@@ -113,7 +113,7 @@ object CloudConnectionFactory {
                         executors =
                             mapOf(
                                 "SHELL_EXEC" to ShellExecExecutor(PtyBroker()),
-                                // The Layer 3 app lifecycle. The supervisor lives in the
+                                // The the Vyzorix CLI app lifecycle. The supervisor lives in the
                                 // container and is reached over its control socket; the
                                 // path is the host side of the `/home/apps` bind the
                                 // proot launcher installs, so it is `files/apps/...` here
@@ -220,7 +220,7 @@ object CloudConnectionFactory {
     }
 
     /**
-     * A client for the Layer 3 supervisor's control socket.
+     * A client for the the Vyzorix CLI supervisor's control socket.
      *
      * `files/apps/supervisor.sock` is the host path of the container's
      * `/home/apps/supervisor.sock`: the proot launcher binds `files/apps` to

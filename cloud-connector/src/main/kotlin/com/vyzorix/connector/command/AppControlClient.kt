@@ -12,7 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
 /**
- * Runs a command against the Layer 3 supervisor's control socket.
+ * Runs a command against the the Vyzorix CLI supervisor's control socket.
  *
  * The supervisor lives inside the container and speaks the repo's framed protocol
  * (`[4B length][1B type][payload]`, JSON payload) over a unix socket at

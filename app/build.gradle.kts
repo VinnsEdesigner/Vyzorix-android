@@ -161,33 +161,33 @@ fun sha256FromSums(name: String): String {
 }
 
 /**
- * The bundled Layer 3 archive for this build's ABI, or null when it has not been
+ * The bundled the Vyzorix CLI archive for this build's ABI, or null when it has not been
  * built.
  *
  * Unlike the rootfs, this is always bundled: it is our own code, it is ~360 KB, and
  * a device with no network must still be able to run apps. A missing archive is not
  * an error — the app builds and runs without the supervisor, which is the state a
- * source checkout is in until `scripts/build-layer3.sh` has run.
+ * source checkout is in until `scripts/build-vyzorix-cli.sh` has run.
  */
-fun bundledLayer3File(): File? =
+fun bundledVyzorixCliFile(): File? =
     rootProject
-        .file("app-runtime/dist/layer3-${bundledRootfsAbi()}.tar.gz")
+        .file("app-runtime/dist/vyzorix-cli-${bundledRootfsAbi()}.tar.gz")
         .takeIf { it.isFile }
 
 /**
- * The SHA-256 of the Layer 3 archive.
+ * The SHA-256 of the the Vyzorix CLI archive.
  *
- * Layer 3 is not bundled, so this is what the fetcher verifies the download against.
+ * the Vyzorix CLI is not bundled, so this is what the fetcher verifies the download against.
  * Computed from the local archive when the build has one (a source checkout that ran
- * `scripts/build-layer3.sh`), else supplied via the `layer3Sha256` property /
- * `VYZORIX_LAYER3_SHA256` env — a release build in a clean checkout has no archive.
+ * `scripts/build-vyzorix-cli.sh`), else supplied via the `vyzorixCliSha256` property /
+ * `VYZORIX_CLI_SHA256` env — a release build in a clean checkout has no archive.
  * Empty disables the fetch rather than fetching unverified.
  */
-fun layer3Sha256(): String {
-    (findProperty("layer3Sha256") as String?)?.let { return it }
-    System.getenv("VYZORIX_LAYER3_SHA256")?.let { return it }
+fun vyzorixCliSha256(): String {
+    (findProperty("vyzorixCliSha256") as String?)?.let { return it }
+    System.getenv("VYZORIX_CLI_SHA256")?.let { return it }
 
-    val file = bundledLayer3File() ?: return ""
+    val file = bundledVyzorixCliFile() ?: return ""
 
     val digest = MessageDigest.getInstance("SHA-256")
     file.inputStream().use { input ->
@@ -287,10 +287,10 @@ android {
         buildConfigField("String", "ROOTFS_EXTENDED_SHA256", "\"${extendedRootfsSha256()}\"")
         // Where the device fetches its rootfs. The release that carries the tarballs.
         buildConfigField("String", "ROOTFS_BASE_URL", "\"${rootfsBaseUrl()}\"")
-        // Layer 3 (the supervisor + the terse-command CLI). Fetched from the release,
+        // the Vyzorix CLI (the supervisor + the terse-command CLI). Fetched from the release,
         // verified against this checksum. Empty means the download path is unavailable,
         // never unverified.
-        buildConfigField("String", "LAYER3_SHA256", "\"${layer3Sha256()}\"")
+        buildConfigField("String", "VYZORIX_CLI_SHA256", "\"${vyzorixCliSha256()}\"")
         // Allow the terminal to run a plain device shell when the container is
         // not installed. Off unless asked for, because that shell runs as the app's
         // uid and can read the app's private files, which the container exists to
@@ -311,7 +311,7 @@ android {
         // `l3` is here for a different reason: `Layer3Installer` marks the install with
         // the archive's **byte length**, read via `AssetManager.openFd`. A *compressed*
         // asset has no fd, so `openFd` throws and the length reads as -1 — a constant
-        // that never changes, so a rebuilt layer3 never reinstalls on an app update.
+        // that never changes, so a rebuilt Vyzorix CLI never reinstalls on an app update.
         // Storing it uncompressed gives a real fd and a real length. It is itself gzip,
         // so nothing is saved by deflating it again.
         noCompress += listOf("tar.gz", "l3")
@@ -397,7 +397,7 @@ dependencies {
 }
 
 /**
- * The rootfs and Layer 3 are **bundled in the APK**.
+ * The rootfs and the Vyzorix CLI are **bundled in the APK**.
  *
  * They are staged as assets below, so a device has its container the moment the APK is
  * installed — no network fetch, no window where the shell is empty because a download
@@ -444,27 +444,27 @@ android.sourceSets.getByName("main").assets.srcDir(
     layout.buildDirectory.dir("generated/rootfsAssets"),
 )
 android.sourceSets.getByName("main").assets.srcDir(
-    layout.buildDirectory.dir("generated/layer3Assets"),
+    layout.buildDirectory.dir("generated/vyzorixCliAssets"),
 )
 
 /**
- * Builds the Layer 3 container binaries with their own Makefile.
+ * Builds the the Vyzorix CLI container binaries with their own Makefile.
  *
  * Staging copies whatever is at `app-runtime/dist/`, so the build must produce it first or
  * a source change to the supervisor is invisible on the device. Skipped when the
  * cross-compiler is missing, so a machine without the toolchain still produces an APK.
  */
-val buildLayer3 by tasks.registering(Exec::class) {
-    description = "Cross-compiles the Layer 3 container binaries for ${bundledRootfsAbi()}."
+val buildVyzorixCli by tasks.registering(Exec::class) {
+    description = "Cross-compiles the the Vyzorix CLI container binaries for ${bundledRootfsAbi()}."
 
-    val script = rootProject.file("scripts/build-layer3.sh")
+    val script = rootProject.file("scripts/build-vyzorix-cli.sh")
     onlyIf { script.isFile }
     if (script.isFile) {
         commandLine("bash", script.absolutePath, "--arch", bundledRootfsAbi())
         inputs.dir(rootProject.file("app-runtime/supervisor/src"))
         inputs.dir(rootProject.file("app-runtime/cli-wrappers"))
         inputs.dir(rootProject.file("native/lib"))
-        // `android-bin` is part of layer 3 too (it is the container's bridge client), and
+        // `android-bin` is part of the Vyzorix CLI too (it is the container's bridge client), and
         // its command surface lives in `commands.txt`/`apis.txt`. Without this input a
         // change to those files did not invalidate this task, so the archive kept a stale
         // `android-bin` — a new command (`wboot`) was simply absent on the device.
@@ -472,20 +472,20 @@ val buildLayer3 by tasks.registering(Exec::class) {
         inputs.file(rootProject.file("app-runtime/supervisor/Makefile"))
         inputs.file(rootProject.file("app-runtime/cli-wrappers/Makefile"))
         inputs.file(script)
-        outputs.file(rootProject.file("app-runtime/dist/layer3-${bundledRootfsAbi()}.tar.gz"))
+        outputs.file(rootProject.file("app-runtime/dist/vyzorix-cli-${bundledRootfsAbi()}.tar.gz"))
     }
 }
 
-val stageLayer3 by tasks.registering {
-    val destDir = layout.buildDirectory.dir("generated/layer3Assets/layer3")
-    val destName = "layer3.l3"
+val stageVyzorixCli by tasks.registering {
+    val destDir = layout.buildDirectory.dir("generated/vyzorixCliAssets/vyzorix-cli")
+    val destName = "vyzorix-cli.l3"
 
-    description = "Stages the ${bundledRootfsAbi()} Layer 3 binaries into assets/."
+    description = "Stages the ${bundledRootfsAbi()} the Vyzorix CLI binaries into assets/."
 
-    dependsOn(buildLayer3)
+    dependsOn(buildVyzorixCli)
 
-    // Resolved at execution time: the tarball does not exist until `buildLayer3` has run.
-    val sourceProvider = providers.provider { bundledLayer3File() }
+    // Resolved at execution time: the tarball does not exist until `buildVyzorixCli` has run.
+    val sourceProvider = providers.provider { bundledVyzorixCliFile() }
 
     onlyIf { sourceProvider.get() != null }
     inputs.file(sourceProvider)
@@ -503,10 +503,10 @@ val stageLayer3 by tasks.registering {
 
 tasks
     .matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(stageRootfs, stageLayer3) }
+    .configureEach { dependsOn(stageRootfs, stageVyzorixCli) }
 
 // The lint path reads the same staged directories; Gradle fails a release build for an
 // undeclared dependency there, so it needs the same dependency as the merge path.
 tasks
     .matching { it.name.contains("Lint") || it.name.contains("lint") }
-    .configureEach { dependsOn(stageRootfs, stageLayer3) }
+    .configureEach { dependsOn(stageRootfs, stageVyzorixCli) }

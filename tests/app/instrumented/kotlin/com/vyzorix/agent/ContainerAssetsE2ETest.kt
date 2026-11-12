@@ -9,7 +9,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The container's userspace and Layer 3 are **fetched**, not bundled. This drives the
+ * The container's userspace and the Vyzorix CLI are **fetched**, not bundled. This drives the
  * real installers end to end against a served release: the checksum-compiled-in fetch,
  * the extraction, and the "is it ready" check — the path a device takes on first boot.
  *
@@ -44,9 +44,12 @@ class ContainerAssetsE2ETest {
     }
 
     @Test
-    fun theLayer3BinariesAreFetched() {
+    fun theVyzorixCliIsFetched() {
         RootfsBootstrap.ensureInstalled(context)
-        assertTrue("layer 3 must install from the release", RootfsBootstrap.ensureLayer3(context))
+        assertTrue(
+            "the Vyzorix CLI must install from the release",
+            RootfsBootstrap.ensureVyzorixCli(context),
+        )
         assertTrue(
             "the supervisor must be present after install",
             ProotLauncher.hasSupervisor(context),

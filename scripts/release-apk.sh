@@ -30,7 +30,7 @@
 #
 # What it does, in order:
 #   1. checks every tool it needs is present and usable, and says what is missing;
-#   2. makes sure the arm64 build inputs exist (the rootfs tarball and the Layer 3
+#   2. makes sure the arm64 build inputs exist (the rootfs tarball and the the Vyzorix CLI
 #      binaries), fetching or building them if they do not;
 #   3. runs the gate (unless --skip-tests), so a release is a green tree;
 #   4. builds the APK for arm64;
@@ -133,17 +133,17 @@ done
 
 [[ -x "${REPO_ROOT}/gradlew" ]] || { info "MISS gradlew"; missing+=("gradlew"); }
 
-# The Layer 3 binaries are cross-compiled for the container's glibc. The compiler is
+# The the Vyzorix CLI binaries are cross-compiled for the container's glibc. The compiler is
 # only needed when the arm64 archive is absent and must be built here; if it is
 # already present (a release checkout, or a previous build) it is not required.
-LAYER3_EXISTS=0
-[[ -s "${REPO_ROOT}/app-runtime/dist/layer3-arm64.tar.gz" ]] && LAYER3_EXISTS=1
-if [[ "${LAYER3_EXISTS}" -eq 1 ]]; then
-  info "ok   layer3-arm64.tar.gz present (no cross-compiler needed)"
+VYZORIX_CLI_EXISTS=0
+[[ -s "${REPO_ROOT}/app-runtime/dist/vyzorix-cli-arm64.tar.gz" ]] && VYZORIX_CLI_EXISTS=1
+if [[ "${VYZORIX_CLI_EXISTS}" -eq 1 ]]; then
+  info "ok   vyzorix-cli-arm64.tar.gz present (no cross-compiler needed)"
 elif command -v aarch64-linux-gnu-g++ >/dev/null 2>&1; then
   info "ok   aarch64-linux-gnu-g++"
 else
-  info "MISS aarch64-linux-gnu-g++ — needed to build the arm64 Layer 3 binaries (scripts/install-toolchain.sh)"
+  info "MISS aarch64-linux-gnu-g++ — needed to build the arm64 the Vyzorix CLI binaries (scripts/install-toolchain.sh)"
   missing+=("aarch64-linux-gnu-g++")
 fi
 
@@ -202,12 +202,12 @@ else
     || die "could not fetch the rootfs; build it with scripts/build-rootfs.sh --arch ${ROOTFS_ABI}"
 fi
 
-LAYER3="${REPO_ROOT}/app-runtime/dist/layer3-${ROOTFS_ABI}.tar.gz"
-if [[ -s "${LAYER3}" ]]; then
-  info "Layer 3 binaries present: ${LAYER3}"
+VYZORIX_CLI="${REPO_ROOT}/app-runtime/dist/vyzorix-cli-${ROOTFS_ABI}.tar.gz"
+if [[ -s "${VYZORIX_CLI}" ]]; then
+  info "the Vyzorix CLI binaries present: ${VYZORIX_CLI}"
 else
-  info "building the ${ROOTFS_ABI} Layer 3 binaries"
-  bash "${REPO_ROOT}/scripts/build-layer3.sh" --arch "${ROOTFS_ABI}"
+  info "building the ${ROOTFS_ABI} the Vyzorix CLI binaries"
+  bash "${REPO_ROOT}/scripts/build-vyzorix-cli.sh" --arch "${ROOTFS_ABI}"
 fi
 
 # ---------------------------------------------------------------- gate

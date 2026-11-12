@@ -506,11 +506,11 @@ class AdminApisLiveTest {
         assertTrue(json.has("rootfsReady"))
         assertTrue(json.has("prootExecutable"))
         assertTrue(json.has("supervisorPresent"))
-        assertTrue(json.has("layer3Installed"))
+        assertTrue(json.has("vyzorixCliInstalled"))
         assertTrue(json.has("shellUsable"))
         assertTrue("the verdict must be named", json.getString("verdict").isNotEmpty())
         // The fetch URLs are reported, so a missing asset is visible.
-        assertTrue(json.has("layer3Url"))
+        assertTrue(json.has("vyzorixCliUrl"))
         assertTrue(json.has("rootfsUrl"))
         Log.i(TAG, "container_status -> $json")
     }

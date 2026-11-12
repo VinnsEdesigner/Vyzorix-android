@@ -24,7 +24,7 @@ object ProotLauncher {
      *
      * Bound to `/home/apps` inside the container. It is **app storage, not package
      * storage**, and it is separate from the overlay for one reason that decides it:
-     * Layer 2 is disposable and Layer 3's storage is not. The overlay holds
+     * Layer 2 is disposable and the Vyzorix CLI's storage is not. The overlay holds
      * installed packages and is conceptually part of the container; this holds the
      * operator's apps and must survive anything the container does.
      */
@@ -386,7 +386,7 @@ object ProotLauncher {
                 // the overlay is the only thing there — which is the point: an
                 // update swaps files/rootfs and leaves on-device config alone.
                 add("$overlay/etc:/etc/vyzorix")
-                // App storage: Layer 2 is disposable, Layer 3's storage is not.
+                // App storage: Layer 2 is disposable, the Vyzorix CLI's storage is not.
                 // The supervisor's registry, its logs and the apps' files live here,
                 // so a rootfs replacement leaves every app and its data alone.
                 add("${appsDir(context).absolutePath}:$APPS_IN_CONTAINER")
@@ -573,12 +573,12 @@ object ProotLauncher {
         )
 
     /**
-     * The request that starts the Layer 3 supervisor inside the container.
+     * The request that starts the the Vyzorix CLI supervisor inside the container.
      *
      * Not a PTY session: the supervisor is a daemon, not a terminal. It is run with
      * the same proot argv shape as the login shell, minus the shell — `env -i` to
      * clear the environment, then the supervisor binary, which is installed into the
-     * rootfs by [Layer3Installer].
+     * rootfs by [VyzorixCliInstaller].
      *
      * Its stdout and stderr are the caller's to capture: the supervisor logs to
      * stderr, and Layer 1 relays that to logcat so `logcat` shows supervisor output
@@ -634,7 +634,7 @@ object ProotLauncher {
      * sees at `/usr/local/bin/supervisor`. Checking under the rootfs would look
      * plausible and always be false.
      *
-     * Like [hasTmux], this is checked rather than assumed: [Layer3Installer] may not
+     * Like [hasTmux], this is checked rather than assumed: [VyzorixCliInstaller] may not
      * have run yet on a device upgrading in place.
      */
     fun hasSupervisor(context: Context): Boolean =
@@ -690,7 +690,7 @@ object ProotLauncher {
     /**
      * The supervisor binary inside the container, absolute.
      *
-     * Installed into the overlay's `/usr/local/bin` by the Layer 3 installer, so it
+     * Installed into the overlay's `/usr/local/bin` by the the Vyzorix CLI installer, so it
      * survives a rootfs replacement the same way the app storage does.
      */
     const val SUPERVISOR_BINARY = "/usr/local/bin/supervisor"

@@ -86,7 +86,7 @@ class VyzorixForegroundService : Service() {
     /** The one-shot install thread, kept so `onDestroy` can join it. */
     private var installThread: Thread? = null
 
-    /** The Layer 3 supervisor process, when it is running. */
+    /** The the Vyzorix CLI supervisor process, when it is running. */
     private var supervisor: Process? = null
 
     /** How many times the supervisor has been restarted, for the backoff. */
@@ -169,14 +169,14 @@ class VyzorixForegroundService : Service() {
                     Log.i(TAG, "rootfs install finished; container ready=$ready")
 
                     if (ready) {
-                        // Layer 3 is bundled too. The supervisor is started as soon as it
+                        // the Vyzorix CLI is bundled too. The supervisor is started as soon as it
                         // is in place, because `ProotLauncher.hasSupervisor()` is the
                         // signal everything else uses to mean "the tree is ready".
                         notification.preparingContainer("unpacking the app runtime")
-                        val layer3 = RootfsBootstrap.ensureLayer3(this)
-                        Log.i(TAG, "layer 3 install finished; supervisor=$layer3")
+                        val cli = RootfsBootstrap.ensureVyzorixCli(this)
+                        Log.i(TAG, "the Vyzorix CLI install finished; supervisor=$cli")
 
-                        if (layer3) {
+                        if (cli) {
                             startSupervisor()
                         }
                     }
@@ -312,7 +312,7 @@ class VyzorixForegroundService : Service() {
         }
 
     /**
-     * Starts the Layer 3 supervisor inside the container, and relays its log.
+     * Starts the the Vyzorix CLI supervisor inside the container, and relays its log.
      *
      * Run as a **plain child process**, not a PTY session: the supervisor is a
      * daemon, and giving it a terminal would only add a reader whose output goes

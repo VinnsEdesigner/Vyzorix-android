@@ -8,7 +8,7 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * Installs the Layer 3 container binaries: the supervisor, the `app-*` CLI, and the
+ * Installs the the Vyzorix CLI container binaries: the supervisor, the `app-*` CLI, and the
  * bridge client.
  *
  * ## Why this is separate from [RootfsInstaller]
@@ -24,12 +24,12 @@ import java.io.InputStream
  * ## Where the archive comes from
  *
  * Bundled in the APK under `assets/`, or — when the build does not bundle it — fetched
- * from the release that carries `layer3-<abi>.tar.gz`. The bundled copy is the fast
+ * from the release that carries `vyzorix-cli-<abi>.tar.gz`. The bundled copy is the fast
  * path and the offline path; the download lets a build ship without the ~10 MB asset,
  * so a rebuilt container reaches a device as a new release rather than only as a new
  * APK.
  *
- * A **fetched** archive is verified against the build's baked [layer3Sha256]. That
+ * A **fetched** archive is verified against the build's baked [vyzorixCliSha256]. That
  * checksum is the integrity anchor: unlike the bundled copy, a download has no APK
  * signature over it, so an unverified download is an attacker's binary. An empty
  * checksum therefore disables the download path rather than fetching unverified.
@@ -40,7 +40,7 @@ import java.io.InputStream
  * bundled archive) or its checksum (for a fetched one), so a rebuilt container
  * reinstalls while an unchanged one is a no-op.
  */
-class Layer3Installer(
+class VyzorixCliInstaller(
     private val context: Context,
     /** The asset holding this build's binaries. */
     private val assetName: String = DEFAULT_ASSET,
@@ -82,7 +82,7 @@ class Layer3Installer(
             // container, the bridge and the terminal all still work. Logged loudly
             // because it is the difference between "apps run" and "apps silently do
             // not", and the next boot retries.
-            Log.e(TAG, "layer 3 binaries failed to install; apps will not run", e)
+            Log.e(TAG, "the Vyzorix CLI binaries failed to install; apps will not run", e)
 
             false
         }
@@ -104,7 +104,7 @@ class Layer3Installer(
      * For a bundled archive that value is the archive's **length**. The ABI alone is
      * not enough — a rebuilt supervisor with the same ABI has the same name, so an
      * ABI-only marker made every rebuild a no-op. The length changes when the binaries
-     * change. (Reading it needs an uncompressed asset: `assets/layer3/layer3.l3` is in
+     * change. (Reading it needs an uncompressed asset: `assets/vyzorix-cli/vyzorix-cli.l3` is in
      * `noCompress`, because `openFd` has no fd for a deflated asset and the length would
      * read as -1 — a constant, and the bug that left a device on old commands.)
      *
@@ -145,18 +145,21 @@ class Layer3Installer(
 
         marker(context).writeText(installKey())
 
-        Log.i(TAG, "layer 3 binaries installed")
+        Log.i(TAG, "the Vyzorix CLI binaries installed")
     }
 
     /** Extracts the bundled asset. The APK signature is the integrity check. */
     private fun installFromAsset(target: File) {
-        Log.i(TAG, "installing layer 3 binaries from the bundled asset into ${target.absolutePath}")
+        Log.i(
+            TAG,
+            "installing the Vyzorix CLI from the bundled asset into ${target.absolutePath}",
+        )
 
         val asset =
             try {
                 context.assets.open(assetName, AssetManager.ACCESS_STREAMING)
             } catch (e: IOException) {
-                throw IOException("no bundled layer 3 archive at $assetName", e)
+                throw IOException("no bundled the Vyzorix CLI archive at $assetName", e)
             }
 
         asset.use { TarGz.extract(it, target, expectedSha256 = "") }
@@ -169,18 +172,18 @@ class Layer3Installer(
      * trusted, because there is no APK signature over a downloaded archive.
      */
     private fun installFromRelease(target: File) {
-        val fetcher = download ?: throw IOException("no download configured for layer 3")
+        val fetcher = download ?: throw IOException("no download configured for the Vyzorix CLI")
         if (baseUrl.isEmpty() || abi.isEmpty()) {
-            throw IOException("no layer 3 download configured for $abi")
+            throw IOException("no the Vyzorix CLI download configured for $abi")
         }
         if (expectedSha256.isEmpty()) {
             // Refusing here is the point: an unverified download is arbitrary code, and
             // the build should either bake the asset or carry the checksum.
-            throw IOException("layer 3 download refused: no checksum to verify against")
+            throw IOException("the Vyzorix CLI download refused: no checksum to verify against")
         }
 
-        val url = "$baseUrl/$LAYER3_PREFIX$abi$LAYER3_SUFFIX"
-        Log.i(TAG, "fetching layer 3 binaries from $url")
+        val url = "$baseUrl/$VYZORIX_CLI_PREFIX$abi$VYZORIX_CLI_SUFFIX"
+        Log.i(TAG, "fetching the Vyzorix CLI binaries from $url")
 
         fetcher(url).use { TarGz.extract(it, target, expectedSha256) }
     }
@@ -216,7 +219,7 @@ class Layer3Installer(
     private fun File.readTextOrNull(): String? = if (isFile) readText().trim() else null
 
     companion object {
-        private const val TAG = "Layer3Installer"
+        private const val TAG = "VyzorixCliInstaller"
 
         /**
          * The bundled archive.
@@ -227,16 +230,16 @@ class Layer3Installer(
          * recognises as an archive, so a `.tar.gz` arrives decompressed. The bytes
          * are gzip either way; only the name avoids AGP's handling.
          */
-        const val DEFAULT_ASSET = "layer3/layer3.l3"
+        const val DEFAULT_ASSET = "vyzorix-cli/vyzorix-cli.l3"
 
         /** The overlay subdirectory the archive's `bin/` sits under. */
         const val OVERLAY_SUB_DIR = "usr-local"
 
         /** Marks what was installed, so a re-install is a no-op. */
-        const val MARKER = "layer3.installed"
+        const val MARKER = "vyzorix-cli.installed"
 
-        /** The release asset's name, `layer3-<abi>.tar.gz`. */
-        const val LAYER3_PREFIX = "layer3-"
-        const val LAYER3_SUFFIX = ".tar.gz"
+        /** The release asset's name, `vyzorix-cli-<abi>.tar.gz`. */
+        const val VYZORIX_CLI_PREFIX = "vyzorix-cli-"
+        const val VYZORIX_CLI_SUFFIX = ".tar.gz"
     }
 }

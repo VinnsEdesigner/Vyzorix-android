@@ -14,7 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The cloud command path into the Layer 3 supervisor, against the **real** supervisor
+ * The cloud command path into the the Vyzorix CLI supervisor, against the **real** supervisor
  * running in the container.
  *
  * ## Why this is in `:app`

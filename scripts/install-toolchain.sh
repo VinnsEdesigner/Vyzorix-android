@@ -27,7 +27,7 @@
 #   container-build     debootstrap + qemu-user-static + binfmt-support, and the binfmt_misc
 #                    handlers  -> rebuilds a rootfs for ANY architecture (Layer 2)
 #   cross-compilers  gcc/g++ for aarch64 and armhf  -> builds android-bin (Layer 2)
-#                    and the Layer 3 supervisor / cli-wrappers, which run inside the
+#                    and the the Vyzorix CLI supervisor / cli-wrappers, which run inside the
 #                    Debian userspace (glibc, not Android's bionic)
 #
 # On completion it writes <prefix>/env.sh; source it to get the toolchain on PATH.
@@ -238,9 +238,9 @@ if ! skipped container-build; then
 fi
 
 # ------------------------------------------------------------ cross-compilers
-# `debian-container/android-bin` (Layer 2) and Layer 3's supervisor / cli-wrappers are
+# `debian-container/android-bin` (Layer 2) and the Vyzorix CLI's supervisor / cli-wrappers are
 # built for the Debian userspace, whose libc is glibc — not Android's bionic — so
-# they need a GNU cross toolchain, not the NDK. C++ for android-bin, C for Layer 3,
+# they need a GNU cross toolchain, not the NDK. C++ for android-bin, C for the Vyzorix CLI,
 # hence both gcc- and g++- packages.
 if ! skipped cross-compilers; then
   # apt's mirror rate-limits under load; a transient 503 is not a real failure, so

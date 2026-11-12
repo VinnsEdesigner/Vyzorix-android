@@ -1,0 +1,111 @@
+#!/bin/bash
+# vyzorix — the Vyzorix CLI: this device's APIs, as commands.
+#
+# This is the front door to the tools installed beside it. Run it bare for a
+# command list, or with a command to call one:
+#
+#   vyzorix                     what this device can do
+#   vyzorix <command> [args]    call one
+#   vyzorix help <command>      that command's own help
+#   vyzorix version
+#
+# Every command is a symlink to `android-bin` beside this script, so the set is
+# discovered at run time — a new API appears here without editing this file.
+set -uo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colour only when the output is a terminal and NO_COLOR is unset, so piping to a
+# file or a script gives plain text. The brand accent matches the notification.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  b=$'\033[1m'; d=$'\033[2m'; r=$'\033[0m'
+  brand=$'\033[38;5;88m'   # burgundy
+else
+  b=""; d=""; r=""; brand=""
+fi
+
+# Groups, so the list reads as a product rather than an alphabet. A command not
+# named here falls under "other", so a new one is still listed.
+group_of() {
+  case "$1" in
+    camera|audio|display|sensor|thermal|haptics|brightness|screen|rotation|input|haptic*) echo "Hardware" ;;
+    wifi|net|network*|dns|vpn|bt|bluetooth*|nfc|airplane|proxy*|mounts|storage*) echo "Connectivity" ;;
+    sms|call|phone*|contacts*) echo "Telephony" ;;
+    apps|app-*|supervisor|session) echo "Apps" ;;
+    dev|admin|security|restrict|esc|ops|props|build|device|wboot|wdbg|sysui|a11y) echo "Device" ;;
+    cpu|mem|load|kernel|procs|fds|battery|power|clock|lang|logcat|clipboard|notifications|dnd|wallpaper|location|usb) echo "System" ;;
+    *) echo "Other" ;;
+  esac
+}
+
+commands() {
+  # The symlinks beside this script that point at android-bin, plus app-* (which
+  # point at app-tool). Named explicitly so a stray file is not listed.
+  local f
+  for f in "$here"/*; do
+    [[ -L "$f" ]] || continue
+    local n; n="$(basename "$f")"
+    [[ "$n" == "vyzorix" || "$n" == "android-bin" || "$n" == "supervisor" ]] && continue
+    case "$n" in
+      app-*|android-bin|supervisor) : ;;
+      *) printf '%s\n' "$n" ;;
+    esac
+  done | sort -u
+}
+
+banner() {
+  printf '\n' >&2
+  printf '  %sV Y Z O R I X%s  %sCLI%s\n' "$brand" "$r" "$d" "$r" >&2
+  printf '  %s────────────────────────────────────────%s\n' "$d" "$r" >&2
+  printf '  %sthe device APIs, as commands%s\n\n' "$d" "$r" >&2
+}
+
+list_commands() {
+  local -a cmds; mapfile -t cmds < <(commands)
+  local g last=""
+  for g in Hardware Connectivity Telephony Apps Device System Other; do
+    local -a members=()
+    local c; for c in "${cmds[@]}"; do [[ "$(group_of "$c")" == "$g" ]] && members+=("$c"); done
+    ((${#members[@]})) || continue
+    printf '  %s%s%s\n' "$b" "$g" "$r"
+    printf '    %s\n' "$(printf '%s  ' "${members[@]}" | sed 's/  $//')"
+    printf '\n'
+  done
+}
+
+usage() {
+  banner
+  printf '  %sUsage%s\n' "$b" "$r"
+  printf '    vyzorix                  %sthis list%s\n' "$d" "$r"
+  printf '    vyzorix <command> ...    %scall a command%s\n' "$d" "$r"
+  printf '    vyzorix help <command>   %shelp for one command%s\n' "$d" "$r"
+  printf '    vyzorix version\n\n'
+  printf '  %sCommands%s\n' "$b" "$r"
+  list_commands
+  printf '  %severy command prints JSON, and exits non-zero on failure.%s\n\n' "$d" "$r"
+}
+
+case "${1:-}" in
+  ""|-h|--help|help)
+    if [[ "${1:-}" == "help" && -n "${2:-}" ]]; then
+      exec "$here/$2" --help
+    fi
+    usage
+    ;;
+  version|--version|-v)
+    printf 'Vyzorix CLI %s (%s)\n' "$(cat "$here/VERSION" 2>/dev/null || echo dev)" "$(uname -m)"
+    ;;
+  list|commands)
+    list_commands
+    ;;
+  *)
+    cmd="$1"; shift
+    target="$here/$cmd"
+    if [[ ! -x "$target" ]]; then
+      printf 'vyzorix: no such command: %s\n\n' "$cmd" >&2
+      usage >&2
+      exit 2
+    fi
+    exec "$target" "$@"
+    ;;
+esac

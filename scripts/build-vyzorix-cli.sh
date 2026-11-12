@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# Build the Layer 3 container binaries for one Android ABI.
+# Build the the Vyzorix CLI container binaries for one Android ABI.
 #
 # Produces, in app-runtime/dist/:
-#   layer3-<abi>.tar.gz   supervisor + app-* + android-bin, with the paths they
+#   vyzorix-cli-<abi>.tar.gz   supervisor + app-* + android-bin, with the paths they
 #                         install to inside the container
 #
 # These binaries run **inside the Debian userspace**, whose libc is glibc — not
@@ -17,7 +17,7 @@
 # scripts/install-toolchain.sh installs both cross-compilers.
 #
 # Usage:
-#   scripts/build-layer3.sh [--arch arm64|armeabi-v7a|x86_64] [--out DIR]
+#   scripts/build-vyzorix-cli.sh [--arch arm64|armeabi-v7a|x86_64] [--out DIR]
 #
 # The tarball's paths are relative to the overlay's /usr/local, so extracting it at
 # files/overlay/usr-local installs:
@@ -69,7 +69,7 @@ LDFLAGS_STATIC="-static -static-libgcc -static-libstdc++"
 export LDFLAGS_STATIC
 
 if ! command -v "${CXX}" >/dev/null 2>&1; then
-  echo "build-layer3: ${CXX} not found; run scripts/install-toolchain.sh" >&2
+  echo "build-vyzorix-cli: ${CXX} not found; run scripts/install-toolchain.sh" >&2
   exit 1
 fi
 
@@ -92,6 +92,11 @@ log "building for ${ARCH} with ${CXX}"
 
 cp "${ROOT}/app-runtime/supervisor/build/bin/supervisor" "${STAGE}/bin/"
 cp "${ROOT}"/app-runtime/cli-wrappers/build/bin/app-* "${STAGE}/bin/"
+# The front door: `vyzorix` lists and dispatches the commands below it, and
+# VERSION is what `vyzorix version` prints.
+cp "${ROOT}/app-runtime/cli-wrappers/build/bin/vyzorix" "${STAGE}/bin/vyzorix"
+cp "${ROOT}/app-runtime/cli-wrappers/build/bin/VERSION" "${STAGE}/bin/VERSION"
+chmod 0755 "${STAGE}/bin/vyzorix"
 
 # android-bin is a directory of symlinks beside the binary, so the whole directory
 # is copied: the symlinks are relative to the binary and only resolve together.
@@ -115,16 +120,20 @@ expected_machine="$(
 for binary in "${STAGE}"/bin/*; do
   [[ -f "${binary}" && ! -L "${binary}" ]] || continue
 
+  # Only ELF files are checked: `vyzorix` is a shell script and `VERSION` is text.
+  # `readelf` fails on those, and neither is a compiled binary to verify.
+  head -c 4 "${binary}" 2>/dev/null | grep -q $'\x7fELF' || continue
+
   machine="$(readelf -h "${binary}" | awk -F: '/Machine:/ {print $2}' | xargs)"
   if [[ "${machine}" != "${expected_machine}" ]]; then
-    echo "build-layer3: $(basename "${binary}") is ${machine}, expected ${expected_machine}" >&2
+    echo "build-vyzorix-cli: $(basename "${binary}") is ${machine}, expected ${expected_machine}" >&2
     exit 1
   fi
 
   # A dynamic binary here is the bug that only shows on a device, so it is a build
   # failure rather than a warning.
   if readelf -d "${binary}" 2>/dev/null | grep -q "NEEDED"; then
-    echo "build-layer3: $(basename "${binary}") is dynamically linked; it will not" >&2
+    echo "build-vyzorix-cli: $(basename "${binary}") is dynamically linked; it will not" >&2
     echo "  load against the rootfs glibc. The static flags are not reaching the link." >&2
     exit 1
   fi
@@ -133,12 +142,12 @@ echo "all binaries are ${expected_machine} and statically linked"
 
 log "packing"
 mkdir -p "${OUT}"
-tar -C "${STAGE}" -czf "${OUT}/layer3-${ARCH}.tar.gz" .
-ls -lh "${OUT}/layer3-${ARCH}.tar.gz"
+tar -C "${STAGE}" -czf "${OUT}/vyzorix-cli-${ARCH}.tar.gz" .
+ls -lh "${OUT}/vyzorix-cli-${ARCH}.tar.gz"
 # The listing is a convenience, and `tar | head` is a SIGPIPE race: head exits after
 # 20 lines, tar gets EPIPE, and with `set -o pipefail` the whole build fails
 # intermittently. The archive is already verified above, so a failure to *list* it
 # must not fail the build — hence the explicit tolerance rather than a bare pipe.
-tar -tzf "${OUT}/layer3-${ARCH}.tar.gz" 2>/dev/null | head -20 || true
+tar -tzf "${OUT}/vyzorix-cli-${ARCH}.tar.gz" 2>/dev/null | head -20 || true
 
 log "done"

@@ -6,8 +6,8 @@ import com.vyzorix.bridge.ApiOutcome
 import com.vyzorix.bridge.ApiTags
 import com.vyzorix.bridge.VyzorixApi
 import com.vyzorix.container.ContainerConfig
-import com.vyzorix.container.Layer3Installer
 import com.vyzorix.container.ProotLauncher
+import com.vyzorix.container.VyzorixCliInstaller
 import java.io.File
 import org.json.JSONObject
 
@@ -18,9 +18,9 @@ import org.json.JSONObject
  * ## The failure this makes visible
  *
  * The container is three parts installed at different times: the **rootfs** (the Debian
- * tree), the **overlay's layer 3** (the supervisor + `android-bin`, fetched separately),
+ * tree), the **overlay's the Vyzorix CLI** (the supervisor + `android-bin`, fetched separately),
  * and **proot**. A shell opens only when all three are present — `ProotLauncher.isReady`
- * gates the terminal. When layer 3 is missing (its fetch 404'd, or a build that does not
+ * gates the terminal. When the Vyzorix CLI is missing (its fetch 404'd, or a build that does not
  * bundle it has no checksum), the terminal opens and then produces **nothing**, which
  * reads as a hang rather than as a missing piece. This API reports each part and the
  * exact fetch URLs the device would use, so "the shell is empty" has an answer.
@@ -55,25 +55,27 @@ object ContainerStatusApi : ApiHandler {
         val rootfsReady = ProotLauncher.isReady(context)
         val supervisorPresent = ProotLauncher.hasSupervisor(context)
         val prootExecutable = ProotLauncher.prootBinary(context).canExecute()
-        val layer3Sha = config?.layer3Sha256.orEmpty()
+        val vyzorixCliSha = config?.vyzorixCliSha256.orEmpty()
 
         // The layer-3 marker: what is written vs what this build expects. A mismatch is a
         // stale install, which the next start reinstalls.
-        val layer3 =
-            Layer3Installer(
+        val cli =
+            VyzorixCliInstaller(
                 context = context,
                 abi = abi,
                 baseUrl = baseUrl,
-                expectedSha256 = config?.layer3Sha256.orEmpty(),
+                expectedSha256 = config?.vyzorixCliSha256.orEmpty(),
             )
-        val layer3Installed = layer3.isInstalled()
+        val vyzorixCliInstalled = cli.isInstalled()
 
         // The one-line verdict an operator acts on, named rather than inferred.
         val verdict =
             when {
                 !rootfsReady -> "rootfs missing: the Debian tree is not installed"
-                !supervisorPresent -> "layer3 missing: no supervisor, so the shell is empty"
-                !layer3Installed -> "layer3 stale: installed marker does not match this build"
+                !supervisorPresent ->
+                    "the Vyzorix CLI is missing: no supervisor, so the shell is empty"
+                !vyzorixCliInstalled ->
+                    "the Vyzorix CLI is stale: its marker does not match this build"
                 else -> "ready"
             }
 
@@ -85,9 +87,9 @@ object ContainerStatusApi : ApiHandler {
                 .put("rootfsBashPresent", File(rootfsDir, "bin/bash").exists())
                 .put("prootExecutable", prootExecutable)
                 .put("supervisorPresent", supervisorPresent)
-                .put("layer3Installed", layer3Installed)
-                .put("layer3Marker", layer3.installedMarker())
-                .put("layer3MarkerExpected", layer3.expectedMarker())
+                .put("vyzorixCliInstalled", vyzorixCliInstalled)
+                .put("vyzorixCliMarker", cli.installedMarker())
+                .put("vyzorixCliMarkerExpected", cli.expectedMarker())
                 // A shell opens only when all three hold; this is the terminal's own gate.
                 .put("shellUsable", rootfsReady && supervisorPresent)
                 .put("verdict", verdict)
@@ -95,20 +97,20 @@ object ContainerStatusApi : ApiHandler {
                 // layer-3 URL is the one that 404'd when the release lacked the asset.
                 .put("abi", abi)
                 .put("baseUrl", baseUrl)
-                .put("layer3Url", layer3Url(baseUrl, abi))
+                .put("vyzorixCliUrl", vyzorixCliUrl(baseUrl, abi))
                 .put("rootfsUrl", rootfsUrl(baseUrl, abi))
-                .put("layer3Sha256", config?.layer3Sha256.orEmpty())
+                .put("vyzorixCliSha256", config?.vyzorixCliSha256.orEmpty())
                 .put("rootfsSha256", config?.sha256.orEmpty())
                 // Empty checksum or URL disables the fetch (fail-closed), which is itself a
                 // reason the shell can be empty — named, not left to inference.
-                .put("fetchConfigured", baseUrl.isNotEmpty() && layer3Sha.isNotEmpty()),
+                .put("fetchConfigured", baseUrl.isNotEmpty() && vyzorixCliSha.isNotEmpty()),
         )
     }
 
-    private fun layer3Url(
+    private fun vyzorixCliUrl(
         baseUrl: String,
         abi: String,
-    ): String = if (baseUrl.isEmpty() || abi.isEmpty()) "" else "$baseUrl/layer3-$abi.tar.gz"
+    ): String = if (baseUrl.isEmpty() || abi.isEmpty()) "" else "$baseUrl/vyzorix-cli-$abi.tar.gz"
 
     private fun rootfsUrl(
         baseUrl: String,

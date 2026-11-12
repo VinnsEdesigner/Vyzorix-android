@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The Layer 3 download fallback: a build that does not bundle the archive fetches it
+ * The the Vyzorix CLI download fallback: a build that does not bundle the archive fetches it
  * from the release, verified against the build's checksum.
  *
  * The interesting cases are the refusals — a fetch with no checksum, a fetch whose
@@ -24,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
  * and an unverified one is arbitrary code.
  */
 @RunWith(RobolectricTestRunner::class)
-class Layer3InstallerTest {
+class VyzorixCliInstallerTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     /** The archive the fake release serves: one executable `bin/supervisor`. */
@@ -35,7 +35,7 @@ class Layer3InstallerTest {
         baseUrl: String = "https://example.invalid/releases/latest/download",
         abi: String = "arm64-v8a",
         sha256: String = sha256(archive),
-    ) = Layer3Installer(
+    ) = VyzorixCliInstaller(
         context = context,
         // No bundled asset in this test: the emulator's APK does not carry one for the
         // test ABI, so `hasBundledAsset()` is false and the download path is taken.
@@ -60,7 +60,7 @@ class Layer3InstallerTest {
 
         // The URL names the ABI's tarball under the base URL.
         assertEquals(
-            "https://example.invalid/releases/latest/download/layer3-arm64-v8a.tar.gz",
+            "https://example.invalid/releases/latest/download/vyzorix-cli-arm64-v8a.tar.gz",
             served.single(),
         )
 
@@ -68,7 +68,7 @@ class Layer3InstallerTest {
         assertTrue(ProotLauncher.hasSupervisor(context))
         val marker =
             java.io
-                .File(context.filesDir, Layer3Installer.MARKER)
+                .File(context.filesDir, VyzorixCliInstaller.MARKER)
                 .readText()
                 .trim()
         assertTrue("the marker must record the checksum", marker.endsWith(sha256(archive)))

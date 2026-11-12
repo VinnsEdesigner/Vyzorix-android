@@ -16,6 +16,9 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Werror
 LDFLAGS ?=
 BUILD := build
 
+# The CLI's own version, stamped into the bundle and printed by `vyzorix version`.
+CLI_VERSION ?= 0.1.0
+
 LIB := ../../native/lib
 INC := -I$(LIB)/include
 
@@ -38,7 +41,10 @@ symlinks: $(BUILD)/bin/app-tool
 	@for cmd in $(COMMANDS); do \
 		ln -sf app-tool $(BUILD)/bin/$$cmd; \
 	done
-	@echo "cli-wrappers: $(words $(COMMANDS)) command(s)"
+	@cp vyzorix $(BUILD)/bin/vyzorix
+	@chmod 0755 $(BUILD)/bin/vyzorix
+	@printf '%s' "$(CLI_VERSION)" > $(BUILD)/bin/VERSION
+	@echo "cli-wrappers: $(words $(COMMANDS)) command(s) + vyzorix"
 
 $(BUILD):
 	mkdir -p $(BUILD)

@@ -39,15 +39,15 @@ data class ContainerConfig(
     /** Where a device of another ABI fetches its rootfs. Empty disables the fallback. */
     val baseUrl: String,
     /**
-     * SHA-256 the Layer 3 archive must match when it is **fetched** rather than
+     * SHA-256 the the Vyzorix CLI archive must match when it is **fetched** rather than
      * bundled.
      *
-     * Layer 3 is our own code, so the bundled copy is covered by the APK signature and
+     * the Vyzorix CLI is our own code, so the bundled copy is covered by the APK signature and
      * needs no checksum. A fetched copy has no such cover, so an empty value here means
      * the download fallback is unavailable rather than unverified — the same rule the
      * extended rootfs tier follows.
      */
-    val layer3Sha256: String = "",
+    val vyzorixCliSha256: String = "",
     /**
      * Fetches a URL as a stream.
      *
