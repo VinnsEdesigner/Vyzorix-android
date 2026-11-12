@@ -397,11 +397,111 @@ dependencies {
 }
 
 /**
- * The rootfs and Layer 3 are **not** bundled in the APK.
+ * The rootfs and Layer 3 are **bundled in the APK**.
  *
- * They are published as separate release assets (`debian-core-<abi>.tar.gz`,
- * `debian-extended-<abi>.tar.gz`, `layer3-<abi>.tar.gz`) and fetched on first run, verified
- * against the checksums compiled in above. This keeps the APK small (no ~46 MB rootfs, no
- * ~10 MB layer3) and lets each be updated without a new APK. The `ROOTFS_*` / `LAYER3_*`
- * BuildConfig fields below are what the fetchers use; there is no staging step.
+ * They are staged as assets below, so a device has its container the moment the APK is
+ * installed — no network fetch, no window where the shell is empty because a download
+ * failed. The release still publishes the tarballs as separate assets, and the fetch path
+ * (with the checksums compiled in above) remains as a fallback, but the bundled copy is
+ * the path a device actually uses.
+ *
+ * The cost is APK size (~60 MB with one rootfs); the benefit is that installing the APK is
+ * sufficient. This is a deliberate reversal of the "fetch separately" experiment, which
+ * was not stable enough in practice.
+ *
+ * ## Staging the rootfs
+ *
+ * `dist/` holds six tarballs; the task copies only the one file the build is configured
+ * for, so the APK carries one rootfs. A missing tarball is not an error — the app still
+ * builds and runs bridge-only until the rootfs arrives by fetch.
  */
+val stageRootfs by tasks.registering {
+    val source = bundledRootfsFile()
+    val destDir = layout.buildDirectory.dir("generated/rootfsAssets/rootfs")
+    val destName = "debian-core.rootfs"
+
+    description = "Stages the ${bundledRootfsAbi()} rootfs into assets/."
+
+    onlyIf { source != null }
+    if (source != null) {
+        inputs.file(source)
+        outputs.file(destDir.map { it.file(destName) })
+
+        doLast {
+            // A plain byte copy, NOT Gradle's Copy task, and the `.rootfs` extension is
+            // load-bearing: AGP's mergeAssets treats a `.tar.gz` asset as an archive and
+            // unpacks it, so the APK would receive an uncompressed tar instead of the gzip
+            // SHA256SUMS describes. An extension AGP does not recognise is stored
+            // byte-for-byte. The bytes are still gzip; TarGz reads them as such.
+            val out = destDir.get().file(destName).asFile
+            out.parentFile.mkdirs()
+            source.inputStream().use { input -> out.outputStream().use { input.copyTo(it) } }
+        }
+    }
+}
+
+android.sourceSets.getByName("main").assets.srcDir(
+    layout.buildDirectory.dir("generated/rootfsAssets"),
+)
+android.sourceSets.getByName("main").assets.srcDir(
+    layout.buildDirectory.dir("generated/layer3Assets"),
+)
+
+/**
+ * Builds the Layer 3 container binaries with their own Makefile.
+ *
+ * Staging copies whatever is at `app-runtime/dist/`, so the build must produce it first or
+ * a source change to the supervisor is invisible on the device. Skipped when the
+ * cross-compiler is missing, so a machine without the toolchain still produces an APK.
+ */
+val buildLayer3 by tasks.registering(Exec::class) {
+    description = "Cross-compiles the Layer 3 container binaries for ${bundledRootfsAbi()}."
+
+    val script = rootProject.file("scripts/build-layer3.sh")
+    onlyIf { script.isFile }
+    if (script.isFile) {
+        commandLine("bash", script.absolutePath, "--arch", bundledRootfsAbi())
+        inputs.dir(rootProject.file("app-runtime/supervisor/src"))
+        inputs.dir(rootProject.file("app-runtime/cli-wrappers"))
+        inputs.dir(rootProject.file("native/lib"))
+        inputs.file(rootProject.file("app-runtime/supervisor/Makefile"))
+        inputs.file(rootProject.file("app-runtime/cli-wrappers/Makefile"))
+        inputs.file(script)
+        outputs.file(rootProject.file("app-runtime/dist/layer3-${bundledRootfsAbi()}.tar.gz"))
+    }
+}
+
+val stageLayer3 by tasks.registering {
+    val destDir = layout.buildDirectory.dir("generated/layer3Assets/layer3")
+    val destName = "layer3.l3"
+
+    description = "Stages the ${bundledRootfsAbi()} Layer 3 binaries into assets/."
+
+    dependsOn(buildLayer3)
+
+    // Resolved at execution time: the tarball does not exist until `buildLayer3` has run.
+    val sourceProvider = providers.provider { bundledLayer3File() }
+
+    onlyIf { sourceProvider.get() != null }
+    inputs.file(sourceProvider)
+    outputs.file(destDir.map { it.file(destName) })
+
+    doLast {
+        val input = sourceProvider.get() ?: return@doLast
+        // Same copy-not-srcDir rule and `.l3` extension trick as the rootfs: AGP's
+        // mergeAssets unpacks an asset it recognises as an archive. The bytes are gzip.
+        val out = destDir.get().file(destName).asFile
+        out.parentFile.mkdirs()
+        input.inputStream().use { from -> out.outputStream().use { from.copyTo(it) } }
+    }
+}
+
+tasks
+    .matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach { dependsOn(stageRootfs, stageLayer3) }
+
+// The lint path reads the same staged directories; Gradle fails a release build for an
+// undeclared dependency there, so it needs the same dependency as the merge path.
+tasks
+    .matching { it.name.contains("Lint") || it.name.contains("lint") }
+    .configureEach { dependsOn(stageRootfs, stageLayer3) }

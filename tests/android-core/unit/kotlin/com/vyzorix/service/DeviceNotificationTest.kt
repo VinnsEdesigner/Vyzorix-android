@@ -100,6 +100,32 @@ class DeviceNotificationTest {
     }
 
     @Test
+    fun `the preparing state names the stage and is dismissible-free`() {
+        DeviceNotification(context).preparingContainer("downloading its userspace")
+
+        val posted =
+            shadowOf(
+                manager(),
+            ).getNotification(DeviceNotification.PREPARING_NOTIFICATION_ID)
+        assertNotNull("the preparing notification must post", posted)
+        val text = posted.extras.getString(Notification.EXTRA_TEXT)
+        assertTrue(
+            "the text must name the stage; got: $text",
+            text!!.contains("downloading its userspace"),
+        )
+        assertTrue(
+            "the text must set the expectation of a wait; got: $text",
+            text.contains("minute", ignoreCase = true),
+        )
+
+        DeviceNotification(context).clearPreparingContainer()
+        assertNull(
+            "clearing must remove the preparing notification",
+            shadowOf(manager()).getNotification(DeviceNotification.PREPARING_NOTIFICATION_ID),
+        )
+    }
+
+    @Test
     fun `an unnamed offline device does not invent a name`() {
         DeviceNotification(context).running(name = "", networkUp = false)
 

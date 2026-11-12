@@ -106,6 +106,14 @@ object ProotLauncher {
     const val TMP_DIR_ENV = "PROOT_TMP_DIR"
 
     /**
+     * The `resolv.conf` the container binds, written from the device's own DNS servers.
+     *
+     * Kept in the app's files dir, not the rootfs: the rootfs ships an empty
+     * `resolv.conf` (a bind target only), so the container needs one from elsewhere.
+     */
+    const val DNS_CONF = "resolv.conf"
+
+    /**
      * proot's seccomp acceleration switch, read from proot's own environment.
      *
      * Termux proot accelerates syscall handling with a seccomp filter
@@ -196,6 +204,59 @@ object ProotLauncher {
     fun rootfs(context: Context): File = File(context.filesDir, ROOTFS_DIR)
 
     fun overlay(context: Context): File = File(context.filesDir, OVERLAY_DIR)
+
+    /**
+     * A `resolv.conf` the container can resolve names with.
+     *
+     * The rootfs ships `resolv.conf` empty (it is only a bind target), so the container
+     * has no nameserver unless one is written here. This reads the device's **own** DNS
+     * servers from the active network and writes them, so resolution inside the container
+     * matches the host's. When no server can be read, public resolvers are the fallback —
+     * a container with no DNS at all is the failure this exists to prevent.
+     *
+     * Rewritten on each call so a network change (a new Wi-Fi, a DNS change) is picked up
+     * the next time a shell is opened.
+     */
+    fun dnsConf(context: Context): File {
+        val file = File(context.filesDir, DNS_CONF)
+        val servers = currentDnsServers(context)
+
+        val text =
+            buildString {
+                append("# Written by Vyzorix: the device's DNS servers for the container.\n")
+                if (servers.isEmpty()) {
+                    append("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
+                } else {
+                    for (server in servers) {
+                        append("nameserver ").append(server.hostAddress).append('\n')
+                    }
+                }
+            }
+
+        runCatching { file.writeText(text) }
+
+        return file
+    }
+
+    /**
+     * The active network's DNS servers, or empty when none can be read.
+     *
+     * Defensive on purpose: this runs on the shell-open path, and a platform quirk (an
+     * old SDK without `getActiveNetwork`, a shadowed service in a test) must not break
+     * opening a terminal. Any failure yields "no servers", and [dnsConf] then falls back
+     * to public resolvers rather than leaving the container with no DNS at all.
+     */
+    private fun currentDnsServers(context: Context): List<java.net.InetAddress> =
+        runCatching {
+            val manager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                    as? android.net.ConnectivityManager
+                    ?: return emptyList()
+            val network = manager.activeNetwork ?: return emptyList()
+            val properties = manager.getLinkProperties(network) ?: return emptyList()
+
+            properties.dnsServers.filterNotNull()
+        }.getOrDefault(emptyList())
 
     fun appsDir(context: Context): File = File(context.filesDir, APPS_DIR)
 
@@ -299,7 +360,6 @@ object ProotLauncher {
      * or the recordings by construction, not by remembering to exclude them.
      */
     fun binds(context: Context): List<String> {
-        val rootfs = rootfs(context).absolutePath
         val overlay = overlay(context).absolutePath
 
         val binds =
@@ -308,8 +368,14 @@ object ProotLauncher {
                 add("/dev")
                 add("/proc")
                 add("/sys")
-                // DNS, or there is no name resolution inside the container.
-                add("$rootfs/etc/resolv.conf:/etc/resolv.conf")
+                // DNS, or there is no name resolution inside the container. The rootfs
+                // ships `resolv.conf` **empty** (it is only a bind target), so binding
+                // it directly leaves the container with no nameserver and every
+                // `curl`/`getaddrinfo` fails with "could not resolve host". Writing the
+                // device's own DNS servers into a file the overlay owns and binding that
+                // gives the container working resolution — verified necessary: the empty
+                // bind was the reason nothing in-container could reach the network.
+                add("${dnsConf(context).absolutePath}:/etc/resolv.conf")
                 // The writable overlay prefix, so on-device installs survive a
                 // rootfs replacement. Only named subdirectories, never the overlay
                 // root and never files/.

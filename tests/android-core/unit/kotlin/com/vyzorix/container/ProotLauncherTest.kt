@@ -196,6 +196,24 @@ class ProotLauncherTest {
     }
 
     @Test
+    fun `the container gets a resolv conf with a nameserver`() {
+        // The rootfs ships resolv.conf empty, so the container had no DNS and nothing
+        // in-container could resolve a host. The bind must point at a file the launcher
+        // writes, and that file must carry a nameserver.
+        val conf = ProotLauncher.dnsConf(context)
+
+        assertTrue("the resolv.conf must be written", conf.isFile)
+        assertTrue(
+            "the resolv.conf must carry a nameserver; got: ${conf.readText()}",
+            conf.readText().contains("nameserver "),
+        )
+        assertTrue(
+            "the resolv.conf must be bound into the container",
+            ProotLauncher.binds(context).any { it.endsWith(":/etc/resolv.conf") },
+        )
+    }
+
+    @Test
     fun `shared storage is bound so the container sees the public collections`() {
         // Tier 1 (unrooted) reaches shared storage through the app's own uid and the
         // storage permission, so the container is given the same tree the app has.

@@ -253,6 +253,71 @@ class DeviceNotification(
         }
     }
 
+    /**
+     * The container's userspace is being installed — a first-boot download that takes
+     * minutes on a slow link.
+     *
+     * This exists because the alternative was a silent stall: on a fresh install the
+     * agent has no container yet, so the terminal produces nothing and the status
+     * notification sat at "Starting…" with no explanation, which reads as a hang. [stage]
+     * says which part is being fetched so the wait is attributable, and the bar is
+     * indeterminate (the byte count is not known until the response headers arrive).
+     *
+     * It is its own notification id and channel, so it does **not** fight the persistent
+     * status notification, which the foreground service owns and the cloud connection
+     * moves through its own states. Both are visible at once: "preparing" says why the
+     * agent is not up yet, and the status one says what the service is doing.
+     */
+    fun preparingContainer(stage: String) {
+        ensurePreparingChannel()
+
+        val text = "Setting up the container — $stage. This can take a few minutes…"
+        val notification =
+            Notification
+                .Builder(context, PREPARING_CHANNEL_ID)
+                .setSmallIcon(R.drawable.vyzorix_notification_icon)
+                .setColor(BURGUNDY)
+                .setContentTitle("Vyzorix — preparing")
+                .setContentText(text)
+                .setStyle(
+                    Notification.BigTextStyle().bigText(
+                        "Setting up the container — $stage.\n\n" +
+                            "The first run downloads the container's userspace, which takes " +
+                            "a few minutes on a slow connection. The agent starts once it is " +
+                            "ready.",
+                    ),
+                ).setProgress(PROGRESS_MAX, 0, true)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build()
+
+        runCatching {
+            notificationManager()?.notify(PREPARING_NOTIFICATION_ID, notification)
+        }
+    }
+
+    /** Removes the "preparing" notification once the container is up (or has failed). */
+    fun clearPreparingContainer() {
+        runCatching {
+            notificationManager()?.cancel(PREPARING_NOTIFICATION_ID)
+        }
+    }
+
+    private fun ensurePreparingChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+        val manager = notificationManager() ?: return
+        if (manager.getNotificationChannel(PREPARING_CHANNEL_ID) != null) return
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PREPARING_CHANNEL_ID,
+                "Vyzorix setup",
+                NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
+    }
+
     /** The "Accept install" action: re-opens the installer for the staged APK. */
     private fun installAction(tapIntent: PendingIntent): Notification.Action {
         val builder =
@@ -410,6 +475,14 @@ class DeviceNotification(
 
         /** The install notification's channel, created on demand. */
         const val INSTALL_CHANNEL_ID = "vyzorix-install"
+
+        /**
+         * The "preparing the container" notification, a third id and channel. Its own id
+         * so a first-boot download does not overwrite the persistent status notification,
+         * which the foreground service owns.
+         */
+        const val PREPARING_NOTIFICATION_ID = 3
+        const val PREPARING_CHANNEL_ID = "vyzorix-preparing"
 
         /** The brand accent. `setColor` tints the icon, app name and emphasis text. */
         val BURGUNDY: Int = Color.rgb(128, 0, 32)
