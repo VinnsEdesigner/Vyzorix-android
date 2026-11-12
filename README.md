@@ -1,14 +1,18 @@
 # Vyzorix — Android
 
 A headless Android agent. It runs a Debian userspace inside `proot`, exposes it
-over a cloud WebSocket, and gives an operator a terminal (and, later, USB and app
-control). This repository is the **device half**; the server half lives in
-`VYZORIX`.
+over a cloud WebSocket, and gives an operator a terminal, the **Vyzorix CLI** (the
+device's APIs as commands, inside the container), and app control. This repository
+is the **device half**; the server half lives in `VYZORIX`.
 
 > **Read `doc/ANDROID_SERVICE_ARCHITECTURE.md` first.** It is the authority for
 > everything structural, and it records *why* the awkward constraints below exist.
 > `AGENTS.md` has the build, gate and toolchain detail. If a document here
 > disagrees with the architecture doc, the architecture doc wins.
+>
+> **The Vyzorix CLI has its own page: [`doc/CLI.md`](doc/CLI.md).** It is what an
+> operator actually types into; read it to understand the command surface and the
+> per-session identity and scoping.
 
 ---
 
@@ -33,6 +37,29 @@ scripts/run-emulator.sh
 
 That is the whole loop. The two scripts are the only setup you need; the rest of
 this file explains them and the layout.
+
+---
+
+## The Vyzorix CLI
+
+The device's own tool, inside the container: `camera`, `battery`, `wifi`, `apps`,
+`wboot` and ~75 more, each an API. It ships with the agent (bundled in the APK at
+`assets/vyzorix-cli/`, extracted to the container's `/usr/local`) and is what the
+cloud terminal lands you in:
+
+```bash
+vyzorix            # who you are, and the commands you may run
+vyzorix whoami     # your name, role, org, expiry
+vyzorix battery    # call one — JSON out, non-zero on failure
+```
+
+A session is **scoped**: the server resolves the operator's capability from their
+role and the device's tier, and sends it with the terminal session. `vyzorix` shows
+only what you may call; the bridge token enforces it. See [`doc/CLI.md`](doc/CLI.md).
+
+The bundle is built by `scripts/build-vyzorix-cli.sh` and published as
+`vyzorix-cli-<abi>.tar.gz`; the on-device wireless-debugging helper `adb` is built
+by `scripts/build-adb.sh` and published as `adb-<abi>.tar.gz`.
 
 ---
 
@@ -121,11 +148,30 @@ by its own `Makefile`, not Gradle, because it runs *inside* the Debian userspace
 
 ```bash
 cd debian-container/android-bin
-make check                         # JSON unit tests, on the host
+make check                         # JSON + command-resolver tests, on the host
 make CXX=aarch64-linux-gnu-g++     # build for arm64
 ```
 
-See `debian-container/android-bin/README.md`.
+It is part of the Vyzorix CLI bundle; `scripts/build-vyzorix-cli.sh` stages it
+beside the supervisor and the `app-*` wrappers. See
+`debian-container/android-bin/README.md`.
+
+### `scripts/build-vyzorix-cli.sh`
+
+Builds the container-side bundle (the supervisor, `android-bin` with its command
+symlinks, the `app-*` wrappers, and the `vyzorix` front door) into
+`app-runtime/dist/vyzorix-cli-<abi>.tar.gz`. Cross-compiled with a GNU toolchain
+for the container's glibc. **Reproducible** — fixed mtime/owner/order and `gzip -n`
+— so its SHA-256 is stable and the APK's compiled checksum matches the published
+tarball.
+
+### `scripts/build-adb.sh`
+
+Builds a standalone `adb` for the container, for on-device wireless debugging with
+no PC. Cross-built from `nmeum/android-tools` against a Debian bookworm sysroot
+(the container's libc), into `debian-container/adb/dist/adb-<abi>.tar.gz`. The
+tarball also carries `adbwireless`, the `pair`/`connect` helper.
+
 
 ---
 
@@ -162,16 +208,19 @@ android-core/     Layer 1 — the OS-facing library: foreground service, the uni
                   socket bridge, per-session tokens, the PTY broker (NDK), the
                   proot launcher. The only module that touches Android APIs.
 cloud-connector/  Layer 4 — the cloud client: enroll, device WebSocket, config,
-                  commands, telemetry, the terminal relay.
+                  commands, telemetry, the terminal relay (with the session identity).
 app/              the APK: manifest, permissions, and the container's end-to-end test.
-debian-container/    Layer 2 assets — the rootfs tarballs and android-bin.
-doc/              the architecture, the build contracts, and the spike results.
+app-runtime/      Layer 3 — the Vyzorix CLI bundle: the supervisor (C), the app-*
+                  CLI wrappers, built by its own Makefiles.
+debian-container/ Layer 2 — the rootfs pipeline and android-bin, the bridge client.
+doc/              the architecture, the build contracts, the CLI, the spike results.
 tests/            all tests, split per module (unit/ and instrumented/).
 third_party/      vendored native deps (proot, talloc), built by our own CMake.
 ```
 
 The four-layer design, the fd-capability model, and the PTY wire contract are in
-`doc/ANDROID_SERVICE_ARCHITECTURE.md`. `doc/README.md` indexes the rest.
+`doc/ANDROID_SERVICE_ARCHITECTURE.md`. `doc/CLI.md` is the Vyzorix CLI.
+`doc/README.md` indexes the rest.
 
 ---
 
