@@ -92,6 +92,12 @@ class Layer3Installer(
     fun isInstalled(): Boolean =
         ProotLauncher.hasSupervisor(context) && marker(context).readTextOrNull() == installKey()
 
+    /** The recorded install marker for this build, or "" when none is written. */
+    fun installedMarker(): String = marker(context).readTextOrNull().orEmpty()
+
+    /** The install marker this build would write. Differs from [installedMarker] when stale. */
+    fun expectedMarker(): String = installKey()
+
     /**
      * What the marker records: the ABI plus a value that changes when the binaries do.
      *

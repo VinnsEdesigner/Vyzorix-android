@@ -31,6 +31,7 @@ call_capability
 call_control
 camera_list
 clipboard_state
+container_status
 cpu_info
 default_apps
 developer_options

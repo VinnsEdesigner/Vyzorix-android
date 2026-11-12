@@ -2,6 +2,7 @@ package com.vyzorix.bridge
 
 import com.vyzorix.bridge.apis.AppOpsApi
 import com.vyzorix.bridge.apis.BatteryApi
+import com.vyzorix.bridge.apis.ContainerStatusApi
 import com.vyzorix.bridge.apis.DeviceInfoApi
 import com.vyzorix.bridge.apis.EscalationReconApi
 import com.vyzorix.bridge.apis.LogcatApi
@@ -33,6 +34,7 @@ class ApiTagsTest {
         listOf(
             BatteryApi::class.java,
             DeviceInfoApi::class.java,
+            ContainerStatusApi::class.java,
             StorageApi::class.java,
             NetworkApi::class.java,
             LogcatApi::class.java,
@@ -127,6 +129,7 @@ class ApiTagsTest {
             listOf(
                 BatteryApi::class.java,
                 DeviceInfoApi::class.java,
+                ContainerStatusApi::class.java,
                 StorageApi::class.java,
                 NetworkApi::class.java,
                 LogcatApi::class.java,

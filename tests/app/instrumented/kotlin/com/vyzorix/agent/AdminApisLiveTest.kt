@@ -498,6 +498,23 @@ class AdminApisLiveTest {
         return line?.trim().orEmpty()
     }
 
+    @Test
+    fun container_status_names_the_three_parts() {
+        val json = call("container_status")
+
+        // Each part of the container is reported, so an empty shell is attributable.
+        assertTrue(json.has("rootfsReady"))
+        assertTrue(json.has("prootExecutable"))
+        assertTrue(json.has("supervisorPresent"))
+        assertTrue(json.has("layer3Installed"))
+        assertTrue(json.has("shellUsable"))
+        assertTrue("the verdict must be named", json.getString("verdict").isNotEmpty())
+        // The fetch URLs are reported, so a missing asset is visible.
+        assertTrue(json.has("layer3Url"))
+        assertTrue(json.has("rootfsUrl"))
+        Log.i(TAG, "container_status -> $json")
+    }
+
     private companion object {
         const val TAG = "AdminApisLive"
     }

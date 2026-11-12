@@ -96,6 +96,7 @@ input_method             input ime
 # --- System ---
 battery                  battery
 battery_history          battery history
+container_status      wboot
 cpu_info                 cpu
 memory_info              mem
 load_average             load

@@ -15,6 +15,7 @@ import com.vyzorix.bridge.apis.CallCapabilityApi
 import com.vyzorix.bridge.apis.CallControlApi
 import com.vyzorix.bridge.apis.CameraListApi
 import com.vyzorix.bridge.apis.ClipboardStateApi
+import com.vyzorix.bridge.apis.ContainerStatusApi
 import com.vyzorix.bridge.apis.CpuInfoApi
 import com.vyzorix.bridge.apis.DefaultAppsApi
 import com.vyzorix.bridge.apis.DeveloperOptionsApi
@@ -133,6 +134,7 @@ object ApiCatalogue {
             CameraListApi.NAME to CameraListApi,
             ClipboardStateApi.NAME to ClipboardStateApi,
             CpuInfoApi.NAME to CpuInfoApi,
+            ContainerStatusApi.NAME to ContainerStatusApi,
             DefaultAppsApi.NAME to DefaultAppsApi,
             DeveloperOptionsApi.NAME to DeveloperOptionsApi,
             DeviceOwnerApi.NAME to DeviceOwnerApi,
