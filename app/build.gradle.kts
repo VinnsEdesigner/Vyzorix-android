@@ -464,6 +464,11 @@ val buildLayer3 by tasks.registering(Exec::class) {
         inputs.dir(rootProject.file("app-runtime/supervisor/src"))
         inputs.dir(rootProject.file("app-runtime/cli-wrappers"))
         inputs.dir(rootProject.file("native/lib"))
+        // `android-bin` is part of layer 3 too (it is the container's bridge client), and
+        // its command surface lives in `commands.txt`/`apis.txt`. Without this input a
+        // change to those files did not invalidate this task, so the archive kept a stale
+        // `android-bin` — a new command (`wboot`) was simply absent on the device.
+        inputs.dir(rootProject.file("debian-container/android-bin"))
         inputs.file(rootProject.file("app-runtime/supervisor/Makefile"))
         inputs.file(rootProject.file("app-runtime/cli-wrappers/Makefile"))
         inputs.file(script)

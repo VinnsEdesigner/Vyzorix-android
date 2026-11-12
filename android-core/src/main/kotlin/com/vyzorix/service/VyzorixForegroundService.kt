@@ -155,41 +155,24 @@ class VyzorixForegroundService : Service() {
         // the next boot retries.
         installThread =
             Thread({
-                // Tell the user why nothing runs yet. The first run downloads the
-                // container's userspace (tens of MB) and, without this, the notification
-                // sat at "Starting…" for minutes with no explanation — which reads as a
-                // hang. Cleared in the finally, so a failure does not leave it up either.
+                // The bundled pieces are unpacked first and the supervisor started, so the
+                // shell is usable in seconds. The extended tier (~108 MB, optional) is
+                // fetched **after** that, so a slow download never gates the container.
                 val notification = DeviceNotification(this)
+                var ready = false
 
                 try {
-                    // RootfsBootstrap pairs the installer with the build's ContainerConfig,
-                    // so the wiring lives in one place rather than here. Idempotent: on a
-                    // device that already has the rootfs this is three filesystem checks.
-                    notification.preparingContainer("downloading its userspace")
-                    val ready = RootfsBootstrap.ensureInstalled(this)
+                    // The core rootfs is bundled in the APK, so this is an unpack, not a
+                    // download — fast, and it cannot fail on the network.
+                    notification.preparingContainer("unpacking its userspace")
+                    ready = RootfsBootstrap.ensureInstalled(this)
                     Log.i(TAG, "rootfs install finished; container ready=$ready")
 
-                    // **Order matters: extended, then layer 3, then the supervisor.**
-                    //
-                    // The extended tier (`git`, `python3`, `tmux`) re-ships every core
-                    // file — `libc.so.6`, `ld-linux`, every binary — so writing it into
-                    // the tree while anything is running out of that tree rewrites files
-                    // out from under live processes. The extraction is atomic now (see
-                    // `TarGz.writeFile`), which makes it *safe*; installing it before
-                    // anything is spawned is what makes it *unnecessary to be lucky*.
-                    //
-                    // The supervisor is started **last** deliberately, because
-                    // `ProotLauncher.hasSupervisor()` is the signal everything else uses
-                    // to mean "the tree is ready" — the service's own watchdog, and any
-                    // caller waiting on the container. Starting it before the extended
-                    // extract would make that signal true while the tree was still being
-                    // rewritten.
                     if (ready) {
-                        notification.preparingContainer("installing the optional tooling")
-                        val extended = RootfsBootstrap.ensureExtended(this)
-                        Log.i(TAG, "extended tier install finished; installed=$extended")
-
-                        notification.preparingContainer("installing the app runtime")
+                        // Layer 3 is bundled too. The supervisor is started as soon as it
+                        // is in place, because `ProotLauncher.hasSupervisor()` is the
+                        // signal everything else uses to mean "the tree is ready".
+                        notification.preparingContainer("unpacking the app runtime")
                         val layer3 = RootfsBootstrap.ensureLayer3(this)
                         Log.i(TAG, "layer 3 install finished; supervisor=$layer3")
 
@@ -198,7 +181,26 @@ class VyzorixForegroundService : Service() {
                         }
                     }
                 } finally {
+                    // The shell is up (or the bundled unpack failed). Either way nothing
+                    // more is *waited on*, so the notification comes down now; the
+                    // extended fetch below runs without one.
                     notification.clearPreparingContainer()
+                }
+
+                // **The extended tier is fetched last, and that is the point.**
+                //
+                // It is `git`, `python3`, `tmux` — ~108 MB, optional, and the only part
+                // that needs the network. Starting the supervisor before it means a fresh
+                // install has a working shell in seconds instead of after the download,
+                // which on a slow link is minutes. Its extraction writes over files in the
+                // same tree (`libc.so.6`, `ld-linux`) — safe because `TarGz.writeFile`
+                // extracts atomically (temp file + rename), so a process that already has
+                // one mapped keeps the old inode and only a new exec sees the new one. A
+                // failure here leaves the container fully usable, just without the optional
+                // tooling; the next boot retries.
+                if (ready) {
+                    val extended = RootfsBootstrap.ensureExtended(this)
+                    Log.i(TAG, "extended tier install finished; installed=$extended")
                 }
             }, "vyzorix-rootfs-install").apply {
                 isDaemon = true
