@@ -86,7 +86,9 @@ class DeployApplierTest {
         )
 
     /** An applier that records what it installed, so the state write can be asserted. */
-    private fun applierThatRecords(supervisor: SupervisorControl): Pair<DeployApplier, InstalledStateTarget> {
+    private fun applierThatRecords(
+        supervisor: SupervisorControl,
+    ): Pair<DeployApplier, InstalledStateTarget> {
         val target = InstalledStateTarget.beside(appsRoot)
         val applier =
             DeployApplier(

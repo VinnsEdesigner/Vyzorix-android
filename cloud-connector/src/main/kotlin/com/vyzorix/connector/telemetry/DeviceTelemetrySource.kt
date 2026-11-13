@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.SystemClock
 import com.vyzorix.connector.deploy.InstalledState
+import com.vyzorix.connector.deploy.InstalledStateStore
 import com.vyzorix.connector.deploy.InstalledStateTarget
 
 /**

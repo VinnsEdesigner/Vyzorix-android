@@ -1,10 +1,9 @@
 package com.vyzorix.connector.deploy
 
 import java.io.File
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -36,8 +35,22 @@ class InstalledStateTest {
 
     @Test
     fun `the digest does not depend on map order`() {
-        val a = InstalledStateStore.digest(mapOf("engine" to "11", "console" to "22", "extractors" to "33"))
-        val b = InstalledStateStore.digest(mapOf("extractors" to "33", "engine" to "11", "console" to "22"))
+        val a =
+            InstalledStateStore.digest(
+                mapOf(
+                    "engine" to "11",
+                    "console" to "22",
+                    "extractors" to "33",
+                ),
+            )
+        val b =
+            InstalledStateStore.digest(
+                mapOf(
+                    "extractors" to "33",
+                    "engine" to "11",
+                    "console" to "22",
+                ),
+            )
 
         assertEquals(a, b)
     }
@@ -47,7 +60,7 @@ class InstalledStateTest {
         val a = InstalledStateStore.digest(mapOf("engine" to "1111"))
         val b = InstalledStateStore.digest(mapOf("engine" to "2222"))
 
-        assertTrue(a != b, "a changed sha256 must change the digest")
+        assertTrue("a changed sha256 must change the digest", a != b)
     }
 
     @Test
@@ -57,11 +70,12 @@ class InstalledStateTest {
 
     @Test
     fun `the digest is sixteen hex characters`() {
-        val got = InstalledStateStore.digest(mapOf("engine" to "1111"))
+        // JUnit's assertNotNull does not smart-cast in Kotlin, so the value is
+        // asserted non-null by the type system here as well.
+        val got = InstalledStateStore.digest(mapOf("engine" to "1111"))!!
 
-        assertNotNull(got)
         assertEquals(16, got.length)
-        assertTrue(got.all { it in "0123456789abcdef" }, "not hex: $got")
+        assertTrue("not hex: $got", got.all { it in "0123456789abcdef" })
     }
 
     @Test
@@ -99,37 +113,6 @@ class InstalledStateTest {
     }
 
     @Test
-    fun `a successful apply records what was installed`() {
-        // The record is what the telemetry heartbeat reports, and what the server
-        // compares to its expectation. A version alone would catch a failed apply; the
-        // digests catch an app replaced in place.
-        val archive = TarFixtures.tarGz(mapOf("run.sh" to "#!/bin/sh\necho vfd\n"))
-        serve(archive)
-        val (applier, target) = applierThatRecords(FakeSupervisor())
-
-        val result = applier.apply(config(app(artifacts = listOf(artifact("engine", archive)))))
-
-        assertTrue(result.success)
-        val state = target.read()
-        assertEquals(7, state.version)
-        assertEquals(artifact("engine", archive).sha256, state.apps["vfd"]?.get("engine"))
-    }
-
-    @Test
-    fun `a refused apply records nothing`() {
-        // "A failed apply changes nothing" includes the record: a state claiming a
-        // version the device is not running is exactly the lie this exists to remove.
-        val archive = TarFixtures.tarGz(mapOf("run.sh" to "echo vfd\n"))
-        serve(archive)
-        val (applier, target) = applierThatRecords(FakeSupervisor(reachable = false))
-
-        val result = applier.apply(config(app(artifacts = listOf(artifact("engine", archive)))))
-
-        assertFalse(result.success)
-        assertEquals(0, target.read().version)
-    }
-
-    @Test
     fun `stateFor records the version and every artifact digest`() {
         val app =
             com.vyzorix.connector.config
@@ -146,7 +129,13 @@ class InstalledStateTest {
                     artifacts =
                         listOf(
                             com.vyzorix.connector.config
-                                .ArtifactConfig("engine", "arm64-v8a", "https://x/e", "1111", "dir"),
+                                .ArtifactConfig(
+                                    "engine",
+                                    "arm64-v8a",
+                                    "https://x/e",
+                                    "1111",
+                                    "dir",
+                                ),
                             com.vyzorix.connector.config
                                 .ArtifactConfig("console", null, "https://x/c", "2222", "webroot"),
                         ),

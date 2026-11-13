@@ -83,7 +83,10 @@ class InstalledStateStore(
             // drift rather than as a healthy device — the safe direction. It is logged
             // rather than silently swallowed, because a state file that will not parse
             // is a bug worth seeing, not a normal condition.
-            android.util.Log.w("InstalledState", "unreadable installed state at $path: ${e.message}")
+            android.util.Log.w(
+                "InstalledState",
+                "unreadable installed state at $path: ${e.message}",
+            )
 
             InstalledState()
         }
@@ -187,5 +190,17 @@ class InstalledStateTarget(
         /** The target beside an app-storage directory, which is where the registry is. */
         fun beside(appsRoot: File): InstalledStateTarget =
             InstalledStateTarget(File(appsRoot, InstalledState.FILE_NAME))
+
+        /**
+         * The target under an app's private storage.
+         *
+         * The one place the `apps/` subdirectory is named, so a caller cannot pair this
+         * with the wrong directory — the applier and the telemetry reader both resolve
+         * through here.
+         */
+        fun under(filesDir: File): InstalledStateTarget = beside(File(filesDir, APPS_DIR))
+
+        /** The app-storage subdirectory, matching the applier's and the supervisor's. */
+        const val APPS_DIR = "apps"
     }
 }

@@ -132,7 +132,7 @@ object CloudConnectionFactory {
                 telemetrySource =
                     DeviceTelemetrySource(
                         context = context,
-                        installedState = InstalledStateTarget.beside(appsRoot),
+                        installedState = InstalledStateTarget.under(context.filesDir),
                     ),
                 // The OTA flow. Staged under files/updates, which is the one path the
                 // FileProvider exposes to the installer (see app's file_paths.xml).
