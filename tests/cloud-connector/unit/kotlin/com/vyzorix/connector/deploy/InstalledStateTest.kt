@@ -99,6 +99,37 @@ class InstalledStateTest {
     }
 
     @Test
+    fun `a successful apply records what was installed`() {
+        // The record is what the telemetry heartbeat reports, and what the server
+        // compares to its expectation. A version alone would catch a failed apply; the
+        // digests catch an app replaced in place.
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "#!/bin/sh\necho vfd\n"))
+        serve(archive)
+        val (applier, target) = applierThatRecords(FakeSupervisor())
+
+        val result = applier.apply(config(app(artifacts = listOf(artifact("engine", archive)))))
+
+        assertTrue(result.success)
+        val state = target.read()
+        assertEquals(7, state.version)
+        assertEquals(artifact("engine", archive).sha256, state.apps["vfd"]?.get("engine"))
+    }
+
+    @Test
+    fun `a refused apply records nothing`() {
+        // "A failed apply changes nothing" includes the record: a state claiming a
+        // version the device is not running is exactly the lie this exists to remove.
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "echo vfd\n"))
+        serve(archive)
+        val (applier, target) = applierThatRecords(FakeSupervisor(reachable = false))
+
+        val result = applier.apply(config(app(artifacts = listOf(artifact("engine", archive)))))
+
+        assertFalse(result.success)
+        assertEquals(0, target.read().version)
+    }
+
+    @Test
     fun `stateFor records the version and every artifact digest`() {
         val app =
             com.vyzorix.connector.config

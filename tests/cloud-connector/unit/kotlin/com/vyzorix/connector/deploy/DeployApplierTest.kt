@@ -85,6 +85,21 @@ class DeployApplierTest {
             stagingDir = staging,
         )
 
+    /** An applier that records what it installed, so the state write can be asserted. */
+    private fun applierThatRecords(supervisor: SupervisorControl): Pair<DeployApplier, InstalledStateTarget> {
+        val target = InstalledStateTarget.beside(appsRoot)
+        val applier =
+            DeployApplier(
+                fetcher = ArtifactFetcher(OkHttpClient()),
+                registry = AppRegistryWriter(),
+                supervisor = supervisor,
+                stagingDir = staging,
+                installedState = target,
+            )
+
+        return applier to target
+    }
+
     private fun artifact(
         name: String,
         bytes: ByteArray,
@@ -397,5 +412,36 @@ class DeployApplierTest {
 
         assertFalse(result.success)
         assertEquals("no_artifact_for_arch", result.reason)
+    }
+
+    @Test
+    fun `a successful apply records what was installed`() {
+        // The record is what the telemetry heartbeat reports and what the server
+        // compares to its expectation. The version alone would catch a failed apply;
+        // the digests catch an app replaced in place, which the version cannot see.
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "#!/bin/sh\necho vfd\n"))
+        serve(archive)
+        val (applier, target) = applierThatRecords(FakeSupervisor())
+
+        val result = applier.apply(config(app(artifacts = listOf(artifact("engine", archive)))))
+
+        assertTrue(result.success)
+        val state = target.read()
+        assertEquals(7, state.version)
+        assertEquals(TarFixtures.sha256(archive), state.apps["vfd"]?.get("engine"))
+    }
+
+    @Test
+    fun `a refused apply records nothing`() {
+        // "A failed apply changes nothing" includes the record. A state that claimed a
+        // version the device is not running is exactly the lie this exists to remove.
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "echo vfd\n"))
+        serve(archive)
+        val (applier, target) = applierThatRecords(FakeSupervisor(reachable = false))
+
+        val result = applier.apply(config(app(artifacts = listOf(artifact("engine", archive)))))
+
+        assertFalse(result.success)
+        assertEquals(0, target.read().version)
     }
 }
