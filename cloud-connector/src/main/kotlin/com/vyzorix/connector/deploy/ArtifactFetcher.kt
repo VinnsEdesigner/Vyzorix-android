@@ -56,6 +56,19 @@ class ArtifactFetcher(
                 .build()
 
         http.newCall(request).execute().use { response ->
+            // **416 is a completed download, not a failure.** The server answers
+            // "Range Not Satisfiable" when the requested start is at or past the end,
+            // which for `bytes=<length>-` means the local file is already the whole
+            // artifact. Treating it as fatal makes a retry impossible: the partial
+            // file that caused the 416 is never removed, so every later attempt sends
+            // the same unsatisfiable range and fails the same way. The digest check
+            // that follows decides whether those bytes are actually right.
+            if (response.code == HTTP_RANGE_NOT_SATISFIABLE) {
+                if (existing > 0) return
+
+                throw IOException("artifact fetch failed: HTTP 416 for $url")
+            }
+
             if (!response.isSuccessful) {
                 throw IOException("artifact fetch failed: HTTP ${response.code} for $url")
             }
@@ -124,5 +137,8 @@ class ArtifactFetcher(
     private companion object {
         const val COPY_BUFFER = 64 * 1024
         const val HTTP_PARTIAL = 206
+
+        /** The server refuses a range that starts at or past the end of the file. */
+        const val HTTP_RANGE_NOT_SATISFIABLE = 416
     }
 }
