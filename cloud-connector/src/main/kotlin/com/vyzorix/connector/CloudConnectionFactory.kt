@@ -1,6 +1,7 @@
 package com.vyzorix.connector
 
 import android.content.Context
+import android.os.Build
 import com.vyzorix.capability.PtyBroker
 import com.vyzorix.connector.cloud.DeviceRequestSigner
 import com.vyzorix.connector.cloud.DeviceWsClient
@@ -216,6 +217,10 @@ object CloudConnectionFactory {
             // App-private, NOT under files/apps: that subdirectory is bound to
             // /home/apps and readable by every app in the container.
             exposeTokens = FileExposeTokens(File(context.filesDir, "expose-tokens")),
+            // The device's ABIs, so an artifact that declares an `arch` is chosen
+            // for this device rather than all of them being installed over each
+            // other. Most preferred first, which is the order Build reports.
+            deviceAbis = Build.SUPPORTED_ABIS.toList(),
         )
     }
 

@@ -36,6 +36,16 @@ class DeployApplier(
     private val secrets: SecretStore? = null,
     private val pwa: PwaManifest = PwaManifest(),
     private val exposeTokens: ExposeTokenSource = InMemoryExposeTokens(),
+    /**
+     * The device's ABIs, most preferred first (`Build.SUPPORTED_ABIS` on device).
+     *
+     * Empty means "cannot tell", and every artifact is taken — the behaviour for a
+     * host test and for a device that reports none. On a device this is what makes
+     * `arch` mean something: without it, a manifest that lists one engine per ABI
+     * installs *all* of them to the same path and the last one wins, which is how a
+     * phone ends up running a foreign binary.
+     */
+    private val deviceAbis: List<String> = emptyList(),
 ) {
     /** Applies [config]. Returns the outcome; an expected refusal is not thrown. */
     fun apply(config: DeviceConfig): ApplyResult {
@@ -90,7 +100,23 @@ class DeployApplier(
         app: AppConfig,
         pending: MutableList<Install>,
     ): ApplyResult? {
+        // An artifact with no `arch` applies to every device. One with an `arch`
+        // applies only to a device that has it, and where several artifacts share a
+        // name (one build per ABI) exactly one is chosen — the best match — because
+        // they all install to the same path. Taking them all is how the last-listed
+        // ABI silently overwrites the right one.
+        val chosen = mutableListOf<ArtifactConfig>()
+        val seen = mutableSetOf<String>()
         for (artifact in app.artifacts) {
+            if (!seen.add(artifact.name)) continue
+            when (val pick = selectForArch(app.name, artifact.name, app.artifacts)) {
+                is ArchPick.None ->
+                    return ApplyResult.refused(version, "no_artifact_for_arch", pick.reason)
+                is ArchPick.One -> chosen += pick.artifact
+            }
+        }
+
+        for (artifact in chosen) {
             val tag = "${app.name}-${artifact.name}-${artifact.arch ?: ANY_ARCH}"
             val download = File(stagingDir, tag)
             fetch(version, artifact, download)?.let { return it }
@@ -102,6 +128,57 @@ class DeployApplier(
         }
 
         return null
+    }
+
+    /** The outcome of choosing one artifact from the candidates that share a name. */
+    private sealed interface ArchPick {
+        /** The artifact to install: the only candidate, or the device's best match. */
+        data class One(
+            val artifact: ArtifactConfig,
+        ) : ArchPick
+
+        /** Nothing matches this device's ABIs, so the app cannot be installed. */
+        data class None(
+            val reason: String,
+        ) : ArchPick
+    }
+
+    /**
+     * Chooses which artifact named [name] to install on this device.
+     *
+     * The rule, in order:
+     *  1. an artifact with no `arch` applies everywhere, so it is the choice;
+     *  2. otherwise, when the device reports its ABIs, the first candidate whose
+     *     `arch` is one of them, in the device's own preference order;
+     *  3. otherwise the only candidate, if there is exactly one — a device that
+     *     cannot report its ABIs still gets the single build it was sent;
+     *  4. otherwise nothing, which is refused rather than guessed.
+     */
+    private fun selectForArch(
+        appName: String,
+        name: String,
+        all: List<ArtifactConfig>,
+    ): ArchPick {
+        val candidates = all.filter { it.name == name }
+        candidates.firstOrNull { it.arch == null }?.let { return ArchPick.One(it) }
+
+        if (deviceAbis.isNotEmpty()) {
+            for (abi in deviceAbis) {
+                candidates.firstOrNull { it.arch == abi }?.let { return ArchPick.One(it) }
+            }
+        } else if (candidates.size == 1) {
+            return ArchPick.One(candidates.single())
+        }
+
+        val offered =
+            candidates
+                .mapNotNull { it.arch }
+                .distinct()
+                .sorted()
+                .joinToString(", ")
+        return ArchPick.None(
+            "$appName/$name: no build for this device (device $deviceAbis; offered $offered)",
+        )
     }
 
     private fun fetch(

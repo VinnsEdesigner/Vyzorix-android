@@ -317,4 +317,85 @@ class DeployApplierTest {
         assertFalse(result.success)
         assertEquals("secret_undecryptable", result.reason)
     }
+
+    /** An artifact for one ABI, served from its own path so the two can be told apart. */
+    private fun artifactFor(
+        name: String,
+        arch: String,
+        body: String,
+    ): ArtifactConfig {
+        val bytes = TarFixtures.tarGz(mapOf("run.sh" to body))
+        serve(bytes)
+
+        return ArtifactConfig(
+            name = name,
+            arch = arch,
+            url = server.url("/$name-$arch").toString(),
+            sha256 = TarFixtures.sha256(bytes),
+            kind = "dir",
+        )
+    }
+
+    @Test
+    fun `only the artifact for the device's ABI is installed`() {
+        // Two builds of one artifact name, as a manifest that targets several ABIs
+        // would declare. They install to the same path, so taking both means the
+        // last one wins — the defect this test pins.
+        val arm = artifactFor("engine", "arm64-v8a", "#!/bin/sh\necho arm\n")
+        val x86 = artifactFor("engine", "x86_64", "#!/bin/sh\necho x86\n")
+
+        val applier =
+            DeployApplier(
+                fetcher = ArtifactFetcher(OkHttpClient()),
+                registry = AppRegistryWriter(),
+                supervisor = FakeSupervisor(),
+                stagingDir = staging,
+                deviceAbis = listOf("arm64-v8a", "armeabi-v7a"),
+            )
+
+        val result = applier.apply(config(app(artifacts = listOf(arm, x86))))
+
+        assertTrue(result.success)
+        assertEquals(
+            "#!/bin/sh\necho arm\n",
+            File(appsRoot, "vfd/engine/run.sh").readText(),
+        )
+    }
+
+    @Test
+    fun `an artifact with no arch applies to every device`() {
+        val archive = TarFixtures.tarGz(mapOf("run.sh" to "echo any\n"))
+        serve(archive)
+        val any = artifact("engine", archive)
+
+        val applier =
+            DeployApplier(
+                fetcher = ArtifactFetcher(OkHttpClient()),
+                registry = AppRegistryWriter(),
+                supervisor = FakeSupervisor(),
+                stagingDir = staging,
+                deviceAbis = listOf("x86_64"),
+            )
+
+        assertTrue(applier.apply(config(app(artifacts = listOf(any)))).success)
+    }
+
+    @Test
+    fun `an app with no build for this device is refused, not guessed`() {
+        val x86 = artifactFor("engine", "x86_64", "echo x86\n")
+
+        val applier =
+            DeployApplier(
+                fetcher = ArtifactFetcher(OkHttpClient()),
+                registry = AppRegistryWriter(),
+                supervisor = FakeSupervisor(),
+                stagingDir = staging,
+                deviceAbis = listOf("arm64-v8a"),
+            )
+
+        val result = applier.apply(config(app(artifacts = listOf(x86))))
+
+        assertFalse(result.success)
+        assertEquals("no_artifact_for_arch", result.reason)
+    }
 }
