@@ -107,6 +107,22 @@ data class TelemetryFrame(
      * the server's `devices.app_version` would otherwise stay stale forever.
      */
     @SerialName("appVersion") val appVersion: String = "",
+    /**
+     * The config version the device actually holds, or 0 when it holds none.
+     *
+     * Read from `files/apps/installed.json`, which the applier writes only after an
+     * apply completes — so this is what is running, not what was requested. The
+     * server compares it to the config it expects; a difference is drift.
+     */
+    @SerialName("configVersion") val configVersion: Int = 0,
+    /**
+     * App name → a digest of the artifacts installed for it, so a drift that the
+     * version cannot see (an app edited or replaced in place) is still visible.
+     *
+     * The algorithm is `InstalledStateStore.digest` and is duplicated server-side in
+     * `deploy.AppStateDigest`; both must agree or every device reads as drifted.
+     */
+    @SerialName("appDigests") val appDigests: Map<String, String> = emptyMap(),
 )
 
 /** Reads just the `type` of an inbound frame, without decoding the rest. */

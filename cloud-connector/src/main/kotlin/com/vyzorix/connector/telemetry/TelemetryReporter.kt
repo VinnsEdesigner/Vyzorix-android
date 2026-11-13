@@ -46,6 +46,10 @@ class TelemetryReporter(
         val bufferLevel: Int = 0,
         val thermalTemp: Double = 0.0,
         val speakerOn: Boolean = false,
+        /** The config version the device holds, 0 when none. */
+        val configVersion: Int = 0,
+        /** App name → the digest of the artifacts installed for it. */
+        val appDigests: Map<String, String> = emptyMap(),
     )
 
     private val running = AtomicBoolean(false)
@@ -102,6 +106,8 @@ class TelemetryReporter(
                 thermalTemp = sample.thermalTemp,
                 speakerOn = sample.speakerOn,
                 appVersion = appVersion,
+                configVersion = sample.configVersion,
+                appDigests = sample.appDigests,
             )
 
         // Encoded with the outbound config so the `type` discriminator is always on

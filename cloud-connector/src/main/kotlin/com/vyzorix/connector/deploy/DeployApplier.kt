@@ -46,6 +46,15 @@ class DeployApplier(
      * phone ends up running a foreign binary.
      */
     private val deviceAbis: List<String> = emptyList(),
+    /**
+     * Where the applier records what it installed, so the telemetry heartbeat can
+     * report it and the server can notice drift.
+     *
+     * One parameter rather than a store and a path: they are two halves of the same
+     * thing, and passing them separately invited them to be given different paths.
+     * Null disables the record (a test that does not care).
+     */
+    private val installedState: InstalledStateTarget? = null,
 ) {
     /** Applies [config]. Returns the outcome; an expected refusal is not thrown. */
     fun apply(config: DeviceConfig): ApplyResult {
@@ -88,6 +97,11 @@ class DeployApplier(
         writeSecrets(config, resolved)
         writePwaManifests(config)
         registry.write(registryPath(), config.apps)
+        // Record what is now installed, after every step that can fail has passed.
+        // Writing it earlier would claim a version this apply might not complete; the
+        // heartbeat would then report state the device does not have, which is the
+        // exact lie the state record exists to remove.
+        installedState?.record(config.version, config.apps)
         exposeApps(config.apps)
         removed.forEach { supervisor.stop(it) }
 

@@ -19,6 +19,7 @@ import com.vyzorix.connector.deploy.ArtifactFetcher
 import com.vyzorix.connector.deploy.ControlSocketSupervisor
 import com.vyzorix.connector.deploy.DeployApplier
 import com.vyzorix.connector.deploy.FileExposeTokens
+import com.vyzorix.connector.deploy.InstalledStateTarget
 import com.vyzorix.connector.identity.DeviceSigner
 import com.vyzorix.connector.identity.DeviceUuidStore
 import com.vyzorix.connector.identity.KeystoreDeviceIdentity
@@ -128,7 +129,11 @@ object CloudConnectionFactory {
                 notification = DeviceNotification(context),
                 // Telemetry needs the platform (battery, uptime), so the source is built
                 // here; the cadence and the frame live in the connection.
-                telemetrySource = DeviceTelemetrySource(context),
+                telemetrySource =
+                    DeviceTelemetrySource(
+                        context = context,
+                        installedState = InstalledStateTarget.beside(appsRoot),
+                    ),
                 // The OTA flow. Staged under files/updates, which is the one path the
                 // FileProvider exposes to the installer (see app's file_paths.xml).
                 //
@@ -221,6 +226,9 @@ object CloudConnectionFactory {
             // for this device rather than all of them being installed over each
             // other. Most preferred first, which is the order Build reports.
             deviceAbis = Build.SUPPORTED_ABIS.toList(),
+            // What is installed, recorded on a successful apply and read by the
+            // telemetry heartbeat so the server can see drift.
+            installedState = InstalledStateTarget.beside(appsRoot),
         )
     }
 

@@ -92,4 +92,42 @@ class TelemetryReporterTest {
         assertTrue(reporter({ true }).reportOnce())
         assertFalse(reporter({ false }).reportOnce())
     }
+
+    @Test
+    fun `the frame carries the config version and per-app digests`() {
+        // These are what the server compares against the config it expects, so a frame
+        // that drops them silently makes every device read as unknown drift.
+        val out = CapturingSend()
+        val source =
+            TelemetryReporter.TelemetrySource {
+                TelemetryReporter.Sample(
+                    uptimeSeconds = 10,
+                    configVersion = 7,
+                    appDigests = mapOf("vfd" to "47584980637a11e1"),
+                )
+            }
+        TelemetryReporter(
+            source = source,
+            send = out::send,
+            deviceId = "dev-1",
+        ).reportOnce()
+
+        val frame = parse(out.frames.single())
+        assertEquals(7.0, frame.number("configVersion"), 0.0)
+        val digests = frame["appDigests"] as JsonObject
+        assertEquals("47584980637a11e1", (digests["vfd"] as JsonPrimitive).content)
+    }
+
+    @Test
+    fun `a device with no installed state reports version zero and no digests`() {
+        // Zero is a real state ("holds no config"), distinct from the field being
+        // absent, which the server reads as "does not report". The field must be
+        // present so the two are distinguishable on the wire.
+        val out = CapturingSend()
+        reporter(out::send).reportOnce()
+
+        val frame = parse(out.frames.single())
+        assertEquals(0.0, frame.number("configVersion"), 0.0)
+        assertTrue(frame["appDigests"] is JsonObject)
+    }
 }
