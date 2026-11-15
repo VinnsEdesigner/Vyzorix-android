@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Session ids come from the client, so [register] rejects a duplicate rather than
  * replacing: overwriting would leak the first session (never closed, still
- * counted against the cap) and let one operator adopt another's session by
+ * counted against the cap) and let one user adopt another's session by
  * guessing its id.
  *
  * Not durable by design — a session is a live connection, meaningless after a

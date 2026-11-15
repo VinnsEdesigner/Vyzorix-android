@@ -6,7 +6,7 @@ package com.vyzorix.service
  * The architecture's terminal is the container's login shell: proot gives the
  * session a filesystem boundary, so the shell cannot read the app's private files
  * (the device identity, the config, the recordings). Until the rootfs asset ships
- * that shell cannot start at all, and an operator gets an empty terminal.
+ * that shell cannot start at all, and a user gets an empty terminal.
  *
  * This flag allows a plain device shell instead. It is **off by default** because it
  * is a real weakening: a shell running as the app's own uid can read everything the

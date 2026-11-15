@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 /**
  * Whether Do Not Disturb is on. Read from NotificationManager, which reports the
- * interruption filter. An operator paging a device wants to know it will be silent.
+ * interruption filter. An user paging a device wants to know it will be silent.
  * No runtime permission.
  */
 @VyzorixApi(

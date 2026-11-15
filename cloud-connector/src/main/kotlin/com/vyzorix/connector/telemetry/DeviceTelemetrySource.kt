@@ -13,7 +13,7 @@ import com.vyzorix.connector.deploy.InstalledStateTarget
  * Reads the device's telemetry from the platform.
  *
  * Only facts the app can read without a privileged permission, and only ones that
- * mean something to the operator: uptime and thermal state for device health.
+ * mean something to the user: uptime and thermal state for device health.
  *
  * The `audioMode`, `bufferLevel` and `speakerOn` fields are reported as zeros
  * because **this device has no audio engine** — the design is a headless Debian

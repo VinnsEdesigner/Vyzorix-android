@@ -12,7 +12,7 @@ import org.json.JSONObject
 /**
  * The network interfaces and their addresses. Where `network` reports connectivity
  * at the platform level, this reports what the kernel has — which is what an
- * operator needs to reach the device on a hotspot. No runtime permission.
+ * user needs to reach the device on a hotspot. No runtime permission.
  */
 @VyzorixApi(
     tags = [

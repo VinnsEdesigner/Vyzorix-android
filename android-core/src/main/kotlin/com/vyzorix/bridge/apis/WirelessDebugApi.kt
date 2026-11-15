@@ -12,7 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Wireless-debugging state, and what an operator needs to pair the container's `adb` to
+ * Wireless-debugging state, and what a user needs to pair the container's `adb` to
  * this device over Wi-Fi.
  *
  * ## What is readable, and what is not
@@ -21,14 +21,14 @@ import org.json.JSONObject
  * device's own IPv4 addresses say what host to connect to. Both are readable here.
  *
  * The **pairing port** and the **6-digit pairing code** are *not*: the platform generates
- * them when the operator opens "Pair device with pairing code" and shows them only in that
+ * them when the user opens "Pair device with pairing code" and shows them only in that
  * Settings dialog. No public API exposes them, so this reports `portReadable:false` rather
- * than pretending — the operator reads the code off the screen and types it into the pair
+ * than pretending — the user reads the code off the screen and types it into the pair
  * command. (This is exactly what LADB does: it asks the user for the code.)
  *
  * ## The flow this feeds
  *
- *  1. the operator enables Developer options → Wireless Debugging;
+ *  1. the user enables Developer options → Wireless Debugging;
  *  2. opens "Pair device with pairing code", which shows `<ip>:<pairPort>` and a code;
  *  3. in the container: `adb pair <ip>:<pairPort> <code>`;
  *  4. then `adb connect <ip>:<connectPort>` (the port on the Wireless Debugging screen).

@@ -20,7 +20,7 @@ class PtySessionRegistryTest {
         slavePath = "/dev/pts/0",
         childPid = -1,
         deviceId = deviceId,
-        operatorId = "op-1",
+        userId = "op-1",
     )
 
     @Test

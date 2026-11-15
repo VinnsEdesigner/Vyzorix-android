@@ -62,13 +62,13 @@ and from a script.
 
 ## The identity, and why the list is short
 
-A terminal is opened by an operator over the cloud, and the server decides what
-that operator may do. It resolves the capability from the operator's **role**
+A terminal is opened by a user over the cloud, and the server decides what
+that user may do. It resolves the capability from the user's **role**
 intersected with the **device's tier** and any scoped grant, and sends the result
 with the session:
 
 ```
-identity  operator · name · email · org · role (+ human label) · tier · expiry
+identity  user · name · email · org · role (+ human label) · tier · expiry
 allowlist the concrete API names the session may call
 ```
 
@@ -107,7 +107,7 @@ The identity travels with the OPEN frame the server sends to start a session:
 The window size stays the first four bytes after the session id, so a device that
 predates the identity block reads the size it always did and ignores the trailing
 JSON — the frame grew a field without a protocol version. `PtyFrame.decodeOpen`
-returns a null identity for that case, which the CLI reads as *unknown operator*.
+returns a null identity for that case, which the CLI reads as *unknown user*.
 
 ## Adding a command
 

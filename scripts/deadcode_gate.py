@@ -69,7 +69,7 @@ KOTLIN_DECL = re.compile(
     r"^[ \t]*(?:@\w+(?:\([^)]*\))?[ \t]*\n?[ \t]*)*"
     r"(?P<visibility>public|internal|private|protected)?[ \t]*"
     r"(?:(?:open|abstract|sealed|data|enum|inline|suspend|"
-    r"override|operator|infix|external|tailrec|const)[ \t]+)*"
+    r"override|user|infix|external|tailrec|const)[ \t]+)*"
     r"(fun|val|var|class|object|interface)[ \t]+"
     r"(?:<[^>]*>[ \t]*)?"
     r"(?:[A-Za-z_][A-Za-z0-9_.<>?]*\.)?"      # receiver, if any

@@ -13,7 +13,7 @@ import org.json.JSONObject
 /**
  * Bluetooth adapter state. `BLUETOOTH` is a normal permission granted at install.
  * From Android 12 the adapter *name* needs BLUETOOTH_CONNECT, so the name is not
- * reported — the state is, which is what an operator needs.
+ * reported — the state is, which is what a user needs.
  */
 @VyzorixApi(
     tags = [

@@ -43,7 +43,7 @@ import com.vyzorix.R
 class DeviceNotification(
     private val context: Context,
 ) {
-    /** The container is off and waiting for the operator to start it. */
+    /** The container is off and waiting for the user to start it. */
     fun needsStart() {
         val builder =
             base()
@@ -78,7 +78,7 @@ class DeviceNotification(
      *
      * A device administrator is granted by the user, from a system screen; an app
      * cannot grant itself the role. So the action opens that screen — the same shape
-     * as the accessibility hop — and the operator confirms. Declining is fine: the
+     * as the accessibility hop — and the user confirms. Declining is fine: the
      * agent runs without the admin powers and reports them as unavailable.
      */
     private fun adminAction(): Notification.Action {
@@ -203,7 +203,7 @@ class DeviceNotification(
      * ## The "Accept install" action, and why it stays
      *
      * The system installer's own prompt can be dismissed by accident, and once it is
-     * gone there is no way to bring it back — the APK is staged but the operator has
+     * gone there is no way to bring it back — the APK is staged but the user has
      * no control left. So the action is explicit and the notification is
      * **ongoing**: it cannot be swiped away, and every tap of **Accept install**
      * re-opens the installer for the same staged, verified APK. It is re-posted on
@@ -369,7 +369,7 @@ class DeviceNotification(
             .build()
     }
 
-    /** The running line, with the network qualifier the operator asked for. */
+    /** The running line, with the network qualifier the user asked for. */
     private fun runningText(
         name: String,
         networkUp: Boolean,

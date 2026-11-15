@@ -3,14 +3,14 @@ package com.vyzorix.service
 import kotlinx.serialization.Serializable
 
 /**
- * The operator a terminal session belongs to, and what they may call.
+ * The user a terminal session belongs to, and what they may call.
  *
  * This is the server's resolved decision, delivered with the session — not a claim
  * by the client. Two things read it:
  *
  *  - the **device** enforces [allowlist] at the bridge (a call to an API outside it
  *    is refused), and
- *  - the **Vyzorix CLI** inside the container shows the operator and offers only
+ *  - the **Vyzorix CLI** inside the container shows the user and offers only
  *    what they may call, so the terminal is a session with an identity rather than
  *    an anonymous command dump.
  *
@@ -19,11 +19,11 @@ import kotlinx.serialization.Serializable
  * would make the other depend the wrong way.
  *
  * [role] is the machine value (`operator`, `admin`, …); [roleLabel] is its human
- * name (`Operator`, `Administrator`) so a display need not map the two.
+ * name (`User`, `Administrator`) so a display need not map the two.
  */
 @Serializable
 data class SessionIdentity(
-    val operator: String = "",
+    val user: String = "",
     val name: String = "",
     val email: String = "",
     val org: String = "",
@@ -59,7 +59,7 @@ data class SessionIdentity(
          * Parses the identity JSON the server sends with an OPEN frame.
          *
          * Returns null for blank input or a shape that will not parse. A caller treats
-         * that as "unknown operator": the shell still opens, it just cannot say who is
+         * that as "unknown user": the shell still opens, it just cannot say who is
          * on the other end.
          */
         fun parse(raw: String): SessionIdentity? {
@@ -69,7 +69,7 @@ data class SessionIdentity(
                 json.decodeFromString(serializer(), raw)
             } catch (expected: Exception) {
                 // A malformed identity is not fatal: the shell still opens, it just
-                // cannot name the operator. The type is named `expected` for the gate's
+                // cannot name the user. The type is named `expected` for the gate's
                 // swallowed-exception rule, which is the honest reading here.
                 null
             }

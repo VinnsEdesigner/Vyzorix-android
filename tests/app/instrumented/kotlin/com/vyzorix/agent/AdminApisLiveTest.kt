@@ -33,7 +33,7 @@ import org.junit.runner.RunWith
  * The assertions are deliberately shape-level — the admin list is non-empty, the owner
  * booleans are present, the policy dump carries its keys — because the values are the
  * device's, not the test's. The JSON is logged in full so a run shows exactly what an
- * operator would see.
+ * user would see.
  */
 @RunWith(AndroidJUnit4::class)
 class AdminApisLiveTest {

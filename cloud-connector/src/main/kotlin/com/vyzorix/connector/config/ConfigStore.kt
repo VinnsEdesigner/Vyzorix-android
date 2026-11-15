@@ -31,7 +31,7 @@ interface ConfigStorage {
  *
  * The version is what makes a missed update recoverable. The server pushes the config
  * once, at claim time; a device that was offline then has none, and a device whose
- * config the operator later changed has a stale one. In both cases the device asks
+ * config the user later changed has a stale one. In both cases the device asks
  * the server for the config by version and applies what comes back if the version
  * differs.
  */

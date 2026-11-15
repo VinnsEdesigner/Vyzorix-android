@@ -28,7 +28,7 @@ import org.json.JSONObject
  * `getLastKnownLocation` returns nothing useful without it, and the router refuses
  * the call before the handler runs when the grant is absent — so reaching the body
  * means the permission is held. A null fix is then a real answer: the device has
- * the permission but no cached position yet, which an operator should see as
+ * the permission but no cached position yet, which a user should see as
  * "unknown", not as an error.
  */
 @VyzorixApi(

@@ -29,7 +29,7 @@ class PtyBroker(
     fun open(
         sessionId: String,
         deviceId: String,
-        operatorId: String,
+        userId: String,
         request: PtyRequest,
     ): PtyResult<Int> {
         val loaded = NativePty.loadLibrary()
@@ -79,7 +79,7 @@ class PtyBroker(
                 slavePath = pair.detail,
                 childPid = pid,
                 deviceId = deviceId,
-                operatorId = operatorId,
+                userId = userId,
             )
 
         val registered = registry.register(session)

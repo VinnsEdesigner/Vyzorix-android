@@ -48,7 +48,7 @@ automatic; the last tap is consent.
 
 That last tap can be missed. The system installer's own confirmation is easy to
 dismiss by accident, and once it is gone there is nothing left to tap — the APK is
-staged, but the operator has no control. So the agent also posts a standing **"update
+staged, but the user has no control. So the agent also posts a standing **"update
 ready to install"** notification, and this is the durable retry path:
 
 - it is **ongoing** — it cannot be swiped away;
@@ -87,7 +87,7 @@ strips `/api`.
 
 The device reports progress as it downloads — `POST /v1/download-progress` with the
 device id, filename, and byte counts, fired when the whole-percent changes (a 64 MB
-download in 8 KB reads would otherwise be thousands of requests). An operator reads
+download in 8 KB reads would otherwise be thousands of requests). An user reads
 it back with `GET /v1/download-progress/:deviceId`.
 
 The report was previously **log-only**: the server accepted progress and could not
@@ -142,7 +142,7 @@ resolves to `v1.0.0` (the container assets). Verified after publishing.
 
 A device is still not wired to GitHub: it downloads from the **server's**
 `/v1/apk/<name>` route. The public release is for the case where a device (or an
-operator) should be able to fetch the APK without the server in the path.
+user) should be able to fetch the APK without the server in the path.
 
 ## Verified live
 

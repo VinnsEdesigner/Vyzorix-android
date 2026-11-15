@@ -21,10 +21,10 @@ import org.junit.runner.RunWith
  *
  * The bridge's 58 APIs are fixed readers — device info, sensors, storage. They cannot
  * clone a repository or run a build. The one production path that can run *any*
- * command is the operator's terminal: the service opens a PTY, `proot` starts a
- * Debian login shell, and whatever the operator types runs inside the container.
+ * command is the user's terminal: the service opens a PTY, `proot` starts a
+ * Debian login shell, and whatever the user types runs inside the container.
  * That is the path this test drives, so "run this command in the container" means
- * "what an operator would get", not a shortcut through `run-as` (which runs in a
+ * "what a user would get", not a shortcut through `run-as` (which runs in a
  * different SELinux domain and a different mount namespace, and so measures
  * something the app never does).
  *

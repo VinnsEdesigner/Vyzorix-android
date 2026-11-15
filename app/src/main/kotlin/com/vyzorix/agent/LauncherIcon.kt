@@ -13,9 +13,9 @@ import android.util.Log
  * ## Why the icon hides at all
  *
  * The agent is headless: once it is armed there is nothing to open, and the icon
- * only exists to bring the operator to the accessibility screen the first time. So
+ * only exists to bring the user to the accessibility screen the first time. So
  * the icon is retired when the accessibility service is enabled and restored when it
- * is disabled — the operator can always reach the app again by turning the switch off.
+ * is disabled — the user can always reach the app again by turning the switch off.
  *
  * ## Why this is not just done once, in the service
  *

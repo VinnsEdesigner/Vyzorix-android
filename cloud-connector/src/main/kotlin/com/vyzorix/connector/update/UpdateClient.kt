@@ -211,7 +211,7 @@ class UpdateClient(
      *
      * The report is throttled: a 64 MB download in 8 KB reads would be thousands of
      * requests, so it fires only when the whole-percent changes. A failed report is
-     * swallowed — progress is for an operator's dashboard, and losing one must never
+     * swallowed — progress is for a user's dashboard, and losing one must never
      * fail the download that is actually delivering the update.
      */
     private fun copyReportingProgress(

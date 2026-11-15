@@ -7,7 +7,7 @@
 The authority is the set of handlers the router registers. Those are two files in two
 languages, and with fifty APIs a hand-maintained list is wrong within a week: a name
 in `apis.txt` the router does not serve is a command that exists and fails at call
-time with `unknown_api`, and a handler missing from `apis.txt` is one an operator
+time with `unknown_api`, and a handler missing from `apis.txt` is one a user
 simply cannot reach. Both are invisible until someone uses the feature.
 
 `ApiCatalogTest` proves the two agree; this script is how they are made to agree,

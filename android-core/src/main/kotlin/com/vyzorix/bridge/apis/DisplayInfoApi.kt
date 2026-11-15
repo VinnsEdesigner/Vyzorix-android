@@ -13,7 +13,7 @@ import org.json.JSONObject
 
 /**
  * Screen geometry and density. What a proxied web UI needs to render at the
- * right size, and what an operator needs to know a device is a phone rather than
+ * right size, and what a user needs to know a device is a phone rather than
  * a tablet. No runtime permission.
  */
 @VyzorixApi(

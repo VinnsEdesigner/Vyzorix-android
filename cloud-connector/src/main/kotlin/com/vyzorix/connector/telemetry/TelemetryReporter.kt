@@ -10,7 +10,7 @@ import kotlinx.serialization.encodeToString
  *
  * Telemetry is the device telling the server how it is: uptime, audio mode, buffer
  * level, thermal state. The server stores it and drives its threshold alerts from
- * it, so a device that never reports is invisible to the operator — the dashboard
+ * it, so a device that never reports is invisible to the user — the dashboard
  * shows a device that is online with no telemetry at all, which reads as broken
  * rather than as "not reporting".
  *

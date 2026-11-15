@@ -128,7 +128,7 @@ class UpdateLiveE2ETest {
     @Test
     fun theDeviceReportsDownloadProgressTheServerCanRead() {
         // The report and the read are two halves of one feature: the device POSTs
-        // progress while downloading, and an operator GETs it back. This drives both
+        // progress while downloading, and a user GETs it back. This drives both
         // through the production client and asserts the server returns what the
         // device sent — which is what makes the endpoint useful rather than a log.
         val deviceId = "e2e-${System.nanoTime()}"

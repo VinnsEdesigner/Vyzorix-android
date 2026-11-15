@@ -16,7 +16,7 @@ import org.junit.Test
  *
  * The failure it prevents is quiet: a name in `apis.txt` that the router does not
  * serve is a command that exists and fails at call time with `unknown_api`; a
- * handler that is missing from `apis.txt` is one an operator simply cannot reach.
+ * handler that is missing from `apis.txt` is one a user simply cannot reach.
  * Both are invisible until someone uses the feature.
  *
  * The router's own list is built here from the same registrations the service
@@ -195,7 +195,7 @@ class ApiCatalogTest {
     @Test
     fun `every registered api is listed in apis txt`() {
         // The same check as below, stated for the whole catalogue: a name the router
-        // serves but apis.txt omits is a command an operator cannot reach.
+        // serves but apis.txt omits is a command a user cannot reach.
         val listed = apisTxt().toSet()
 
         val unreachable = registeredApis.filterNot { it in listed }

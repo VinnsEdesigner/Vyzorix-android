@@ -361,7 +361,7 @@ All paths verified against `apps/api/internal/api/server_routes.go`.
 | APK download | `GET /v1/apk/*name` | public |
 | Version / update | `GET /v1/version` · `GET /v1/check-update` · `POST /v1/download-progress` | public |
 | Command result (HTTP fallback) | `POST /v1/device/:imei/command/:dispatchId/result` | HMAC |
-| Operator terminal | `GET /v1/device/:imei/terminal` | session cookie + `shell.execute` |
+| User terminal | `GET /v1/device/:imei/terminal` | session cookie + `shell.execute` |
 
 **Command framing is already signed.** The server HMAC-SHA512-signs each `CommandFrame`
 (nonce + timestamp) with the device secret; the device verifies before executing. Reuse
@@ -393,7 +393,7 @@ device) — never executed server-side. Two consequences for the device agent:
   shape for PTY; the same result path applies here).
 - **It must not silently ignore an unknown type.** If a device receives a
   command it does not implement, it should report a **failed** result rather
-  than drop it, so the operator learns the command was not executed instead of
+  than drop it, so the user learns the command was not executed instead of
   watching it sit `delivered` forever.
 
 Do not add an allowlist of "known" command types on the server. The device
@@ -401,7 +401,7 @@ agent owns that knowledge; the server's job is to authorize and deliver. A
 server-side list would reject every new command until a server deploy shipped.
 
 **Interactive shells are not a command.** An earlier revision listed
-`PTY_SESSION_OPEN` here. The implemented design opens a session over the operator
+`PTY_SESSION_OPEN` here. The implemented design opens a session over the user
 WebSocket instead (`GET /v1/device/:imei/terminal`, gated on the `shell.execute`
 scope), because a shell is stateful and bidirectional and does not fit the
 fire-and-forget command lifecycle. See §6.3 for the contract.
@@ -610,7 +610,7 @@ the server already does, not an aspiration.
 | Socket | Endpoint | Auth |
 |:-------|:---------|:-----|
 | Device | `GET /v1/device/:imei/stream` (already the device WS) | HMAC-signed handshake |
-| Operator (browser) | `GET /v1/device/:imei/terminal` | session cookie + `shell.execute` scope |
+| User (browser) | `GET /v1/device/:imei/terminal` | session cookie + `shell.execute` scope |
 
 The device does **not** open a second connection. PTY frames share the existing
 device stream with telemetry and command results; the opcode distinguishes them.
@@ -632,10 +632,10 @@ allocation bound: the server rejects a frame whose declared length exceeds it
 | `type` | Name | Direction | Payload |
 |:-------|:-----|:----------|:--------|
 | `0x01` | `DATA` | both | session-prefixed (below) |
-| `0x02` | `ACK` | device → operator | (ignored today) |
-| `0x03` | `OPEN` | operator → device | session-prefixed, then `[2B rows][2B cols]` |
+| `0x02` | `ACK` | device → user | (ignored today) |
+| `0x03` | `OPEN` | user → device | session-prefixed, then `[2B rows][2B cols]` |
 | `0x04` | `CLOSE` | both | session-prefixed |
-| `0x05` | `RESIZE` | operator → device | session-prefixed, then `[2B rows][2B cols]` |
+| `0x05` | `RESIZE` | user → device | session-prefixed, then `[2B rows][2B cols]` |
 | `0x06` | `ERROR` | both | session-prefixed, then free text |
 
 **Session-prefixed payloads.** A device multiplexes several sessions over one
@@ -647,18 +647,18 @@ socket, so any frame carrying session data names the session:
 
 `idLen` is `1..64`. A UUID is 36 bytes. A malformed header drops the frame.
 
-**Operator control channel.** The browser's control messages are JSON *text*
+**User control channel.** The browser's control messages are JSON *text*
 frames (the browser distinguishes text from binary by the opcode):
 
 | Type | Direction | Fields |
 |:-----|:----------|:-------|
-| `pty_open` | operator → server | `sessionId` |
-| `pty_opened` | server → operator | `sessionId` |
-| `pty_resize` | operator → server | `sessionId`, `rows`, `cols` |
-| `pty_ack` | operator → server | `sessionId`, `credits` |
-| `pty_close` | operator → server | `sessionId` |
-| `pty_closed` | server → operator | `sessionId`, `reason` |
-| `pty_error` | server → operator | `sessionId`, `error` |
+| `pty_open` | user → server | `sessionId` |
+| `pty_opened` | server → user | `sessionId` |
+| `pty_resize` | user → server | `sessionId`, `rows`, `cols` |
+| `pty_ack` | user → server | `sessionId`, `credits` |
+| `pty_close` | user → server | `sessionId` |
+| `pty_closed` | server → user | `sessionId`, `reason` |
+| `pty_error` | server → user | `sessionId`, `error` |
 
 **Session lifecycle.**
 
@@ -667,16 +667,16 @@ frames (the browser distinguishes text from binary by the opcode):
    `OPEN` to the device with the initial window size (24×80 until the browser
    reports otherwise).
 3. The device allocates the PTY and streams `DATA` frames. The server relays
-   them to the operator, applying the credit window.
+   them to the user, applying the credit window.
 4. `RESIZE` is forwarded when the browser reports a size change; the device
    applies `TIOCSWINSZ`.
 5. Either side may close. A session **outlives a dropped socket** — see
    "Reattach" below — and the server closes on: an explicit `pty_close`, the
-   idle TTL, or an operator close. It no longer closes on operator disconnect or
+   idle TTL, or a user close. It no longer closes on user disconnect or
    device disconnect; those are the transient drops reattach exists to ride out.
 
 **Reattach (a session outlives the socket).** Neither a dropped device socket
-nor a dropped operator socket ends a session. The device **detaches** every live
+nor a dropped user socket ends a session. The device **detaches** every live
 session on disconnect — the shell keeps running, its output is buffered up to a
 bound (oldest dropped), and the session is reaped after a device-side TTL
 (`TerminalRelay.DETACHED_TTL_MS`, 10 min) if no reconnect comes. When the device
@@ -685,37 +685,37 @@ socket comes back the server re-sends an `OPEN` for each live session
 session it already holds as a **re-bind**, flushing the buffered output rather
 than spawning a second shell. A reconnecting browser reuses the session id it
 used before; the server's `PTYRegistry.Open` re-binds that id for the **same
-operator and device** (a different operator is still refused, or a guessed id
+user and device** (a different operator is still refused, or a guessed id
 would be a session hijack), refreshing the idle clock and the credit window.
 
 The trade: a transient network drop no longer kills the shell, so a session is
 ended only by an explicit close or by time. The server's 2 h idle TTL and the
-device's shorter detached TTL are what bound a session whose operator never
+device's shorter detached TTL are what bound a session whose user never
 returns.
 
-**Flow control (credit window).** The operator starts with **64 credits**
+**Flow control (credit window).** The user starts with **64 credits**
 (`DefaultPTYCreditWindow`). Each `DATA` frame delivered consumes one. When the
 window is exhausted the server **drops** device output rather than buffering it,
 so a `cat` of a large file cannot grow server memory. The browser returns credit
 with `pty_ack`; the server caps the total at the window, so a buggy or hostile
-operator cannot inflate it. **The browser must ack, or output will be dropped.**
+user cannot inflate it. **The browser must ack, or output will be dropped.**
 
 **Limits (server-enforced).**
 
 | Limit | Value | Purpose |
 |:------|:------|:--------|
 | `MaxPTYPayload` | 64 KiB | bounds a single frame's allocation |
-| per-device sessions | 4 | one operator cannot open unbounded terminals |
+| per-device sessions | 4 | one user cannot open unbounded terminals |
 | credit window | 64 frames | backpressure against a fast producer |
 | session TTL | 2 h idle | a forgotten tab cannot hold a device open |
-| operator outbox | 256 frames, 5 s wait | a slow browser cannot grow server memory |
+| user outbox | 256 frames, 5 s wait | a slow browser cannot grow server memory |
 
 **What the device must do.**
 
 - Decode the frame header; reject `length > 65536`.
 - Parse the session-prefixed payload; keep a `sessionId → pty fd` map.
 - On `OPEN`: allocate the PTY, apply the initial size, start reading.
-- On `DATA` (from the operator): write to the PTY master.
+- On `DATA` (from the user): write to the PTY master.
 - On `RESIZE`: `TIOCSWINSZ` on the master.
 - On `CLOSE`: `SIGHUP`/reap the child, drop the mapping.
 - Emit `DATA` with the session prefix for all PTY output.
@@ -779,7 +779,7 @@ FCM wakes the FGS when offline; the device then reconnects and drains pending co
 > **Not in this build.** FCM is deferred (§1.4), so the wake and the pending-command
 > drain are both out of scope. Today the FGS is kept alive by `START_STICKY` plus the
 > watchdog, and command delivery is live-socket only. A device that is offline when a
-> command is dispatched misses it; the operator sees it stay `delivered`. When FCM
+> command is dispatched misses it; the user sees it stay `delivered`. When FCM
 > lands, this paragraph becomes the requirement again.
 
 ---
@@ -802,13 +802,13 @@ FCM wakes the FGS when offline; the device then reconnects and drains pending co
    MFA + confirmation, matching the existing `device.factory_reset` pattern.
 5. **PTY recording is opt-in.**
    - Default: off. Nothing recorded, nothing leaves the device.
-   - Enable per-device (operator) or per-session.
+   - Enable per-device (user) or per-session.
    - Format: asciinema `.cast` (plain text, greppable, replayable) at
      `files/recordings/<sessionId>.cast`.
    - Retention: max size (~50 MB) and max age (~7 days), then rotate.
    - A banner is shown in the terminal whenever recording is active — never record
      silently.
-   - Upload only if the operator opts in; otherwise it stays local for forensics.
+   - Upload only if the user opts in; otherwise it stays local for forensics.
 6. **No secrets in URLs.** HMAC-signed requests only.
 
 ---
@@ -943,12 +943,12 @@ snapshot of reality, so the Android work has a fixed target.
 | PTY session registry | **Done** | `internal/ws/pty_registry.go`: per-device cap, credit window, TTL. |
 | PTY relay | **Done** | `internal/ws/pty_relay.go`: input, output, control, teardown. |
 | Ephemeral device send | **Done** | `Hub.SendEphemeral` drops rather than persisting, so keystrokes never hit the database. |
-| Operator terminal endpoint | **Done** | `GET /v1/device/:imei/terminal`, session auth + org check. |
-| `shell.execute` scope | **Done** | Granted to `admin` and `super_admin` only; deliberately absent from `viewer` and `operator`. `usb.attach` is admin-only too; `apps.read` is viewer, `apps.write` is operator. Covered by `defaults_test.go`. |
+| User terminal endpoint | **Done** | `GET /v1/device/:imei/terminal`, session auth + org check. |
+| `shell.execute` scope | **Done** | Granted to `admin` and `super_admin` only; deliberately absent from `viewer` and `operator`. `usb.attach` is admin-only too; `apps.read` is viewer, `apps.write` is user. Covered by `defaults_test.go`. |
 | Session expiry scheduling | **Done** | `pty_expiry_worker.go` closes idle sessions on a ticker and prunes old casts, under the server lock. Registered on the lifecycle manager. |
-| PTY audit | **Done** | `ActionPTYSessionOpened`/`Closed`; the operator handler records open, close and denial with the reason and recording flag. |
+| PTY audit | **Done** | `ActionPTYSessionOpened`/`Closed`; the user handler records open, close and denial with the reason and recording flag. |
 | PTY recording | **Done** | asciinema v2 casts via `pty_recorder.go`, opt-in per session, size-capped, swept by age. Output only, so prompt input is never captured. |
-| End-to-end test | **Done** | Real operator and device WebSockets through the hub, relay and both handlers: round trip, teardown on disconnect, and cast output. |
+| End-to-end test | **Done** | Real user and device WebSockets through the hub, relay and both handlers: round trip, teardown on disconnect, and cast output. |
 | Terminal risk gate | **Done** | `PTYAuthorizer` delegates to the shared command `Authorizer`, so `PTY_SESSION_OPEN`'s critical tier is enforced: MFA-verified session plus a single-use confirmation token (449 when satisfiable, 403 on hard deny). This *is* the per-session MFA the earlier revision deferred. |
 | Rate limiting | **Done** | `TerminalOpenLimit`, 20/min, applied to both the terminal and recording routes. |
 | Recording retrieval | **Done** | `GET /v1/dashboard/device/:imei/recordings/:sessionId`, org-scoped, session ID constrained to a UUID with a resolved-path check. |
@@ -969,7 +969,7 @@ scopes already defined), and the public app proxy.
    future Android forces it?
 2. **`app-expose` scope** — full wildcard-DNS/TLS proxy in v1, or defer to v1.1 and ship
    with the hotspot + cloud-relay modes only?
-3. **Recording upload** — if the operator opts in, does the recording stream to the
+3. **Recording upload** — if the user opts in, does the recording stream to the
    server live, or upload on session end?
 4. **`targetSdk 28` exit strategy** — what is the trigger to switch to the root backend,
    and how do we detect it on a device that cannot exec?

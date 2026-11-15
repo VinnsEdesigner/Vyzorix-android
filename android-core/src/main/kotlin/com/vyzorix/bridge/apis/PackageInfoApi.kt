@@ -13,7 +13,7 @@ import org.json.JSONObject
 
 /**
  * One package's details, by name. The single-package form of `installed_apps`, for
- * an operator asking about one thing rather than enumerating. No runtime
+ * a user asking about one thing rather than enumerating. No runtime
  * permission.
  */
 @VyzorixApi(

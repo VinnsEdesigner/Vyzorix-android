@@ -11,7 +11,7 @@ import org.json.JSONObject
 
 /**
  * The security patch level, and whether the build is debuggable. A device on an old
- * patch is a fact an operator should see before trusting it. No runtime permission.
+ * patch is a fact a user should see before trusting it. No runtime permission.
  */
 @VyzorixApi(
     tags = [

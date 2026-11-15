@@ -57,7 +57,7 @@ class PtyBrokerInstrumentedTest {
             broker.open(
                 sessionId = "test-1",
                 deviceId = "dev-1",
-                operatorId = "op-1",
+                userId = "op-1",
                 request = PtyRequest(executable = "/system/bin/sh"),
             )
 
@@ -93,7 +93,7 @@ class PtyBrokerInstrumentedTest {
             broker.open(
                 sessionId = "test-2",
                 deviceId = "dev-1",
-                operatorId = "op-1",
+                userId = "op-1",
                 request = PtyRequest(executable = script.absolutePath),
             )
 
@@ -120,7 +120,7 @@ class PtyBrokerInstrumentedTest {
             broker.open(
                 sessionId = "test-3",
                 deviceId = "dev-1",
-                operatorId = "op-1",
+                userId = "op-1",
                 request = PtyRequest(executable = "/system/bin/sh", rows = 24, cols = 80),
             )
 
@@ -158,7 +158,7 @@ class PtyBrokerInstrumentedTest {
             broker.open(
                 sessionId = "test-4",
                 deviceId = "dev-1",
-                operatorId = "op-1",
+                userId = "op-1",
                 request = PtyRequest(executable = "/nonexistent/binary"),
             )
 

@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
  *   under test here; the device suite covers the populated case.
  * - `storage_all_files` must distinguish "does not apply" (below API 30, where the
  *   permission does not exist) from "not granted" (API 30+, where it does). A false
- *   for both would tell an operator nothing.
+ *   for both would tell a user nothing.
  * - `sms_received` must report `listening: false` for an instance that was never
  *   started, rather than a count of zero that reads as "no messages arrived".
  */
@@ -112,7 +112,7 @@ class NewApisTest {
 
     @Test
     fun `sms_received reports the raw sender, not a hash`() {
-        // The sender is the originating address verbatim: an operator whitelisting a
+        // The sender is the originating address verbatim: a user whitelisting a
         // paging number or telling a service sender from a person cannot work on a
         // hash. The message *body* is still never reported, which is the line that
         // matters — the sender answers "who", the body would be the content.

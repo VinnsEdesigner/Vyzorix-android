@@ -11,7 +11,7 @@ import android.util.Log
  * unconditionally. When enroll failed — no network, a rate limit, a server fault —
  * `ensureEnrolled()` returned without enrolling, and the socket opened anyway. The
  * socket's reconnect loop then retried forever against a device the server had never
- * heard of, so no pairing code was ever shown and the operator saw a notification
+ * heard of, so no pairing code was ever shown and the user saw a notification
  * stuck on "running". The failure was silent and permanent.
  *
  * The fix is to treat enrollment as the precondition it is: retry it until it

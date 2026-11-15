@@ -70,7 +70,7 @@ class VyzorixForegroundService : Service() {
     private val readers = ConcurrentHashMap<Int, PtyReader>()
 
     /**
-     * The port an operator's terminal is opened through.
+     * The port a user's terminal is opened through.
      *
      * Exposed so a caller that is **in this process** — an instrumented test, or a
      * future local client — can drive the production terminal path instead of
@@ -256,7 +256,7 @@ class VyzorixForegroundService : Service() {
      * Builds the PTY port the cloud terminal relay drives.
      *
      * The shell is the same proot login shell the bridge's terminal uses, so an
-     * operator's cloud terminal and a local one are the same environment. The
+     * user's cloud terminal and a local one are the same environment. The
      * allowlist is the full local API set, stated explicitly rather than left empty,
      * because an empty allowlist permits nothing.
      */
@@ -471,7 +471,7 @@ class VyzorixForegroundService : Service() {
      * after the token exists for exactly that reason.
      *
      * The session's allowlist is the full local API set, stated explicitly: a shell
-     * session is an operator's terminal and may call every bridge API. It is spelled
+     * session is a user's terminal and may call every bridge API. It is spelled
      * out rather than left empty because an empty allowlist permits nothing — the
      * fail-closed rule. The server does not resolve a
      * per-session allowlist yet; when it does, it replaces this set.
@@ -479,13 +479,13 @@ class VyzorixForegroundService : Service() {
     fun openSession(
         sessionId: String,
         deviceId: String,
-        operatorId: String,
+        userId: String,
     ): PtyResult<Int> {
         val token =
             tokens.issue(
                 sessionId = sessionId,
                 deviceId = deviceId,
-                operatorId = operatorId,
+                userId = userId,
                 apiAllowlist = router.names().toSet(),
             )
 
@@ -493,7 +493,7 @@ class VyzorixForegroundService : Service() {
             broker.open(
                 sessionId,
                 deviceId,
-                operatorId,
+                userId,
                 ProotLauncher.loginShellRequest(this, token.token),
             )
         if (opened is PtyResult.Err) return opened
@@ -624,7 +624,7 @@ class VyzorixForegroundService : Service() {
 
         // The container is stopping, so the persistent notification returns to the
         // "Start Vyzorix" state: the service's foreground notification goes
-        // away with it, and this re-posts the one the operator can tap to start
+        // away with it, and this re-posts the one the user can tap to start
         // again. Without it, stopping the container left no way back from the
         // notification.
         DeviceNotification(this).needsStart()
@@ -666,7 +666,7 @@ class VyzorixForegroundService : Service() {
      */
     private fun buildNotification(): Notification {
         // A process that came up because an update was installed shows the "updating /
-        // reconnecting" state rather than a bare "Starting…", so the operator sees the
+        // reconnecting" state rather than a bare "Starting…", so the user sees the
         // update land. The marker is consumed here; the cloud connection overwrites
         // this with "running" once it reconnects.
         val applying = UpdateMarker.applyingVersion(this)
@@ -702,7 +702,7 @@ class VyzorixForegroundService : Service() {
          * Prefix for a terminal's tmux session name.
          *
          * Prefixed so a container session is recognisable in `tmux ls` and
-         * cannot collide with a name an operator picks by hand.
+         * cannot collide with a name a user picks by hand.
          */
         private const val TMUX_SESSION_PREFIX = "vyzorix-"
 
@@ -721,7 +721,7 @@ class VyzorixForegroundService : Service() {
          *     avc: denied { read } for comm="tmux: client" name="/" dev="devpts"
          *     scontext=u:r:untrusted_app:… tcontext=u:object_r:devpts:s0 tclass=dir
          *
-         * The client then exits without attaching, and the operator gets a terminal
+         * The client then exits without attaching, and the user gets a terminal
          * that echoes keystrokes and answers nothing. A bare `bash --login` never
          * resolves its tty name, which is why the identical PTY works without tmux.
          * Verified on the emulator: with tmux every API call returns nothing; without

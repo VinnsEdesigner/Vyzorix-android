@@ -11,7 +11,7 @@ Read it before changing anything structural; it is the contract, and it records
 ## What this is
 
 A headless Android agent. It runs a Debian userspace in `proot`, exposes it over
-a cloud WebSocket, and gives operators a terminal and (later) USB and app
+a cloud WebSocket, and gives users a terminal and (later) USB and app
 control. The server half already exists in `VYZORIX`; this repo is
 the device half.
 

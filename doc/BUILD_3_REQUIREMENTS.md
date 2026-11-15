@@ -403,7 +403,7 @@ Instrumented (`tests/android-core/instrumented/kotlin/`):
 
 | Test | Covers |
 |:--|:--|
-| `EnrollmentE2ETest` | Against the **real server** on the emulator: enroll → notification shows a code → an operator claims it → the config arrives over the held WebSocket → it verifies → it applies. This is DoD 1–5 and 8. |
+| `EnrollmentE2ETest` | Against the **real server** on the emulator: enroll → notification shows a code → a user claims it → the config arrives over the held WebSocket → it verifies → it applies. This is DoD 1–5 and 8. |
 
 The spike first, and it is a JVM test plus a Go test that need no device: the
 device signs a connect and a request, the server verifies them; the server signs a
@@ -444,6 +444,6 @@ plumbing. If it does not, the design changes — which is what a spike is for.
 5. **Pinned key delivery** — an asset in the APK, or a `BuildConfig` field, and
    who rotates it.
 6. **Scope of this build** — is `SHELL_EXEC` the only command type (as the
-   contract says), and is the operator terminal relay in scope or deferred? The
+   contract says), and is the user terminal relay in scope or deferred? The
    server already relays PTY over the device WebSocket, so the device's half is
    `PtyFrameCodec` + wiring, not new design.

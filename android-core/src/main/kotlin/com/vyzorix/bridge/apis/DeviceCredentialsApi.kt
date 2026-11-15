@@ -34,7 +34,7 @@ import org.json.JSONObject
  * `installCaCert` adds a certificate to the **system trust store**, so every app on
  * the device trusts it. That is a serious power — the same one a corporate MDM uses
  * to trust an internal CA, and the mechanism TLS interception relies on. It is
- * reported plainly so an operator knows what they are doing; the API does not hide
+ * reported plainly so a user knows what they are doing; the API does not hide
  * the consequence.
  *
  * ## Input format

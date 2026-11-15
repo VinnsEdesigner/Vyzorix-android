@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The service's implementation of [PtySessionPort]: it starts a shell for an
- * operator's terminal, streams its output, and reaps it.
+ * user's terminal, streams its output, and reaps it.
  *
  * It is the cloud-terminal twin of the bridge's session path. Both allocate a PTY
  * from the same [PtyBroker] and read it with the same [PtyReader]; they differ only
@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
  * acknowledges bytes, while the cloud socket has no such acknowledgement, so this
  * port replenishes the reader's window as output is handed to the socket and lets a
  * failed socket write close the session. That is the backpressure: OkHttp's send
- * queue is bounded, so a slow operator makes `send` return false and the session
+ * queue is bounded, so a slow user makes `send` return false and the session
  * ends rather than the device buffering without limit.
  *
  * The shell command is a seam ([shellRequest]) so the terminal can be exercised on
@@ -54,8 +54,8 @@ class ServicePtySessionPort(
      *
      * When the Debian rootfs is not installed, the proot login shell exits the
      * instant it starts — it cannot find its own binary. Opening a PTY for it would
-     * give the operator an empty terminal that silently does nothing, which is worse
-     * than a refusal: the operator cannot tell a broken container from a quiet shell.
+     * give the user an empty terminal that silently does nothing, which is worse
+     * than a refusal: the user cannot tell a broken container from a quiet shell.
      * This lets the port refuse with a reason instead.
      */
     private val canOpen: () -> Boolean = { true },
@@ -76,7 +76,7 @@ class ServicePtySessionPort(
         onExit: (sessionId: String, exitCode: Int) -> Unit,
     ): Boolean {
         // Refuse before allocating a pty when the container cannot run: a shell that
-        // exits instantly would look to the operator like a terminal that opened and
+        // exits instantly would look to the user like a terminal that opened and
         // then died, with no reason given.
         if (!canOpen()) {
             Log.w(TAG, "terminal $sessionId refused: the container is not installed")
@@ -84,8 +84,8 @@ class ServicePtySessionPort(
             return false
         }
 
-        // The operator and the API allowlist come from the server's resolved identity.
-        // Before this, every session was issued an empty operator and the *full*
+        // The user and the API allowlist come from the server's resolved identity.
+        // Before this, every session was issued an empty user and the *full*
         // command set, so the bridge could not attribute a call and the CLI could not
         // show who was connected.
         //
@@ -95,7 +95,7 @@ class ServicePtySessionPort(
         // session is not authorised for any API", not "authorised for all of them".
         // The shell still opens so the container's own tools work, but the bridge
         // refuses every device API — which is what [ApiRouter] enforces via the token.
-        val operatorId = identity?.operator.orEmpty()
+        val userId = identity?.user.orEmpty()
         val allowlist =
             if (identity != null && identity.allowlist.isNotEmpty()) {
                 identity.allowlist.toSet()
@@ -109,14 +109,14 @@ class ServicePtySessionPort(
             tokens.issue(
                 sessionId = sessionId,
                 deviceId = deviceId(),
-                operatorId = operatorId,
+                userId = userId,
                 apiAllowlist = allowlist,
             )
 
         val request =
             shellRequest(sessionId, token.token, identity?.toJson()).copy(rows = rows, cols = cols)
 
-        val opened = broker.open(sessionId, deviceId(), operatorId, request)
+        val opened = broker.open(sessionId, deviceId(), userId, request)
         if (opened is PtyResult.Err) {
             tokens.revokeSession(sessionId)
             Log.w(TAG, "terminal $sessionId could not start: ${opened.error.detail}")
@@ -151,7 +151,7 @@ class ServicePtySessionPort(
                     // Release the broker's channel and its registry slot, not just the
                     // port's own map.
                     //
-                    // A shell can end on its own — the operator types `exit`, or proot
+                    // A shell can end on its own — the user types `exit`, or proot
                     // dies during startup — and that path runs here, not through
                     // [close]. Dropping only `live` left the broker's channel and the
                     // session registry holding the session, and the registry counts
@@ -160,7 +160,7 @@ class ServicePtySessionPort(
                     // later terminal was refused with "already holds 4 sessions" —
                     // which is what made a long API sweep fail partway through with
                     // "the terminal port must open a shell". [close] already does this
-                    // for the operator-initiated path; this is the same cleanup for the
+                    // for the user-initiated path; this is the same cleanup for the
                     // shell-initiated one. Both tolerate the other having run first:
                     // [close] returns early when `live` has no entry, and the broker's
                     // close is a no-op for a channel already gone.

@@ -26,7 +26,7 @@ import kotlinx.serialization.json.jsonObject
  *
  *  - An **unknown command type reports failed**, never silence. The architecture
  *    requires it: a device that drops a command it does not implement leaves
- *    the operator watching it sit `delivered` forever, with no signal that nothing
+ *    the user watching it sit `delivered` forever, with no signal that nothing
  *    ran. Reporting failed is what makes the gap visible.
  *  - A **bad signature is refused without executing**, and the result is not
  *    reported as a failure of the command — it never was a command. The frame is
@@ -159,7 +159,7 @@ class CommandDispatcher(
         val executor =
             executors[frame.command]
                 ?: return Handled.Result(
-                    // An unknown type is reported failed, not dropped: the operator must
+                    // An unknown type is reported failed, not dropped: the user must
                     // learn the command did not run. See the class comment.
                     CommandResultFrame(
                         dispatchId = frame.dispatchId,

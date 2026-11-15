@@ -53,7 +53,7 @@ object DeviceInfoApi : ApiHandler {
                 .put("incremental", Build.VERSION.INCREMENTAL)
                 .put("securityPatch", Build.VERSION.SECURITY_PATCH.orEmpty())
                 // Hardware identity. These are the `ro.product.*` values, distinct
-                // from the marketing model name, and are what an operator uses to
+                // from the marketing model name, and are what a user uses to
                 // tell two devices of the same model apart.
                 .put("device", Build.DEVICE)
                 .put("product", Build.PRODUCT)

@@ -15,7 +15,7 @@ import org.json.JSONObject
  *
  * The whole [ApiCall] is passed rather than a bare argument map so a handler that
  * needs the caller's scope (a session-opening handler must bind the session to the
- * token's device and operator) has it, without every handler taking a token
+ * token's device and user) has it, without every handler taking a token
  * parameter it ignores.
  */
 fun interface ApiHandler {

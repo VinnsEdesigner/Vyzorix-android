@@ -35,7 +35,7 @@ extension model are upstream's.
 ## What upstream proot-me got wrong here (why we switched)
 
 Measured on the Android 13 (API 33) emulator, from the app's own process (Seccomp
-2), before the switch. Each was a real defect an operator would hit:
+2), before the switch. Each was a real defect a user would hit:
 
 - **`cd` / `fchdir` / `chroot` returned `ENOSYS`.** proot emulates these fully by
   rewriting the syscall number to the "avoider" (`-1`). Android's filter traps an

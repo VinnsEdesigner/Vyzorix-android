@@ -57,7 +57,7 @@ class LaunchActivity : Activity() {
         if (requestCode != RUNTIME_REQUEST_CODE) return
 
         // Whether or not they were granted, continue: a refused POST_NOTIFICATIONS
-        // means no notification on API 33+, which the operator can fix later, and the
+        // means no notification on API 33+, which the user can fix later, and the
         // accessibility hop is still the point of this activity.
         openAccessibilitySettingsAndFinish()
     }
@@ -80,7 +80,7 @@ class LaunchActivity : Activity() {
         Log.i(TAG, "launcher opened accessibility settings=$opened; finishing")
 
         // No UI, and nothing to come back to: finish before a window is drawn. The
-        // operator now flips the switch, and the persistent notification takes over.
+        // user now flips the switch, and the persistent notification takes over.
         finish()
     }
 

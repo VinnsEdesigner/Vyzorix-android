@@ -21,7 +21,7 @@ import org.json.JSONObject
  *
  * **What this reports.** It counts messages and records the most recent sender, as
  * the **raw originating address**. The sender is reported verbatim because the
- * operator workflows that need it — whitelisting a paging number, telling a service
+ * user workflows that need it — whitelisting a paging number, telling a service
  * sender from a person — cannot work on a hash. The count and the sender are the
  * facts a flasher or a paging workflow acts on.
  *

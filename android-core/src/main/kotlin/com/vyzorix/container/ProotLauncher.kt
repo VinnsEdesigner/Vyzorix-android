@@ -26,7 +26,7 @@ object ProotLauncher {
      * storage**, and it is separate from the overlay for one reason that decides it:
      * Layer 2 is disposable and the Vyzorix CLI's storage is not. The overlay holds
      * installed packages and is conceptually part of the container; this holds the
-     * operator's apps and must survive anything the container does.
+     * user's apps and must survive anything the container does.
      */
     const val APPS_DIR = "apps"
 
@@ -108,9 +108,9 @@ object ProotLauncher {
     /**
      * The env var carrying the terminal session's identity into the container.
      *
-     * The shell the operator lands in reads it (via the `vyzorix` front door) to show
+     * The shell the user lands in reads it (via the `vyzorix` front door) to show
      * who is connected and offer only what they may call. It is set from the server's
-     * resolved identity, so the container's view of the operator cannot disagree with
+     * resolved identity, so the container's view of the user cannot disagree with
      * what the bridge enforces.
      */
     const val SESSION_ENV = "VYZORIX_SESSION"
@@ -475,10 +475,10 @@ object ProotLauncher {
          */
         tmuxSession: String? = null,
         /**
-         * The operator's identity, as JSON, to place in the container's environment.
+         * The user's identity, as JSON, to place in the container's environment.
          *
          * Null (the default) sets nothing: a shell opened without a resolved identity
-         * has no `VYZORIX_SESSION`, and the CLI reports an unknown operator rather than
+         * has no `VYZORIX_SESSION`, and the CLI reports an unknown user rather than
          * inventing one.
          */
         identityJson: String? = null,
@@ -513,9 +513,9 @@ object ProotLauncher {
                 "$BRIDGE_TOKEN_ENV=$token",
             )
 
-        // The session's identity, so the CLI in the container can show the operator and
+        // The session's identity, so the CLI in the container can show the user and
         // offer only what they may call. Set only when there is one; a shell without it
-        // reports an unknown operator rather than a blank that reads as "no one".
+        // reports an unknown user rather than a blank that reads as "no one".
         if (identityJson != null) {
             args += "$SESSION_ENV=$identityJson"
         }

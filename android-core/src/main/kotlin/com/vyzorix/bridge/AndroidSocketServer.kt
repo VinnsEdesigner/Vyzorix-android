@@ -43,7 +43,7 @@ class AndroidSocketServer(
     /**
      * True when [channel] belongs to [sessionId]: a connection may only drive the
      * channels its own
-     * session opened, so one operator cannot type into or credit another's
+     * session opened, so one user cannot type into or credit another's
      * terminal. Defaulted to deny so a caller that forgets it fails closed.
      */
     private val channelOwnedBy: (channel: Int, sessionId: String) -> Boolean = { _, _ -> false },
@@ -197,7 +197,7 @@ class AndroidSocketServer(
     /**
      * Pushes PTY output for [channel] to the connections entitled to it: those
      * bound to the session that owns the channel. Broadcasting to every connection
-     * would leak one session's terminal to another operator.
+     * would leak one session's terminal to another user.
      */
     fun pushPtyOutput(
         channel: Int,

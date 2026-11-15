@@ -20,7 +20,7 @@ import org.json.JSONObject
  *
  * ## Why so many fields
  *
- * An operator diagnosing a managed device needs the whole policy picture, not a
+ * An user diagnosing a managed device needs the whole policy picture, not a
  * sample: "the screen locks after 30s" and "the screen never locks" are the same call
  * with different numbers, and which password rules are set is what decides whether a
  * device is compliant. So the full set of `DevicePolicyManager` getters that need no

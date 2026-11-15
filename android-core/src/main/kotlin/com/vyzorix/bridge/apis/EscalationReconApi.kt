@@ -14,7 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * **Recon only:** which privilege-escalation routes exist on this device, so an operator can
+ * **Recon only:** which privilege-escalation routes exist on this device, so a user can
  * see what is and is not available *before* trying something.
  *
  * ## Why this exists
@@ -31,7 +31,7 @@ import org.json.JSONObject
  * **Read-only, and it does not escalate.** It never starts a shell, never requests a
  * permission, and never contacts another app's provider. It asks the package manager and
  * the settings provider a few questions and reports the answers. Installing Shizuku or
- * provisioning a device owner is a user/operator decision made *outside* the app — this
+ * provisioning a device owner is a user/user decision made *outside* the app — this
  * app cannot create those grants for itself, and pretending otherwise would be the exact
  * "loophole" the platform has closed.
  *

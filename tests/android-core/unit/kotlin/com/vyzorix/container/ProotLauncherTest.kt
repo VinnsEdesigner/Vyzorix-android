@@ -111,7 +111,7 @@ class ProotLauncherTest {
         // tmux canonicalises its socket path list with realpath(3), which under proot
         // fails on a trailing slash; its compiled default is `/tmp/`. Without an
         // explicit, slashless TMUX_TMPDIR it exits 1 with "no suitable socket path"
-        // and the operator's terminal never starts. See loginShellArgs.
+        // and the user's terminal never starts. See loginShellArgs.
         val args = ProotLauncher.loginShellArgs(context, token = "t", tmuxSession = "sess-1")
 
         val tmpdir = args.firstOrNull { it.startsWith("TMUX_TMPDIR=") }

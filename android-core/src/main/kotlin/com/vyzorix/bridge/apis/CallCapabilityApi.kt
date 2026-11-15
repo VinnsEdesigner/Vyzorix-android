@@ -13,7 +13,7 @@ import org.json.JSONObject
  * Whether the device can place calls, and whether a dialer exists to hand one to.
  *
  * Read-only, and deliberately so: `CALL_PHONE` is a dangerous permission and dialing
- * is a write. The capability is what an operator needs before offering a "call this
+ * is a write. The capability is what a user needs before offering a "call this
  * number" action, and it needs no permission to report.
  */
 @VyzorixApi(

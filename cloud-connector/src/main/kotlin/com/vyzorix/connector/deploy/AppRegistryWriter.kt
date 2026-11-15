@@ -36,7 +36,7 @@ private data class RegistryDocument(
 /**
  * Reads and writes the supervisor's `apps.json`.
  *
- * The registry is the file the supervisor watches and the file an operator edits, so
+ * The registry is the file the supervisor watches and the file a user edits, so
  * it holds only what the supervisor's `App` struct holds. The deploy config is
  * richer (artifacts, secret names, exposure) and must not be copied here: a secret in
  * this file would be readable by every app in the container.

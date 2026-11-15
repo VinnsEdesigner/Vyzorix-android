@@ -48,7 +48,7 @@ object DefaultAppsApi : ApiHandler {
         return ApiOutcome.ok(result)
     }
 
-    /** The roles an operator cares about, and the intent that resolves each. */
+    /** The roles a user cares about, and the intent that resolves each. */
     private val ROLES =
         linkedMapOf(
             "browser" to Intent(Intent.ACTION_VIEW).addCategory(Intent.CATEGORY_BROWSABLE),

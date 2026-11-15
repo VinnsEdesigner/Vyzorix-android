@@ -22,7 +22,7 @@ import org.json.JSONObject
  *
  * ## Why more than the enabled list
  *
- * An operator driving the screen needs to know whether a screen reader is
+ * An user driving the screen needs to know whether a screen reader is
  * intercepting input, and *which* services are present to do so. The enabled list
  * alone hides a service that is installed but off — the difference between "no
  * screen reader on this device" and "one is installed and could be turned on". So

@@ -24,7 +24,7 @@ import org.json.JSONObject
  *
  * The read is `Environment.isExternalStorageManager()`, which is available from API
  * 30. Below that the permission does not exist (scoped storage arrived with it), so
- * the answer is "not applicable" rather than "denied" — a distinction an operator
+ * the answer is "not applicable" rather than "denied" — a distinction a user
  * needs, because a device on API 29 does not need this permission and one on API 30
  * might.
  */

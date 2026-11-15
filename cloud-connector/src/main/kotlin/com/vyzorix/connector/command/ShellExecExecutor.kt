@@ -47,12 +47,12 @@ class ShellExecExecutor(
         val sessionId = "cmd-${UUID.randomUUID()}"
 
         // The PTY's stdio becomes the child's, so the shell runs the command with a
-        // real tty and the output is what the operator would have seen.
+        // real tty and the output is what the user would have seen.
         val opened =
             broker.open(
                 sessionId = sessionId,
                 deviceId = ONE_SHOT_DEVICE,
-                operatorId = ONE_SHOT_OPERATOR,
+                userId = ONE_SHOT_OPERATOR,
                 request =
                     PtyRequest(
                         executable = shell,

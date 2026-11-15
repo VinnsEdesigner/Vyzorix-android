@@ -68,7 +68,7 @@ object ContainerStatusApi : ApiHandler {
             )
         val vyzorixCliInstalled = cli.isInstalled()
 
-        // The one-line verdict an operator acts on, named rather than inferred.
+        // The one-line verdict a user acts on, named rather than inferred.
         val verdict =
             when {
                 !rootfsReady -> "rootfs missing: the Debian tree is not installed"

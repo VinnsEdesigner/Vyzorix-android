@@ -57,7 +57,7 @@ object ApiTags {
 
     // Data sensitivity for hardware identity: the attached-device list, the SoC, a
     // device's serial. Distinct from `data:public` (battery level) because it names
-    // physical hardware an operator may not want every role to see.
+    // physical hardware a user may not want every role to see.
     const val DATA_HARDWARE = "data:hardware"
 
     // A write operation: it changes device or host state and is not repeatable in

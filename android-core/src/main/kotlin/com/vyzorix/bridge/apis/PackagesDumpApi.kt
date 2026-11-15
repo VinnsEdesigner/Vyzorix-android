@@ -34,7 +34,7 @@ import org.json.JSONObject
  *
  * `dataDir`, `deviceProtectedDataDir`, `sourceDir`, `publicSourceDir`,
  * `nativeLibraryDir` and each split's source dir are the real paths, reported
- * verbatim. These are what an operator needs to find a package on disk; none is
+ * verbatim. These are what a user needs to find a package on disk; none is
  * derivable from the package name.
  *
  * ## The limit, and why the default is unlimited
@@ -113,7 +113,7 @@ object PackagesDumpApi : ApiHandler {
      * Packages grouped by the uid they share.
      *
      * A group with more than one member is a real family: those packages run as one
-     * application. This is the "parent/children" view an operator asked for, presented
+     * application. This is the "parent/children" view a user asked for, presented
      * as groups rather than forcing each package to name a parent it does not have.
      */
     private fun sharedUidGroups(packages: List<PackageInfo>): JSONArray {

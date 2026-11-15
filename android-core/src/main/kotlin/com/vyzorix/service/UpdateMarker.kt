@@ -9,7 +9,7 @@ import java.io.File
  * The agent downloads an update, hands the APK to the system installer, and is
  * restarted by the install — a fresh process. That process has no memory of the
  * update, so without a marker it would come up saying "running" as if nothing had
- * happened, and the operator would never see the update land.
+ * happened, and the user would never see the update land.
  *
  * So the install step writes this marker first; the next start reads it, shows the
  * "reconnecting" notification, and clears it. The window is bounded: a marker older

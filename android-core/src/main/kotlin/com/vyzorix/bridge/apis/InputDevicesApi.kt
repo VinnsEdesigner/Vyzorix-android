@@ -12,7 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The input devices the system knows about. An operator driving a screen wants to
+ * The input devices the system knows about. An user driving a screen wants to
  * know whether a touchscreen, a stylus or a keyboard is present. No runtime
  * permission.
  */

@@ -20,7 +20,7 @@ import org.json.JSONObject
  * so another app can claim it.
  *
  * Idempotent: detaching a device that is not open is not an error, because an
- * operator's detach races the device being unplugged.
+ * user's detach races the device being unplugged.
  */
 @VyzorixApi(
     tags = [

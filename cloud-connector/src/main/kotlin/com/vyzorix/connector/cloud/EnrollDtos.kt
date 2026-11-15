@@ -49,7 +49,7 @@ data class EnrollResponse(
     /**
      * How often to ask for the config while waiting to be claimed, in seconds.
      *
-     * The config normally arrives over the held WebSocket the instant an operator
+     * The config normally arrives over the held WebSocket the instant a user
      * claims the code, so this only bounds the fallback: a device whose socket is
      * not up asks on this cadence instead of waiting indefinitely. Defaulted so an
      * older server that does not send it still yields a sane cadence.

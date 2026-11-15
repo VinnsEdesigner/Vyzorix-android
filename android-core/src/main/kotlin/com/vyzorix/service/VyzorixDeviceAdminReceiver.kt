@@ -29,7 +29,7 @@ import android.util.Log
  *
  * The base class requires the enable/disable hooks; they log so the state change is
  * visible in the device log, and `onDisableRequested` returns a plain warning. Nothing
- * is blocked or hidden — an operator can always remove the admin from Settings, which
+ * is blocked or hidden — a user can always remove the admin from Settings, which
  * is the escape hatch that keeps this safe.
  */
 class VyzorixDeviceAdminReceiver : DeviceAdminReceiver() {

@@ -36,7 +36,7 @@ data class DeviceFacts(
     val buildId: String,
     /**
      * The security patch level, `Build.VERSION.SECURITY_PATCH`, for example
-     * "2024-03-01". Empty on a build that does not set it. Lets an operator see how
+     * "2024-03-01". Empty on a build that does not set it. Lets a user see how
      * stale a device is.
      */
     val securityPatch: String,

@@ -10,7 +10,7 @@ import com.vyzorix.bridge.VyzorixApi
 import org.json.JSONObject
 
 /**
- * Shared-storage capacity, and whether it is emulated or real. An operator sizing
+ * Shared-storage capacity, and whether it is emulated or real. An user sizing
  * an export needs this, and the emulated flag explains why the numbers move with
  * `/data`. No runtime permission on API 26 for the app's own view.
  */

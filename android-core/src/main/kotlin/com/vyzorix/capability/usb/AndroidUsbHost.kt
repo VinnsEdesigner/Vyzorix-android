@@ -35,7 +35,7 @@ class AndroidUsbHost(
             manager.deviceList.map { (name, device) -> describe(manager, name, device) }
         } catch (t: Throwable) {
             // A framework failure here is reported as "no devices" rather than
-            // propagated: the caller's job is to tell an operator what is attached,
+            // propagated: the caller's job is to tell a user what is attached,
             // and an exception would read as a broken API.
             Log.w(TAG, "could not enumerate usb devices", t)
 

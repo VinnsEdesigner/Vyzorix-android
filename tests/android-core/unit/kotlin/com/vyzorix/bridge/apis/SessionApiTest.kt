@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
 
 /**
  * The session API is the door the terminal comes through, so its argument handling
- * and its use of the caller's token (never client-supplied device/operator) are
+ * and its use of the caller's token (never client-supplied device/user) are
  * tested directly with fake callbacks.
  */
 @RunWith(RobolectricTestRunner::class)

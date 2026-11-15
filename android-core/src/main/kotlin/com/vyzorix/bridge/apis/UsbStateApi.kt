@@ -10,7 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * USB state and what is attached. The attachment list is what an operator checks
+ * USB state and what is attached. The attachment list is what a user checks
  * before asking the device to drive a flasher. No runtime permission.
  *
  * `hw:usb` and `data:hardware` because this reports physical hardware, and

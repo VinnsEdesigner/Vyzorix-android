@@ -96,14 +96,14 @@ Requirements, each testable:
 
 **Open (decision D3):** who starts the supervisor? Options in §6.
 
-### 4.2 `app-*` CLI — the operator's handle inside the container
+### 4.2 `app-*` CLI — the user's handle inside the container
 
 The doc names eight (§3): `app-start`, `app-stop`, `app-restart`, `app-list`,
 `app-logs`, `app-env`, `app-create`, `app-expose`.
 
 Requirement: each is a thin client of the supervisor's control socket, prints
 machine-readable output, and exits non-zero on failure. The behaviour is identical
-whether invoked by an operator in a terminal or by a script.
+whether invoked by a user in a terminal or by a script.
 
 **Open (decision D1):** language. The doc says "bash wrappers"; the repo's
 convention is C++ for container tools (that is what `android-bin` is, and its

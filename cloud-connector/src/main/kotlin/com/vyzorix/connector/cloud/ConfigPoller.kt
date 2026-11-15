@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * Asks the server for the config on a cadence while the device waits to be claimed.
  *
- * The config normally arrives over the held WebSocket the moment an operator claims
+ * The config normally arrives over the held WebSocket the moment a user claims
  * the pairing code, so this is a fallback, not the primary path. It exists for the
  * window where the socket is not up — the device enrolled but is not yet connected,
  * or the socket is reconnecting — so a claimed device does not sit unconfigured

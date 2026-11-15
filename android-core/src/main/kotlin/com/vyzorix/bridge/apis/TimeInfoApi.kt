@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 /**
  * Clocks: wall time, monotonic uptime, and the timezone. All three matter and
- * are different — an operator correlating a device event with a server log needs
+ * are different — a user correlating a device event with a server log needs
  * wall time, and anything measuring a duration needs uptime. No runtime
  * permission.
  */

@@ -19,7 +19,7 @@ import org.json.JSONObject
  *
  * `SEND_SMS` is a dangerous permission. It is required here because `SmsManager`
  * cannot be obtained without it, which is the honest place to require it: an
- * operator asking "can this device send SMS" is asking a question that needs the
+ * user asking "can this device send SMS" is asking a question that needs the
  * permission to answer truthfully.
  */
 @VyzorixApi(

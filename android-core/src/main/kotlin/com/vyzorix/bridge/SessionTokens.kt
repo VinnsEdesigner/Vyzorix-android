@@ -9,13 +9,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * [apiAllowlist] is the scope: a token issued for a shell that may read the
  * battery cannot also read logcat. Empty means every API, which is what an
- * operator-initiated terminal gets.
+ * user-initiated terminal gets.
  */
 class SessionToken internal constructor(
     val token: String,
     val sessionId: String,
     val deviceId: String,
-    val operatorId: String,
+    val userId: String,
     val apiAllowlist: Set<String>,
     val expiresAtMs: Long,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -87,7 +87,7 @@ class SessionTokenRegistry(
     fun issue(
         sessionId: String,
         deviceId: String,
-        operatorId: String,
+        userId: String,
         apiAllowlist: Set<String>,
         ttlMs: Long = DEFAULT_TTL_MS,
     ): SessionToken {
@@ -99,7 +99,7 @@ class SessionTokenRegistry(
                 token = bytes.toHex(),
                 sessionId = sessionId,
                 deviceId = deviceId,
-                operatorId = operatorId,
+                userId = userId,
                 apiAllowlist = apiAllowlist,
                 expiresAtMs = clock() + ttlMs,
                 clock = clock,

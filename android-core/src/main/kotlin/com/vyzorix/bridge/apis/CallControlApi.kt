@@ -127,7 +127,7 @@ object CallControlApi : ApiHandler {
      *
      * `DISALLOW_OUTGOING_CALLS` is the device-owner restriction; airplane mode and an
      * absent telephony service mean no call is possible either way, and both are folded
-     * into the one answer an operator acts on.
+     * into the one answer a user acts on.
      */
     private fun outgoingCallsBlocked(context: Context): Boolean {
         val users = context.getSystemService(Context.USER_SERVICE) as? UserManager

@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * The device half of the interactive terminal, over the cloud WebSocket.
  *
- * The operator's browser opens a terminal; the server mints a session id and sends
+ * The user's browser opens a terminal; the server mints a session id and sends
  * the device a binary OPEN frame. From then on the two sides exchange DATA frames
  * (keystrokes down, output up), RESIZE frames and a CLOSE frame, all multiplexed
  * over the one device socket and all keyed by that session id.
@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  * routing and can be tested without either.
  *
  * Flow control: the server applies a credit window to output going *to* the
- * operator, but it never sends credit back to the device (its own comment says the
+ * user, but it never sends credit back to the device (its own comment says the
  * device's accounting governs input). So the device must not stall waiting for an
  * ACK that never comes: the reader's window is replenished locally as output is
  * handed to the socket, and a session whose socket write fails is closed rather
@@ -38,7 +38,7 @@ import java.util.concurrent.ConcurrentHashMap
  * the PTY master fd, so the shell's lifetime is the *session's*, not the socket's.
  * The buffer is bounded because an unbounded one would grow with whatever the shell
  * prints while nobody is watching; when it overflows, the **oldest** bytes are
- * dropped — a terminal is a tail, and the most recent output is what an operator
+ * dropped — a terminal is a tail, and the most recent output is what a user
  * needs. A detached session is reaped after [detachedTtlMs] so a closed tab cannot
  * hold a shell forever.
  */
@@ -51,7 +51,7 @@ class TerminalRelay(
     /**
      * How long a detached session is kept before it is reaped.
      *
-     * The server's idle TTL is the backstop for a session the operator forgets; this
+     * The server's idle TTL is the backstop for a session the user forgets; this
      * is the device's own bound for a session whose socket has gone and may never
      * return. It is deliberately shorter: a device is a phone, and a shell holding
      * memory for a client that is not coming back is worth reclaiming sooner.
@@ -210,7 +210,7 @@ class TerminalRelay(
         val session = sessions[frame.sessionId] ?: return false
         if (session.closing) return true
 
-        // Input while detached is dropped. It cannot have come from the operator (the
+        // Input while detached is dropped. It cannot have come from the user (the
         // socket is down), and writing it to the shell would inject keystrokes nobody
         // sent. A reattach is a fresh view of the same shell, not a replay of input.
         if (session.detached) return true
@@ -239,14 +239,14 @@ class TerminalRelay(
         // guessed at — closing the wrong shell is worse than leaving one open.
         if (frame.sessionId.isEmpty()) return false
 
-        closeSession(frame.sessionId, "operator_closed")
+        closeSession(frame.sessionId, "user_closed")
 
         return true
     }
 
     /**
      * Closes a session: the shell is stopped, the session forgotten, and the server
-     * told. Idempotent, because an operator close races the shell's own exit.
+     * told. Idempotent, because a user close races the shell's own exit.
      */
     fun closeSession(
         sessionId: String,
@@ -275,7 +275,7 @@ class TerminalRelay(
         session.closing = true
 
         // The shell is already gone, so the port needs no close; the reader has
-        // released the fd. Tell the server so the operator sees the terminal end
+        // released the fd. Tell the server so the user sees the terminal end
         // rather than hanging on a dead session.
         sendClose(sessionId, exitCode)
         onSessionClosed(sessionId, "shell_exited")
@@ -386,7 +386,7 @@ class TerminalRelay(
         exitCode: Int,
     ) {
         // The close frame carries the session id and, in the payload, the exit code
-        // as a decimal string so the operator can show it. The server treats the
+        // as a decimal string so the user can show it. The server treats the
         // payload as opaque for close, so a text code is safe and useful.
         sendFrame(
             PtyFrame.encode(PtyFrame.TYPE_CLOSE, exitCode.toString().toByteArray(), sessionId),
@@ -419,7 +419,7 @@ class TerminalRelay(
 
     /**
      * Reads an OPEN payload: the window size and, when the server sent one, the
-     * operator identity.
+     * user identity.
      *
      * The size is read on its own first so an older server's payload (size only) still
      * yields a size; the identity is null in that case, which the port treats as an
@@ -432,7 +432,7 @@ class TerminalRelay(
             PtyFrame.decodeOpen(payload)
         } catch (expected: PtyFrame.MalformedFrame) {
             // A malformed OPEN is not fatal to the session: the shell opens with a
-            // default size and an unknown operator.
+            // default size and an unknown user.
             null to null
         }
     }
@@ -455,7 +455,7 @@ class TerminalRelay(
         /**
          * Output buffered per detached session, in bytes.
          *
-         * 256 KiB holds a screenfuls of scrollback — the tail an operator reconnecting
+         * 256 KiB holds a screenfuls of scrollback — the tail a user reconnecting
          * wants to see — without letting a detached `yes` grow the device's memory.
          * The oldest bytes are dropped past this bound.
          */

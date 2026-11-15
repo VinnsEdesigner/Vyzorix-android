@@ -141,19 +141,19 @@ class TerminalRelayTest {
     }
 
     @Test
-    fun `an open frame carries the operator identity to the port`() {
+    fun `an open frame carries the user identity to the port`() {
         val (r, port, _) = relay()
 
         r.onFrame(
             openFrameWithIdentity(
                 "s1",
-                """{"operator":"op-1","name":"Kamau","role":"operator",""" +
+                """{"user":"op-1","name":"Kamau","role":"operator",""" +
                     """"roleLabel":"Operator","allowlist":["camera_list","battery"]}""",
             ),
         )
 
         val identity = port.identities.single().second
-        assertEquals("op-1", identity?.operator)
+        assertEquals("op-1", identity?.user)
         assertEquals("Operator", identity?.roleLabel)
         assertEquals(listOf("camera_list", "battery"), identity?.allowlist)
     }
@@ -161,7 +161,7 @@ class TerminalRelayTest {
     @Test
     fun `an open frame without an identity opens an unattributed session`() {
         // A server that predates the identity block: the shell still opens, and the
-        // port is told the operator is unknown rather than being handed a wrong one.
+        // port is told the user is unknown rather than being handed a wrong one.
         val (r, port, _) = relay()
 
         r.onFrame(openFrame("s1"))
@@ -227,7 +227,7 @@ class TerminalRelayTest {
 
         assertEquals(listOf("s1"), port.closed)
         assertEquals(1, closed.size)
-        assertEquals("s1" to "operator_closed", closed.first())
+        assertEquals("s1" to "user_closed", closed.first())
         assertFalse(r.isOpen("s1"))
     }
 
@@ -387,7 +387,7 @@ class TerminalRelayTest {
         r.onFrame(openFrame("s1"))
         r.detachAll()
 
-        // Push more than the bound. The newest bytes are what a reconnecting operator
+        // Push more than the bound. The newest bytes are what a reconnecting user
         // needs, so the oldest are the ones dropped.
         port.onOutput?.invoke("s1", "AAAA".toByteArray())
         port.onOutput?.invoke("s1", "BBBB".toByteArray())

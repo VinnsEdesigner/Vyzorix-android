@@ -1,7 +1,7 @@
 # Vyzorix — Android
 
 A headless Android agent. It runs a Debian userspace inside `proot`, exposes it
-over a cloud WebSocket, and gives an operator a terminal, the **Vyzorix CLI** (the
+over a cloud WebSocket, and gives a user a terminal, the **Vyzorix CLI** (the
 device's APIs as commands, inside the container), and app control. This repository
 is the **device half**; the server half lives in `VYZORIX`.
 
@@ -11,7 +11,7 @@ is the **device half**; the server half lives in `VYZORIX`.
 > disagrees with the architecture doc, the architecture doc wins.
 >
 > **The Vyzorix CLI has its own page: [`doc/CLI.md`](doc/CLI.md).** It is what an
-> operator actually types into; read it to understand the command surface and the
+> user actually types into; read it to understand the command surface and the
 > per-session identity and scoping.
 
 ---
@@ -53,7 +53,7 @@ vyzorix whoami     # your name, role, org, expiry
 vyzorix battery    # call one — JSON out, non-zero on failure
 ```
 
-A session is **scoped**: the server resolves the operator's capability from their
+A session is **scoped**: the server resolves the user's capability from their
 role and the device's tier, and sends it with the terminal session. `vyzorix` shows
 only what you may call; the bridge token enforces it. See [`doc/CLI.md`](doc/CLI.md).
 

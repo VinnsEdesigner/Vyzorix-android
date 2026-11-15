@@ -75,7 +75,7 @@ class AndroidApkInstaller(
 
         // On Android 8+ the user must have allowed this app to install unknown apps
         // (REQUEST_INSTALL_PACKAGES). Without it the installer opens and immediately
-        // refuses, which reads to the operator as "the update did nothing". So the
+        // refuses, which reads to the user as "the update did nothing". So the
         // grant is checked here and, when it is missing, the user is sent to the
         // screen that grants it instead of a dead installer.
         if (!canInstall()) {
@@ -98,7 +98,7 @@ class AndroidApkInstaller(
         // Always post the "Accept install" notification first. It is the *durable*
         // retry path: the system installer's prompt can be dismissed by accident, and
         // without a standing notification there is then no way to bring it back. The
-        // notification is ongoing and carries an Accept install action, so the operator
+        // notification is ongoing and carries an Accept install action, so the user
         // can re-open the installer as many times as it takes.
         val posted = postInstallNotification(uri, version)
 

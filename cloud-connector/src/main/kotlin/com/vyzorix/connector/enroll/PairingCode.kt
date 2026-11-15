@@ -1,7 +1,7 @@
 package com.vyzorix.connector.enroll
 
 /**
- * The pairing code the device shows and the operator types.
+ * The pairing code the device shows and the user types.
  *
  * The code is server-issued: the server owns the entropy, the TTL and the
  * single-use rule, and the device only displays it. This type models what the
@@ -36,7 +36,7 @@ data class PairingCode(
      *
      * The device refreshes on its config-poll cadence, so waiting until the exact
      * instant of expiry would leave up to one poll interval of a code the server has
-     * already forgotten — the operator types it and gets a 404. Refreshing [leadMs]
+     * already forgotten — the user types it and gets a 404. Refreshing [leadMs]
      * before expiry closes that window, so what is on screen is always claimable.
      */
     fun needsRefresh(

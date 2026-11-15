@@ -90,7 +90,7 @@ import com.vyzorix.bridge.apis.WirelessDebugApi
  * catalog test — and nothing made them. With six APIs that was survivable; with
  * fifty it is not, and the failure is silent: a name in `apis.txt` the router does
  * not serve is a command that exists and fails at call time, and a handler missing
- * from `apis.txt` is one an operator simply cannot reach.
+ * from `apis.txt` is one a user simply cannot reach.
  *
  * So the list is a **value** here rather than a chain of calls. The service registers
  * from it, `ApiCatalogTest` reads it, and `scripts/sync-apis-txt.py` writes `apis.txt`

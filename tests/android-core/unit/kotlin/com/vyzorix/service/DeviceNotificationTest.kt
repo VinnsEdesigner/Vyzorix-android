@@ -17,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
 /**
- * The two notification behaviours the operator asked for, pinned so a later edit
+ * The two notification behaviours the user asked for, pinned so a later edit
  * cannot quietly undo them:
  *
  *  1. the "update ready to install" notification carries an **Accept install** action

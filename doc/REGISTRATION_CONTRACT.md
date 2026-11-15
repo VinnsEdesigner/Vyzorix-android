@@ -12,7 +12,7 @@ then do — that is the boundary contract.
 
 ## 1. Why the existing flow is replaced
 
-The shipped flow is: device POSTs to `/v1/device/inbox`, an operator approves, the
+The shipped flow is: device POSTs to `/v1/device/inbox`, a user approves, the
 server mints a 32-byte `command_secret`, **pushes that secret to the device over
 FCM**, and the device POSTs it back to `/v1/device/confirm`. Three defects:
 
@@ -45,7 +45,7 @@ Three consequences, and they are the whole point:
   never leaves it. Nothing to intercept, on FCM or anywhere else.
 - **The APK is generic.** One artifact, one release pipeline. Nothing
   user-specific is compiled in, so a downloaded APK is worth nothing on its own.
-- **The server stays authoritative.** The device reports facts; the operator
+- **The server stays authoritative.** The device reports facts; the user
   decides ownership and policy; the server assembles and signs the config.
 
 ---
@@ -61,7 +61,7 @@ Three consequences, and they are the whole point:
    model, manufacturer, the marketing device name (when the platform exposes one),
    OS version, API level, build fingerprint, security patch level, ABIs, storage,
    RAM, device class, and a **tier hint** (unrooted / rooted / advanced). All of it
-   is sent on enroll and stored, so the operator sees the whole picture at claim
+   is sent on enroll and stored, so the user sees the whole picture at claim
    time rather than a name and a model.
 4. The device POSTs `{deviceUuid, publicKey, deviceInfo}` to `POST /v1/device/enroll`
    — public, because there is nothing to authenticate *with* yet. Unlike the current
@@ -195,7 +195,7 @@ configured" does not need to be representable.
      │  POST /v1/device/enroll
      ▼
   PENDING ────────── code expires ──────────► (record expires, device re-enrolls)
-     │  operator claims the code, binds owner + org, config is delivered
+     │  user claims the code, binds owner + org, config is delivered
      ▼
  REGISTERED ──────── device offline mid-claim ─► re-fetches config on reconnect
      │

@@ -79,7 +79,7 @@ class TerminalRelayInstrumentedTest {
     fun aShellStartsAndItsOutputReachesTheServer() {
         val h = Harness()
 
-        // OPEN, exactly as the operator path sends it: session id + initial size.
+        // OPEN, exactly as the user path sends it: session id + initial size.
         val opened =
             h.relay.onFrame(
                 PtyFrame.encode(PtyFrame.TYPE_OPEN, PtyFrame.resizePayload(24, 80), "s1"),
@@ -136,7 +136,7 @@ class TerminalRelayInstrumentedTest {
         h.relay.onFrame(PtyFrame.encode(PtyFrame.TYPE_OPEN, PtyFrame.resizePayload(24, 80), "s3"))
 
         // Exit the shell; the reader's exit callback must close the session and tell
-        // the server, so the operator's terminal ends instead of hanging.
+        // the server, so the user's terminal ends instead of hanging.
         h.relay.onFrame(PtyFrame.encodeData("s3", "exit\n".toByteArray()))
 
         val deadline = System.currentTimeMillis() + 15_000

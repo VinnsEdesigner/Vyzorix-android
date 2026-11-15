@@ -175,7 +175,7 @@ Why this and not the alternatives:
   the two sides stay conceptually aligned.
 
 Token properties: 128-bit random, bound to
-`{sessionId, deviceId, operatorId, apiAllowlist, expiresAt}`. Reusable for the
+`{sessionId, deviceId, userId, apiAllowlist, expiresAt}`. Reusable for the
 lifetime of the session across multiple connections, because a shell that runs
 `android-battery` twice opens two connections and should not need two tokens.
 Revoking the session revokes the token and closes every connection bound to it.

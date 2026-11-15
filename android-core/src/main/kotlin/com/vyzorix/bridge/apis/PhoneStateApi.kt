@@ -12,7 +12,7 @@ import com.vyzorix.bridge.VyzorixApi
 import org.json.JSONObject
 
 /**
- * Telephony state: the network operator and the phone type.
+ * Telephony state: the network user and the phone type.
  *
  * Gated on `READ_BASIC_PHONE_STATE` (API 33+, protection `normal`), not the
  * dangerous `READ_PHONE_STATE`. The fields needing the stronger grant —
@@ -35,7 +35,7 @@ object PhoneStateApi : ApiHandler {
     const val NAME = "phone_state"
 
     /**
-     * The phone's type, operator and SIM facts.
+     * The phone's type, user and SIM facts.
      *
      * Gated on `READ_BASIC_PHONE_STATE` (API 33+, protection `normal`, no dialog) so
      * the API works without a prompt. Nothing here needs the dangerous grant.

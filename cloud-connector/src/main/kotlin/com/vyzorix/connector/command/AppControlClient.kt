@@ -31,7 +31,7 @@ import kotlinx.serialization.json.jsonObject
  *
  * A missing socket is a normal state, not a fault: the supervisor may not be
  * installed (an APK built without the toolchain), may be restarting, or the container
- * may be absent. The operator needs to be told which, and `CommandOutcome.failed`
+ * may be absent. The user needs to be told which, and `CommandOutcome.failed`
  * carries it. Throwing would be caught by the dispatcher and reported as a crash,
  * which hides the reason.
  */
@@ -67,7 +67,7 @@ class AppControlClient(
             socket.connect(address)
         } catch (e: IOException) {
             // The socket is absent or nothing is listening. Both mean the same thing
-            // to an operator: the app runtime is not available.
+            // to a user: the app runtime is not available.
             runCatching { socket.close() }
 
             return CommandOutcome.failed(
@@ -123,7 +123,7 @@ class AppControlClient(
     /**
      * Turns the supervisor's `{"ok":bool,"result":…|"error":…}` into an outcome.
      *
-     * A malformed reply is a failure with the text, not an exception: the operator
+     * A malformed reply is a failure with the text, not an exception: the user
      * needs to see what came back, and a supervisor built from a different revision
      * is a real possibility.
      */
@@ -147,7 +147,7 @@ class AppControlClient(
         }
 
         // The result is either a string (start/stop/restart/logs) or an object
-        // (list, env). Both are reported as text: the operator reads it, and the
+        // (list, env). Both are reported as text: the user reads it, and the
         // command-result path carries a string.
         val result = parsed["result"]
         val text =

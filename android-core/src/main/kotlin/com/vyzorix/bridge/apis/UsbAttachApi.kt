@@ -62,8 +62,8 @@ class UsbAttachApi(
      *
      * `OPEN_FAILED` maps to `INVALID_ARGS`, not `INTERNAL`: the name did not resolve
      * to an attached, permitted device, which is a caller-side condition (a wrong
-     * name, or a permission the operator has not granted), not a broken handler.
-     * Reporting it as internal would make the smoke test — and an operator — read a
+     * name, or a permission the user has not granted), not a broken handler.
+     * Reporting it as internal would make the smoke test — and a user — read a
      * missing device as a bug.
      */
     private fun mapKind(error: UsbError): String =

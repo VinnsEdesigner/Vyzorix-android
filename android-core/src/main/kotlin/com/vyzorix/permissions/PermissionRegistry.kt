@@ -82,7 +82,7 @@ object PermissionRegistry {
             "bluetooth_state" to
                 PermissionDef("android.permission.BLUETOOTH", 1, Protection.NORMAL),
             // READ_BASIC_PHONE_STATE, not READ_PHONE_STATE. The basic permission is
-            // API 33+, protection `normal` (no dialog), and covers the operator and
+            // API 33+, protection `normal` (no dialog), and covers the user and
             // SIM facts this API reports. The dangerous half is `phone_state_detailed`.
             "phone_state" to
                 PermissionDef(

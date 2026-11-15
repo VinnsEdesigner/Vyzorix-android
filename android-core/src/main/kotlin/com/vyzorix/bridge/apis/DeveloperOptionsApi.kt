@@ -20,9 +20,9 @@ import org.json.JSONObject
  * ## The question this answers
  *
  * "Developer options are off" is only half an answer: they may be off because the
- * operator has not enabled them (in which case they can be turned on), or because a
+ * user has not enabled them (in which case they can be turned on), or because a
  * device-owner policy forbids debugging (in which case they cannot). Those are
- * different situations and an operator acts on them differently, so both are
+ * different situations and a user acts on them differently, so both are
  * reported:
  *
  *  - [KEY_DEV_SETTINGS] / [KEY_ADB] — the current state.
@@ -62,7 +62,7 @@ object DeveloperOptionsApi : ApiHandler {
             JSONObject()
                 .put("developerOptions", isOn(resolver, KEY_DEV_SETTINGS))
                 .put("adbEnabled", isOn(resolver, KEY_ADB))
-                // The dev-option-adjacent toggles an operator may be looking for.
+                // The dev-option-adjacent toggles a user may be looking for.
                 .put("adbWifiEnabled", isOn(resolver, KEY_ADB_WIFI))
                 .put("stayAwakeWhilePluggedIn", isOn(resolver, KEY_STAY_AWAKE))
                 .put("wirelessDebuggingEnabled", isOn(resolver, KEY_ADB_WIFI))

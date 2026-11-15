@@ -21,12 +21,12 @@ import org.json.JSONObject
  *
  * A device admin is a *component* (`pkg/.AdminReceiver`), and a package can register
  * more than one. Reporting only package names loses the receiver, which is the thing
- * an operator needs to disable it, to look up its policies, or to tell two admins of
+ * a user needs to disable it, to look up its policies, or to tell two admins of
  * the same package apart. So each admin is reported as its flattened `ComponentName`,
  * with the package and class split out alongside.
  *
  * The device owner and profile owner are also resolved to their components, so an
- * operator can see *which* app holds the owner role (it is not always the obvious
+ * user can see *which* app holds the owner role (it is not always the obvious
  * one). Both need no permission to read.
  *
  * ## The owner components
@@ -40,7 +40,7 @@ import org.json.JSONObject
  * ## What it deliberately does not report
  *
  * No policy values and no per-admin policy details: this answers "who administers
- * this device and is this app the owner", which is the question an operator has. The
+ * this device and is this app the owner", which is the question a user has. The
  * policies themselves are `device_owner_capabilities`.
  */
 @VyzorixApi(

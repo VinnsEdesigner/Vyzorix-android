@@ -28,7 +28,7 @@ import org.robolectric.RobolectricTestRunner
  * service that is not there, read a `/proc` file that is not readable, or called an
  * API level the device does not have. The router turns that into an `internal` error
  * response, so it is not a crash — it is a command that never works, and nothing
- * tells you which one until an operator tries it.
+ * tells you which one until a user tries it.
  *
  * So every API in [ApiCatalogue] is dispatched here. The assertion is deliberately
  * weak on the *result* — most of these read real device state, and the value is not
@@ -228,7 +228,7 @@ class ApiSmokeTest {
      * `package_info` is the only API that requires one, so it is the only entry. An
      * API added later that needs an argument will fail the smoke test loudly, which
      * is the intent: the requirement is then stated here rather than discovered by
-     * an operator.
+     * a user.
      */
     private fun argsFor(api: String): Map<String, String> =
         when (api) {

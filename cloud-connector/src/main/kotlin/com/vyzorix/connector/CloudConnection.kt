@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The flow:
  *  1. On first run, generate the keypair (in the signer) and enroll. The server
  *     returns a pairing code; show it in a notification.
- *  2. Hold the WebSocket open. The operator claims the code at the web page; the
+ *  2. Hold the WebSocket open. The user claims the code at the web page; the
  *     server pushes the signed config over this socket.
  *  3. Verify the config with the pinned server key, apply it, update the
  *     notification. If the device was offline at claim time, re-fetch by version.
@@ -92,7 +92,7 @@ class CloudConnection(
         /**
          * Whether the device currently has a usable network.
          *
-         * Read by the notification so the operator sees "no network connection, but
+         * Read by the notification so the user sees "no network connection, but
          * still running" rather than a reassuring "running" over a dead link. Injected
          * (like the clock) so a test needs no ConnectivityManager.
          */
@@ -153,7 +153,7 @@ class CloudConnection(
      * device is claimed.
      *
      * The code expires (the server's TTL), and a device that is never claimed would
-     * otherwise keep displaying a dead code forever: the operator typing it gets a
+     * otherwise keep displaying a dead code forever: the user typing it gets a
      * 404 and the only fix is a service restart. Holding the code lets the poller see
      * it has expired and re-enroll for a fresh one, so a live code is always on screen.
      */
@@ -315,7 +315,7 @@ class CloudConnection(
     override fun deviceId(): String = deviceId
 
     /**
-     * Attaches the PTY side, so operator terminal frames on the cloud socket reach
+     * Attaches the PTY side, so user terminal frames on the cloud socket reach
      * the device's shells.
      *
      * The relay is built here because this is where the socket lives, but the shells
@@ -495,7 +495,7 @@ class CloudConnection(
      *
      * The server issues the code once, at enroll, with a TTL and no way for the device
      * to extend it. A device that sits unclaimed past that TTL would otherwise show a
-     * code the server has already forgotten — the operator types it and gets a 404,
+     * code the server has already forgotten — the user types it and gets a 404,
      * and only a service restart fixes it. Re-enrolling is idempotent for an unclaimed
      * device (the server refreshes the pending record) and mints a new code, so this
      * keeps a claimable code on screen for as long as the device waits.
@@ -539,7 +539,7 @@ class CloudConnection(
                 override fun onConnected() {
                     // Reap any detached session that outlived its TTL while we were
                     // offline. A reconnect does not necessarily re-open every session
-                    // (the operator may have closed the tab), so this is where the
+                    // (the user may have closed the tab), so this is where the
                     // device's own bound is enforced rather than waiting for a re-OPEN
                     // that may never come.
                     terminalRelay?.let { relay ->
@@ -674,7 +674,7 @@ class CloudConnection(
      * Applies the config's apps, and reports the outcome over the socket.
      *
      * A refusal is reported, not thrown: the config is verified and stored, so the
-     * device stays configured with what it had, and the operator gets the reason
+     * device stays configured with what it had, and the user gets the reason
      * This runs off the frame-handling path — the fetch is a blocking
      * download — so it does not stall the socket.
      */
@@ -691,7 +691,7 @@ class CloudConnection(
                 ) {
                     // An unexpected failure (a rename that would not complete, a
                     // registry that could not be written) must still be reported: a
-                    // silent apply thread is a deploy the operator never hears about.
+                    // silent apply thread is a deploy the user never hears about.
                     Log.w(TAG, "deploy failed: ${e.message}")
 
                     ApplyResult.refused(config.version, "apply_failed", e.message.orEmpty())
@@ -713,7 +713,7 @@ class CloudConnection(
      *
      * Idempotent per connection: an `onConnected` after a reconnect restarts the
      * reporter against the new socket. The interval starts from the config if one is
-     * held, so a reconnecting device reports at the operator's cadence from the
+     * held, so a reconnecting device reports at the user's cadence from the
      * first tick.
      */
     private fun startTelemetry() {

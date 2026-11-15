@@ -11,7 +11,7 @@ import com.vyzorix.bridge.VyzorixApi
 import org.json.JSONObject
 
 /**
- * Battery-saver and idle state. An operator checking whether the device will keep
+ * Battery-saver and idle state. An user checking whether the device will keep
  * the service alive wants this, because battery saver is what Android uses to
  * throttle a background service. No runtime permission.
  */

@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 /**
  * Ringer mode and stream volumes. The volumes are useful to a proxied app that
- * plays sound; the ringer mode tells an operator whether the device will make
+ * plays sound; the ringer mode tells a user whether the device will make
  * noise. No runtime permission.
  */
 @VyzorixApi(
@@ -54,7 +54,7 @@ object AudioStateApi : ApiHandler {
         )
     }
 
-    /** The streams an operator can reason about, by the name a UI would use. */
+    /** The streams a user can reason about, by the name a UI would use. */
     private val STREAMS =
         linkedMapOf(
             "music" to AudioManager.STREAM_MUSIC,

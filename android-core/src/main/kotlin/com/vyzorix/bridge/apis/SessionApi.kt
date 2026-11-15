@@ -16,7 +16,7 @@ import org.json.JSONObject
  * returns the channel the client uses on subsequent `pty_input` / `pty_output`
  * frames. `session.close` tears the session down.
  *
- * The session is bound to the caller's token: the device and operator come from
+ * The session is bound to the caller's token: the device and user come from
  * the validated token, never from client-supplied arguments, so a client cannot
  * open a session attributed to someone else.
  *
@@ -28,14 +28,14 @@ class SessionApi(
     private val openSession: (
         sessionId: String,
         deviceId: String,
-        operatorId: String,
+        userId: String,
     ) -> PtyResult<Int>,
     private val closeSession: (channel: Int) -> PtyResult<Unit>,
     private val resizeSession: (channel: Int, rows: Int, cols: Int) -> PtyResult<Unit>,
     /**
      * True when [channel] belongs to [sessionId]. This is the device's binding
      * check: a connection may only act on the channels its
-     * own session opened, so one operator cannot close or resize another's
+     * own session opened, so one user cannot close or resize another's
      * terminal.
      */
     private val channelOwnedBy: (channel: Int, sessionId: String) -> Boolean,
@@ -56,7 +56,7 @@ class SessionApi(
         val token = call.token
 
         // The session id is client-chosen so a client can correlate its own
-        // shells, but the device and operator are taken from the token so the
+        // shells, but the device and user are taken from the token so the
         // session is attributed to the authenticated caller.
         val sessionId = call.args["sessionId"] ?: "session-${System.nanoTime()}"
 
@@ -64,7 +64,7 @@ class SessionApi(
             openSession(
                 sessionId,
                 token.deviceId,
-                token.operatorId,
+                token.userId,
             )
 
         return when (opened) {

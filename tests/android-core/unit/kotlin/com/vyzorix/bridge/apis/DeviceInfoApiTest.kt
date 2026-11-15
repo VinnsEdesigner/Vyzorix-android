@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 
 /**
  * `device_info` is the "what device is this" summary, so its shape is the contract:
- * a field an operator relies on must be present, and a field that only exists on a
+ * a field a user relies on must be present, and a field that only exists on a
  * newer API must be present-but-empty rather than missing or a crash.
  *
  * The SoC fields are the reason this test exists at all: `Build.SOC_MODEL` is API 31,

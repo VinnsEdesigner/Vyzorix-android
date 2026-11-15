@@ -40,7 +40,7 @@ class UpdateChecker(
      * running the latest build. The caller uses this to clear the "update ready to
      * install" notification, which is the signal that a pending install finally
      * landed. It is *not* called on a failed or unavailable check, so a transient
-     * network failure cannot dismiss a prompt the operator still needs.
+     * network failure cannot dismiss a prompt the user still needs.
      */
     private val onUpToDate: () -> Unit = {},
 ) {
@@ -89,7 +89,7 @@ class UpdateChecker(
         // Already offered this exact build and the install did not happen (the user
         // has not tapped yet, or declined). Re-offering means re-downloading tens of
         // megabytes on every reconnect, which is the data leak this guards. The staged
-        // APK is still on disk; the operator installs it when they are ready.
+        // APK is still on disk; the user installs it when they are ready.
         if (check.versionCode == offeredVersionCode) {
             Log.d(TAG, "update ${check.version} already offered; not re-downloading")
 
@@ -132,7 +132,7 @@ class UpdateChecker(
             onInstalling(check)
         } else {
             // The device cannot install packages itself (the user has not allowed this
-            // app to install unknown apps). The verified APK is staged; an operator can
+            // app to install unknown apps). The verified APK is staged; a user can
             // install it, and the device keeps running its current build.
             Log.w(TAG, "could not offer the install; apk staged at ${apk.absolutePath}")
         }

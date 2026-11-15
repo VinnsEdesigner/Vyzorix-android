@@ -9,7 +9,7 @@ package com.vyzorix.connector.command
  * ## Why every one of them reports rather than swallows
  *
  * A device that receives a command it does not
- * implement must report a **failed** result, so the operator learns it did not run
+ * implement must report a **failed** result, so the user learns it did not run
  * instead of watching it sit `delivered` forever. The same applies to a command that
  * is implemented but could not be carried out — a missing app name, an unreachable
  * supervisor — and these executors therefore always return an outcome, never a

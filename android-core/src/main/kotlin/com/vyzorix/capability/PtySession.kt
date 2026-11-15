@@ -27,7 +27,7 @@ class PtySession internal constructor(
     val slavePath: String,
     val childPid: Int,
     val deviceId: String,
-    val operatorId: String,
+    val userId: String,
 ) {
     private val closed = AtomicBoolean(false)
 

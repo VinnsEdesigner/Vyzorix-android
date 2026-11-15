@@ -19,7 +19,7 @@ import org.json.JSONObject
  * `sms_received` reports a *count* of messages that arrive while the service is
  * running, and it deliberately never returns bodies. That is the right shape for
  * "is this device receiving pages", but it cannot answer "what texts are on this
- * device" — the question an operator actually asks. This API answers that: it reads
+ * device" — the question a user actually asks. This API answers that: it reads
  * the stored inbox through the telephony content provider, so a message that
  * arrived before the agent started, or while it was stopped, is still there.
  *
@@ -27,7 +27,7 @@ import org.json.JSONObject
  *
  * A text is the private content of whoever sent it, and an inbox can hold thousands.
  * The result is therefore bounded by [MAX_LIMIT] (defaulting to [DEFAULT_LIMIT]),
- * newest first, and each row carries only what an operator needs to triage —
+ * newest first, and each row carries only what a user needs to triage —
  * sender, timestamp, read state, body. `count` reports how many rows this call
  * returned and `totalAvailable` how many the provider holds, so a caller can tell a
  * bounded page from an empty inbox. A `limit` argument raises or lowers the page; it
@@ -116,7 +116,7 @@ object SmsReadApi : ApiHandler {
      * The projection is explicit rather than `null`: a `null` projection returns
      * every column the provider holds, which is both wider than this API promises
      * and slower. Ordering is newest-first so a bounded page is the recent messages,
-     * which is what an operator wants.
+     * which is what a user wants.
      */
     private fun queryInbox(
         call: ApiCall,

@@ -168,7 +168,7 @@ class AppCommandE2ETest {
     @Test
     fun anUnknownAppIsReportedAsAFailure() {
         // A command that could not be carried out must be
-        // reported failed, so the operator learns it did not run.
+        // reported failed, so the user learns it did not run.
         val outcome = AppCommands.Start(client).execute("{\"app\":\"definitely-not-an-app\"}")
 
         assertTrue("an unknown app must not report success", !outcome.success)

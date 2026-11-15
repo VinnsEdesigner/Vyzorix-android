@@ -14,7 +14,7 @@ import org.junit.Test
 /**
  * The pass-level behaviour around the install prompt.
  *
- * Two properties the operator relies on:
+ * Two properties the user relies on:
  *
  *  1. a build that was already offered is not re-downloaded on the next connect
  *     (the standing notification keeps the prompt alive, so no re-offer is needed); and

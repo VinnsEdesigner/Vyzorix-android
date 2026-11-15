@@ -12,7 +12,7 @@ import kotlinx.serialization.json.Json
  * nothing. A manifest changes how a browser presents and installs a page, so an app
  * that is not a PWA must not be handed one by accident, and the default is `false`.
  *
- * Only fields the operator overrode are written; the rest are the defaults below.
+ * Only fields the user overrode are written; the rest are the defaults below.
  * Icons are not generated — an icon is an image the platform does not invent — so an
  * app with no icons is installable with a default icon rather than referencing a file
  * that does not exist.

@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 /**
  * Process and device memory. The heap figures are the app's own; the device
- * figures are what an operator sizing an install needs. No runtime permission.
+ * figures are what a user sizing an install needs. No runtime permission.
  */
 @VyzorixApi(
     tags = [

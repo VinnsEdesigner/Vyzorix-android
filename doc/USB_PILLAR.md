@@ -27,7 +27,7 @@ is inert.
 | `data:hardware` | The attachment list names physical devices, which is more sensitive than the public facts `battery`/`device_info` report. |
 | `op:write` | `usb_attach`/`usb_detach` change state — they claim and release a device. `usb_state` is `op:read`. |
 | `protection:signature` | Matches the server catalog's USB capability class. There is no manifest permission for "use a USB device"; the per-device grant is a dialog the app raises. |
-| `visibility:private` | The device list is for an operator, not the public read surface. |
+| `visibility:private` | The device list is for a user, not the public read surface. |
 
 The device's `@VyzorixApi` annotation is documentation — the device never
 evaluates a tag — but the server's catalog is the authority, and the two must use

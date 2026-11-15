@@ -11,7 +11,7 @@ import org.json.JSONObject
 
 /**
  * The filesystem mounts the app can see. Read from `/proc/mounts`, which is
- * world-readable. An operator uses it to tell whether `/sdcard` is real storage
+ * world-readable. An user uses it to tell whether `/sdcard` is real storage
  * or FUSE, and whether the container's binds landed. No runtime permission.
  */
 @VyzorixApi(

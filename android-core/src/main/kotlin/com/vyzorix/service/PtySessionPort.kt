@@ -10,7 +10,7 @@ package com.vyzorix.service
  * that, and `android-core` must not depend on the connector. The interface is the
  * whole seam.
  *
- * Sessions are keyed by the **server's** session id: the operator opened the
+ * Sessions are keyed by the **server's** session id: the user opened the
  * terminal, the server minted the id, and both sides route frames by it. The
  * device's own channel number is an implementation detail behind this interface.
  */
@@ -18,11 +18,11 @@ interface PtySessionPort {
     /**
      * Opens a shell for [sessionId] and starts streaming its output.
      *
-     * [identity] is the operator the server resolved for this session — who they are
+     * [identity] is the user the server resolved for this session — who they are
      * and the API allowlist they were granted. It is delivered to the container's
-     * shell (as `VYZORIX_SESSION`) so the Vyzorix CLI inside it can show the operator
+     * shell (as `VYZORIX_SESSION`) so the Vyzorix CLI inside it can show the user
      * and offer only what they may call. Null means the server sent no identity (an
-     * older server, or a reattach), which is "unknown operator", not a refusal.
+     * older server, or a reattach), which is "unknown user", not a refusal.
      *
      * [onOutput] is called with terminal output as it arrives, from the reader
      * thread. It must be safe to call from any thread, and the implementation must
@@ -44,7 +44,7 @@ interface PtySessionPort {
         onExit: (sessionId: String, exitCode: Int) -> Unit,
     ): Boolean
 
-    /** Writes operator keystrokes to the session's shell. */
+    /** Writes user keystrokes to the session's shell. */
     fun write(
         sessionId: String,
         data: ByteArray,
@@ -59,7 +59,7 @@ interface PtySessionPort {
 
     /**
      * Closes the session and reaps its process. Idempotent: closing a session that
-     * already exited (or never opened) is not an error, because the operator's close
+     * already exited (or never opened) is not an error, because the user's close
      * can race the shell's own exit.
      */
     fun close(sessionId: String)

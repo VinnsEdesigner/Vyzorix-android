@@ -147,7 +147,7 @@ class CommandDispatcherTest {
     @Test
     fun `an unknown command type is reported failed, never dropped`() {
         // The architecture requires this: a device that drops a command it does not
-        // implement leaves the operator watching it sit delivered forever.
+        // implement leaves the user watching it sit delivered forever.
         val frame = signedFrame("d1", "USB_ATTACH", "{}")
 
         val handled = dispatcher().handle(frame)

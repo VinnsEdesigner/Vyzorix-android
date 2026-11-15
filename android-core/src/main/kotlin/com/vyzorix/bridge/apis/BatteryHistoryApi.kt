@@ -12,7 +12,7 @@ import org.json.JSONObject
 
 /**
  * The battery's electrical state: current, voltage and charge counter, which
- * `battery` does not report. An operator diagnosing a device that will not stay up
+ * `battery` does not report. An user diagnosing a device that will not stay up
  * needs these. No runtime permission.
  */
 @VyzorixApi(

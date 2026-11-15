@@ -17,7 +17,7 @@ import android.util.Log
  *
  * The "up" test is `NET_CAPABILITY_INTERNET` **validated**, not merely "a network
  * exists": a device joined to a captive-portal Wi-Fi has a network and no reachability,
- * and reporting that as stable would be a lie the operator acts on. Validation is the
+ * and reporting that as stable would be a lie the user acts on. Validation is the
  * platform's own "this network actually reaches the internet" signal.
  */
 class NetworkMonitor(

@@ -102,7 +102,7 @@ object SystemUiStateApi : ApiHandler {
         }
 
         // The QS tile layout parsed into a list, because that is the one SystemUI input an
-        // operator reads directly: which tiles exist, and in what order.
+        // user reads directly: which tiles exist, and in what order.
         val tilesRaw = runCatching { Settings.Secure.getString(resolver, KEY_QS_TILES) }.getOrNull()
 
         val result =
@@ -128,7 +128,7 @@ object SystemUiStateApi : ApiHandler {
 
         // Two forms, mirroring `am start`: an explicit `component=pkg/pkg.Class`, or an
         // `intent=<action>` (e.g. android.settings.APPLICATION_DEVELOPMENT_SETTINGS). The
-        // action form is what an operator types to reach a settings screen without knowing
+        // action form is what a user types to reach a settings screen without knowing
         // the class, and it is the one Android treats as a system-settings intent.
         val component = call.args["component"].orEmpty()
         val intentAction = call.args["intent"].orEmpty()
@@ -145,7 +145,7 @@ object SystemUiStateApi : ApiHandler {
     /**
      * Resolves a fixed list of well-known components and reports whether each exists.
      *
-     * These are the OEM and settings entry points an operator probes for by hand with
+     * These are the OEM and settings entry points a user probes for by hand with
      * `am start -n`; an app cannot run `am`, but the package manager answers the same
      * question — is the package installed, and does the activity resolve. A component
      * that does not resolve is the answer "this build stripped it", which is exactly
@@ -235,7 +235,7 @@ object SystemUiStateApi : ApiHandler {
     )
 
     /**
-     * The well-known components a recon pass checks, with the names an operator types to
+     * The well-known components a recon pass checks, with the names a user types to
      * `am start -n`. A fixed list so the answer is consistent; each is reported whether or
      * not it exists.
      */

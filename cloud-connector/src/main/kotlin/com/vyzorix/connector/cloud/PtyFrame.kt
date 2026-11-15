@@ -209,7 +209,7 @@ object PtyFrame {
 
     /**
      * Reads an OPEN payload: the window size (the first four bytes) and, when present,
-     * the operator identity that follows it.
+     * the user identity that follows it.
      *
      * The size is read unconditionally so an older server's payload — size only —
      * still yields a size. The identity is null when the payload predates it.

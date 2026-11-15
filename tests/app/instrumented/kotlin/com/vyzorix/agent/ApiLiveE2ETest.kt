@@ -15,7 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Every bridge API, called the way an operator calls it: **from inside the
+ * Every bridge API, called the way a user calls it: **from inside the
  * container, through the real `android-bin`, over the real socket**.
  *
  * ## Why this test exists, and what the JVM test does not cover
@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
  * supplies system services a real device may not.
  *
  * So this runs `android-bin <api>` in the container's shell and asserts the result
- * comes back as JSON. A failure here is a failure an operator would have.
+ * comes back as JSON. A failure here is a failure a user would have.
  *
  * ## What it asserts, and why that shape
  *
@@ -238,7 +238,7 @@ class ApiLiveE2ETest {
         for (api in apis) {
             // The API name *is* the command: `battery`, `device_info` and the rest are
             // symlinks to `android-bin`, and the basename is what selects the API. This
-            // is the form an operator types, so it is the form the test must use.
+            // is the form a user types, so it is the form the test must use.
             val output = runInContainer(api)
             val json = lastJson(output)
 

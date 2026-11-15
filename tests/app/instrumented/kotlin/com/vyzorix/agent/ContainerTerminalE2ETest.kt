@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
  * ## What it proves, and what it deliberately does not
  *
  * It drives [ProotLauncher.loginShellRequest] — the exact request the service hands
- * the broker for an operator's terminal — through the real [PtyBroker] and
+ * the broker for a user's terminal — through the real [PtyBroker] and
  * [PtyReader]. What comes back is asserted to be *inside the container*:
  *
  *  - `cat /etc/debian_version` answers, which the device shell cannot;
@@ -217,7 +217,7 @@ class ContainerTerminalE2ETest {
     }
 
     /**
-     * The request the service builds for an operator's terminal, verbatim.
+     * The request the service builds for a user's terminal, verbatim.
      *
      * This is the point of the test: not a request that happens to work, but the one
      * production sends.
